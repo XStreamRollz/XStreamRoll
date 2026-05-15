@@ -1,4 +1,5 @@
 import axios from "axios"
+import { env } from "./config"
 
 interface StreamEvent {
   streamId: string
@@ -6,7 +7,7 @@ interface StreamEvent {
   timestamp: string
 }
 
-const API_URL = process.env.API_URL || "http://localhost:3001"
+const API_URL = env.API_URL
 const WORKER_ID = `worker-${Date.now()}`
 
 class StreamProcessor {
