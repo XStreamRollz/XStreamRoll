@@ -1,5 +1,7 @@
 # XStreamRoll
 
+[![codecov](https://codecov.io/gh/XStreamRollz/XStreamRoll/branch/main/graph/badge.svg)](https://codecov.io/gh/XStreamRollz/XStreamRoll)
+
 XStreamRoll is a powerful distributed streaming platform designed for developers and content creators who need real-time data streaming capabilities. The platform provides a complete ecosystem for building, managing, and scaling streaming applications with a modern web interface, robust API backend, client SDKs, and dedicated stream processing infrastructure. It's built for teams looking to deploy production-ready streaming solutions without the complexity of managing multiple disconnected services.
 
 ## Repository Structure
