@@ -76,3 +76,34 @@ CREATE TABLE IF NOT EXISTS stream_tags (
 
 CREATE INDEX IF NOT EXISTS idx_stream_tags_stream_id ON stream_tags(stream_id);
 CREATE INDEX IF NOT EXISTS idx_stream_tags_tag_id    ON stream_tags(tag_id);
+
+-- ---------------------------------------------------------------------
+-- Issue #73: Indexes for common query patterns
+-- Rollback: DROP INDEX idx_streams_user_id_status, idx_stream_events_stream_id_occurred_at, idx_users_email;
+-- ---------------------------------------------------------------------
+
+CREATE INDEX IF NOT EXISTS idx_streams_user_id_status
+    ON streams(user_id, status);
+
+CREATE INDEX IF NOT EXISTS idx_stream_events_stream_id_occurred_at
+    ON stream_events(stream_id, created_at DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email
+    ON users(email);
+
+-- ---------------------------------------------------------------------
+-- Issue #75: Notifications table
+-- Rollback: DROP TABLE notifications;
+-- ---------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id         SERIAL PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type       VARCHAR(100) NOT NULL,
+    payload    JSONB NOT NULL DEFAULT '{}',
+    read_at    TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_unread  ON notifications(user_id) WHERE read_at IS NULL;

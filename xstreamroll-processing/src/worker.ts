@@ -1,5 +1,6 @@
 import axios from "axios"
 import { env } from "./config"
+import { EventFilter } from "./pipeline"
 import { SessionRegistry } from "./session-registry"
 import { ProcessedStreamEvent, StreamEvent } from "./session"
 
@@ -21,6 +22,8 @@ const registry = new SessionRegistry(
   { maxConcurrentSessions: MAX_CONCURRENT_SESSIONS },
 )
 
+const filter = new EventFilter()
+
 async function pollOnce(): Promise<void> {
   let events: StreamEvent[] = []
   try {
@@ -36,6 +39,9 @@ async function pollOnce(): Promise<void> {
     if (!event || typeof event.streamId !== "string" || event.streamId.length === 0) {
       console.warn(`[${WORKER_ID}] dropping malformed event`, event)
       continue
+    }
+    if (!filter.allow(event)) {
+      continue // silently drop filtered events
     }
     const result = registry.route(event)
     if (result === "capacity") {
