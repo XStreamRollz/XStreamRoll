@@ -1,4 +1,7 @@
 export { StreamingClient } from "./client"
+export type { ClientEnv } from "./client"
+export { HttpClient } from "./http"
+export type { RequestInterceptor, ResponseInterceptor, InterceptorHandle } from "./http"
 export type {
   // Config
   StreamConfig,

@@ -1,24 +1,28 @@
 # ── Builder ───────────────────────────────────────────────────────────────────
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 WORKDIR /app
 
-COPY package*.json ./
+COPY package.json package-lock.json* ./
 RUN npm ci
 
-COPY tsconfig.json ./
-COPY src ./src
+COPY . .
+
 RUN npm run build
 
 # ── Production ────────────────────────────────────────────────────────────────
-FROM node:18-alpine AS production
+FROM node:20-alpine AS production
 WORKDIR /app
 
-COPY package*.json ./
+ENV NODE_ENV=production
+
+COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
+
+EXPOSE 3002
 
 CMD ["node", "dist/worker.js"]

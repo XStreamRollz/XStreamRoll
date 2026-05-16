@@ -1,6 +1,15 @@
 import axios, { type AxiosInstance } from "axios"
 import type { StreamEvent, StreamConfig, AuthTokens, CreateUserDto } from "./types"
 
+/** Named environment presets for base URL resolution. */
+export type ClientEnv = "development" | "staging" | "production"
+
+const ENV_URLS: Record<ClientEnv, string> = {
+  development: "http://localhost:3001",
+  staging: "https://staging-api.xstreamroll.io",
+  production: "https://api.xstreamroll.io",
+}
+
 export class StreamingClient {
   private apiUrl: string
   private clientId: string
@@ -8,7 +17,13 @@ export class StreamingClient {
   private tokens: AuthTokens | null = null
 
   constructor(config: StreamConfig) {
-    this.apiUrl = config.apiUrl || "http://localhost:3001"
+    if (config.baseUrl) {
+      this.apiUrl = config.baseUrl
+    } else if (config.env) {
+      this.apiUrl = ENV_URLS[config.env]
+    } else {
+      this.apiUrl = config.apiUrl ?? ENV_URLS.development
+    }
     this.clientId = config.clientId || `client-${Date.now()}`
 
     this.http = axios.create({ baseURL: this.apiUrl })

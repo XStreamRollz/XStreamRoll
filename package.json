@@ -5,7 +5,7 @@
   "private": true,
   "workspaces": [
     "app",
-    "api", 
+    "api",
     "xstreamroll-sdk",
     "xstreamroll-processing"
   ],
@@ -23,6 +23,13 @@
     "install:xstreamroll-processing": "cd xstreamroll-processing && npm install"
   },
   "devDependencies": {
+    "baseline-browser-mapping": "^2.10.29",
     "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.2.2",
+    "js-cookie": "^3.0.7",
+    "react-hook-form": "^7.76.0",
+    "zod": "^4.4.3"
   }
 }
