@@ -17,6 +17,7 @@
     "@nestjs/platform-express": "^10.3.0",
     "@nestjs/platform-socket.io": "^10.4.22",
     "@nestjs/swagger": "^7.4.2",
+    "@nestjs/throttler": "^6.5.0",
     "@nestjs/websockets": "^10.4.22",
     "cache-manager": "^5.7.6",
     "class-transformer": "^0.5.1",

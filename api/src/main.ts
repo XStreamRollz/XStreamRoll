@@ -5,6 +5,7 @@ import compression from "compression"
 import helmet from "helmet"
 import { AppModule } from "./app.module"
 import { SanitizeStringsPipe } from "./common/sanitization/sanitize-strings.pipe"
+import { ThrottlerExceptionFilter } from "./throttler-exception.filter"
 
 // Bypass compression when the response is smaller than this. Anything
 // under ~1 KB doesn't benefit from gzip and the per-request CPU cost
@@ -60,6 +61,8 @@ async function bootstrap() {
       transformOptions: { enableImplicitConversion: true },
     }),
   )
+
+  app.useGlobalFilters(new ThrottlerExceptionFilter())
 
   // Swagger / OpenAPI documentation served at /docs.
   const swaggerConfig = new DocumentBuilder()
