@@ -2,8 +2,13 @@
 
 /** Configuration for the StreamingClient. */
 export interface StreamConfig {
+  /** @deprecated Use `env` or `baseUrl` instead. */
   apiUrl?: string
   clientId?: string
+  /** Named environment preset. Overridden by `baseUrl`. */
+  env?: "development" | "staging" | "production"
+  /** Explicit base URL. Takes precedence over `env` and `apiUrl`. */
+  baseUrl?: string
 }
 
 // ─── User ─────────────────────────────────────────────────────────────────────
