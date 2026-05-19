@@ -3,15 +3,12 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common"
+import { PaginatedResult } from "../common/dto/pagination.dto"
 import { TagsRepository } from "./repository/tags.repository"
 import { slugify } from "./slugify"
 import { Tag } from "./tag.entity"
 
-export interface PagedTags {
-  items: Tag[]
-  page: number
-  limit: number
-  total: number
+export interface PagedTags extends PaginatedResult<Tag> {
   hasMore: boolean
 }
 
@@ -22,7 +19,7 @@ export class TagsService {
   list(page: number, limit: number): PagedTags {
     const { items, total } = this.tags.listPaginated(page, limit)
     return {
-      items,
+      data: items,
       page,
       limit,
       total,

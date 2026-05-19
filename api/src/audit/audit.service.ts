@@ -12,11 +12,22 @@ export class AuditService {
     )
   }
 
-  async findAll(limit = 100, offset = 0) {
+  async findAll(page = 1, limit = 20) {
+    const offset = (page - 1) * limit
+    const totalResult = await this.pool.query(
+      "SELECT COUNT(*)::int AS total FROM audit_logs",
+    )
+    const total = totalResult.rows[0]?.total ?? 0
     const { rows } = await this.pool.query(
       "SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT $1 OFFSET $2",
       [limit, offset],
     )
-    return rows
+
+    return {
+      data: rows,
+      total,
+      page,
+      limit,
+    }
   }
 }
