@@ -1,5 +1,8 @@
-import { Controller, Get } from "@nestjs/common"
+import { Controller, Get, ServiceUnavailableException } from "@nestjs/common"
 import { ApiOkResponse, ApiOperation, ApiProperty, ApiTags } from "@nestjs/swagger"
+import { HealthCheckService } from "@nestjs/terminus"
+import { SkipThrottle } from "@nestjs/throttler"
+import { DatabaseHealthIndicator } from "./database.health-indicator"
 
 export class HealthCheckResponseDto {
   @ApiProperty({
@@ -19,15 +22,30 @@ export class HealthCheckResponseDto {
 @ApiTags("health")
 @Controller("health")
 export class HealthController {
+  constructor(
+    private readonly healthCheckService: HealthCheckService,
+    private readonly databaseHealthIndicator: DatabaseHealthIndicator,
+  ) {}
+
   @Get()
+  @SkipThrottle()
   @ApiOperation({
     summary: "Liveness probe",
     description:
       "Returns a fixed `ok` status and the current server timestamp. " +
-      "Intended for use by load balancers and orchestrators.",
+      "Also verifies the database connection for liveness checks.",
   })
   @ApiOkResponse({ type: HealthCheckResponseDto })
-  check(): HealthCheckResponseDto {
-    return { status: "ok", timestamp: new Date().toISOString() }
+  async check(): Promise<HealthCheckResponseDto> {
+    try {
+      await this.healthCheckService.check([
+        async () => this.databaseHealthIndicator.isHealthy("database"),
+      ])
+      return { status: "ok", timestamp: new Date().toISOString() }
+    } catch (error) {
+      throw new ServiceUnavailableException(
+        "Database connectivity check failed.",
+      )
+    }
   }
 }

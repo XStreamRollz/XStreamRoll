@@ -4,7 +4,7 @@ import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler"
 import { AdminModule } from "./admin/admin.module"
 import { AuditModule } from "./audit/audit.module"
 import { GatewaysModule } from "./gateways/gateways.module"
-import { HealthController } from "./health/health.controller"
+import { HealthModule } from "./health/health.module"
 import { TagsModule } from "./tags/tags.module"
 
 @Module({
@@ -18,9 +18,9 @@ import { TagsModule } from "./tags/tags.module"
     AdminModule,
     AuditModule,
     GatewaysModule,
+    HealthModule,
     TagsModule,
   ],
-  controllers: [HealthController],
   providers: [
     {
       provide: APP_GUARD,
