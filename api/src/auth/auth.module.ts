@@ -10,18 +10,11 @@ const JWT_EXPIRES_IN = "15m"
   imports: [
     JwtModule.register({
       secret: process.env.JWT_SECRET ?? "dev-secret-change-me",
-      signOptions: { expiresIn: "24h" },
-    }),
-  ],
-  controllers: [AuthController],
-  providers: [AuthService, UsersRepository],
-  exports: [AuthService],
-      secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: JWT_EXPIRES_IN },
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService],
+  providers: [AuthService, UsersRepository],
   exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

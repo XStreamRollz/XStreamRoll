@@ -17,8 +17,6 @@ export class AuthController {
 
   @Post("register")
   @HttpCode(HttpStatus.CREATED)
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto.email, dto.password)
   @ApiOperation({
     summary: "Register a new user",
     description:
