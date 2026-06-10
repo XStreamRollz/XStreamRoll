@@ -16,6 +16,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post("register")
+  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: "Register a new user",
     description:
