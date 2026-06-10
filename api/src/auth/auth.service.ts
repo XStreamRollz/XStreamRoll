@@ -5,94 +5,140 @@ import {
 } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 import * as bcrypt from "bcrypt"
-import { randomBytes } from "crypto"
-import { UsersRepository } from "./users.repository"
+import { Pool } from "pg"
+import { RegisterDto } from "./dto/register.dto"
+import { LoginDto } from "./dto/login.dto"
 
-const BCRYPT_ROUNDS = 10
+/** Rounds for bcrypt key derivation (auto-salt). */
+const BCRYPT_ROUNDS = 12
 
-function randomSuffix(): string {
-  return randomBytes(6).toString("hex")
+/** Row shape returned by the users table queries. */
+interface UserRow {
+  id: number
+  username: string
+  email: string
+  password_hash: string
+  created_at: Date
 }
 
-export interface TokenPayload {
-  sub: number
+/** Public-safe user representation — never includes the password hash. */
+export interface SafeUser {
+  id: number
+  username: string
   email: string
+  createdAt: Date
+}
+
+export interface AuthResponse {
+  user: SafeUser
+  accessToken: string
 }
 
 @Injectable()
 export class AuthService {
-  constructor(
-    private readonly jwtService: JwtService,
-    private readonly users: UsersRepository,
-  ) {}
+  private readonly pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+  })
+
+  constructor(private readonly jwtService: JwtService) {}
 
   /**
-   * Register a new user account. Returns a JWT access token so the
-   * caller is immediately authenticated after registration.
+   * Register a new user.
    *
-   * Throws ConflictException when the email is already taken.
+   * Validates email uniqueness, hashes the password with bcrypt, and
+   * returns a signed JWT together with a public-safe user object.
    */
-  async register(
-    email: string,
-    password: string,
-  ): Promise<{ access_token: string }> {
-    const existing = await this.users.findByEmail(email)
-    if (existing) {
-      throw new ConflictException("Email is already registered")
+  async register(dto: RegisterDto): Promise<AuthResponse> {
+    const emailExists = await this.emailTaken(dto.email)
+    if (emailExists) {
+      throw new ConflictException("email is already registered")
     }
 
-    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS)
-    const username = `${email.split("@")[0]}_${randomSuffix()}`
-    const user = await this.users.create(username, email, passwordHash)
+    const usernameExists = await this.usernameTaken(dto.username)
+    if (usernameExists) {
+      throw new ConflictException("username is already taken")
+    }
 
-    const token = this.generateToken(user.id, user.email)
-    return { access_token: token }
+    const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS)
+
+    const { rows } = await this.pool.query<UserRow>(
+      `INSERT INTO users (username, email, password_hash)
+       VALUES ($1, $2, $3)
+       RETURNING id, username, email, password_hash, created_at`,
+      [dto.username, dto.email, passwordHash],
+    )
+
+    const user = rows[0]
+    return {
+      user: toSafeUser(user),
+      accessToken: this.signToken(user),
+    }
   }
 
   /**
-   * Authenticate an existing user with email + password.
+   * Authenticate an existing user.
    *
-   * Throws UnauthorizedException when the email does not exist or the
-   * password is incorrect. The error message is intentionally generic
-   * to avoid user-enumeration attacks.
+   * Looks up the user by email, compares the provided password against
+   * the stored bcrypt hash, and returns a JWT on success.
    */
-  async login(
-    email: string,
-    password: string,
-  ): Promise<{ access_token: string }> {
-    const user = await this.users.findByEmail(email)
+  async login(dto: LoginDto): Promise<AuthResponse> {
+    const { rows } = await this.pool.query<UserRow>(
+      `SELECT id, username, email, password_hash, created_at
+       FROM users
+       WHERE email = $1`,
+      [dto.email],
+    )
+
+    const user = rows[0]
     if (!user) {
-      throw new UnauthorizedException("Invalid credentials")
+      throw new UnauthorizedException("invalid email or password")
     }
 
-    const valid = await bcrypt.compare(password, user.password_hash)
+    const valid = await bcrypt.compare(dto.password, user.password_hash)
     if (!valid) {
-      throw new UnauthorizedException("Invalid credentials")
+      throw new UnauthorizedException("invalid email or password")
     }
 
-    const token = this.generateToken(user.id, user.email)
-    return { access_token: token }
-  }
-
-  /**
-   * Issue a signed JWT for the given user identity.
-   */
-  generateToken(userId: number, email: string): string {
-    const payload: TokenPayload = { sub: userId, email }
-    return this.jwtService.sign(payload)
-  }
-
-  /**
-   * Verify a JWT and return its decoded payload.
-   *
-   * Throws UnauthorizedException when the token is expired, malformed,
-   * or signed with an unknown secret.
-   */
-  validateToken(token: string): TokenPayload {
-    try {
-      return this.jwtService.verify<TokenPayload>(token)
-    } catch {
-      throw new UnauthorizedException("Invalid or expired token")
+    return {
+      user: toSafeUser(user),
+      accessToken: this.signToken(user),
     }
+  }
+
+  /** Create a short-lived JWT access token for the given user. */
+  private signToken(user: UserRow): string {
+    return this.jwtService.sign({
+      sub: user.id,
+      email: user.email,
+      username: user.username,
+    })
+  }
+
+  /** Check whether an email address is already in use. */
+  private async emailTaken(email: string): Promise<boolean> {
+    const { rows } = await this.pool.query<{ exists: boolean }>(
+      "SELECT EXISTS(SELECT 1 FROM users WHERE email = $1) AS exists",
+      [email],
+    )
+    return rows[0]?.exists ?? false
+  }
+
+  /** Check whether a username is already in use. */
+  private async usernameTaken(username: string): Promise<boolean> {
+    const { rows } = await this.pool.query<{ exists: boolean }>(
+      "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1) AS exists",
+      [username],
+    )
+    return rows[0]?.exists ?? false
+  }
+}
+
+/** Strip the password hash from a user row before returning to clients. */
+function toSafeUser(row: UserRow): SafeUser {
+  return {
+    id: row.id,
+    username: row.username,
+    email: row.email,
+    createdAt: row.created_at,
   }
 }

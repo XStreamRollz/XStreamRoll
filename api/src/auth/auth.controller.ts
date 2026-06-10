@@ -5,16 +5,12 @@ import {
   HttpStatus,
   Post,
 } from "@nestjs/common"
-import { AuthService } from "./auth.service"
+import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger"
+import { AuthResponse, AuthService } from "./auth.service"
 import { LoginDto } from "./dto/login.dto"
 import { RegisterDto } from "./dto/register.dto"
 
-/**
- * Public authentication endpoints.
- *
- *   POST /auth/register   – create a new user account
- *   POST /auth/login      – obtain a JWT access token
- */
+@ApiTags("auth")
 @Controller("auth")
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -23,11 +19,30 @@ export class AuthController {
   @HttpCode(HttpStatus.CREATED)
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto.email, dto.password)
+  @ApiOperation({
+    summary: "Register a new user",
+    description:
+      "Creates a new user account. Email and username must be unique. " +
+      "Returns a JWT access token and the user profile.",
+  })
+  @ApiCreatedResponse({
+    description: "Registration successful. JWT token returned.",
+  })
+  register(@Body() dto: RegisterDto): Promise<AuthResponse> {
+    return this.authService.register(dto)
   }
 
   @Post("login")
   @HttpCode(HttpStatus.OK)
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto.email, dto.password)
+  @ApiOperation({
+    summary: "Log in with email and password",
+    description:
+      "Authenticates a user by email and password. Returns a signed JWT access token.",
+  })
+  @ApiOkResponse({
+    description: "Login successful. JWT token returned.",
+  })
+  login(@Body() dto: LoginDto): Promise<AuthResponse> {
+    return this.authService.login(dto)
   }
 }

@@ -4,6 +4,8 @@ import { AuthController } from "./auth.controller"
 import { AuthService } from "./auth.service"
 import { UsersRepository } from "./users.repository"
 
+const JWT_EXPIRES_IN = "15m"
+
 @Module({
   imports: [
     JwtModule.register({
@@ -14,5 +16,12 @@ import { UsersRepository } from "./users.repository"
   controllers: [AuthController],
   providers: [AuthService, UsersRepository],
   exports: [AuthService],
+      secret: process.env.JWT_SECRET,
+      signOptions: { expiresIn: JWT_EXPIRES_IN },
+    }),
+  ],
+  controllers: [AuthController],
+  providers: [AuthService],
+  exports: [AuthService, JwtModule],
 })
 export class AuthModule {}
