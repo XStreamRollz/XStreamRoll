@@ -38,6 +38,9 @@ describe("EventFilter", () => {
     const blocked = ["x"]
     f.setConfig("s1", { blockedEventTypes: blocked })
     blocked.push("y")
-    expect(f.allow(evt("y"))).toBe(false)
+    // The stored config is a copy, so mutating the caller's array after
+    // setConfig must not affect what EventFilter blocks. "y" is therefore
+    // NOT in the stored blocked list, so the event is allowed.
+    expect(f.allow(evt("y"))).toBe(true)
   })
 })

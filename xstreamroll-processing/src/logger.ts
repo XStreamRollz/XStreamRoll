@@ -120,10 +120,10 @@ export class Logger {
   /** Create a child logger with extra default fields merged in. */
   child(defaults: LogFields): Logger {
     return {
-      debug: (m, f) => this.debug(m, { ...defaults, ...(f ?? {}) }),
-      info:  (m, f) => this.info(m,  { ...defaults, ...(f ?? {}) }),
-      warn:  (m, f) => this.warn(m,  { ...defaults, ...(f ?? {}) }),
-      error: (m, f) => this.error(m, { ...defaults, ...(f ?? {}) }),
+      debug: (m: string, f?: LogFields) => this.debug(m, { ...defaults, ...(f ?? {}) }),
+      info:  (m: string, f?: LogFields) => this.info(m,  { ...defaults, ...(f ?? {}) }),
+      warn:  (m: string, f?: LogFields) => this.warn(m,  { ...defaults, ...(f ?? {}) }),
+      error: (m: string, f?: LogFields) => this.error(m, { ...defaults, ...(f ?? {}) }),
     } as unknown as Logger
   }
 }
