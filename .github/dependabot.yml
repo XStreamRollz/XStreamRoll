@@ -1,0 +1,56 @@
+version: 2
+updates:
+  # Root package
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    reviewers:
+      - "Xhristin3"
+
+  # Web Frontend workspace
+  - package-ecosystem: "npm"
+    directory: "/app"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    reviewers:
+      - "Xhristin3"
+
+  # API Backend workspace
+  - package-ecosystem: "npm"
+    directory: "/api"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    reviewers:
+      - "Xhristin3"
+
+  # Streaming SDK workspace
+  - package-ecosystem: "npm"
+    directory: "/xstreamroll-sdk"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    reviewers:
+      - "Xhristin3"
+
+  # Stream Processing workspace
+  - package-ecosystem: "npm"
+    directory: "/xstreamroll-processing"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    reviewers:
+      - "Xhristin3"
