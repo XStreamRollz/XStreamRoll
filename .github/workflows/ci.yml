@@ -128,7 +128,7 @@ jobs:
           cache: "npm"
 
       - name: Install app dependencies
-        run: cd app && npm ci
+        run: cd app && npm install
 
       - name: Build app with analysis
         run: cd app && npm run analyze
