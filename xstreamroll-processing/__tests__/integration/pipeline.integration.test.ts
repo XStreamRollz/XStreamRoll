@@ -1,4 +1,5 @@
 import nock from "nock"
+import type { StreamEvent, ProcessedStreamEvent } from "../../src/session"
 
 jest.setTimeout(20000)
 
@@ -13,7 +14,7 @@ test("filtered events are not published (integration)", async () => {
   jest.doMock("../../src/pipeline", () => {
     return {
       EventFilter: class {
-        allow(event: any) {
+        allow(event: StreamEvent) {
           return event.data?.type !== "blocked"
         }
       },
@@ -39,7 +40,7 @@ test("filtered events are not published (integration)", async () => {
       return [200, []]
     })
 
-  const published: any[] = []
+  const published: ProcessedStreamEvent[] = []
   const publishedPromise = new Promise<void>((resolve) => {
     nock("http://mock-api")
       .post("/streams/processed")
@@ -50,9 +51,9 @@ test("filtered events are not published (integration)", async () => {
       })
   })
 
-  const worker = require("../../src/worker")
+  const workerMod = await import("../../src/worker")
   await publishedPromise
-  await worker.shutdown("test")
+  await workerMod.shutdown("test")
 
   // Only the unblocked event should have been published
   expect(published.length).toBeGreaterThanOrEqual(1)

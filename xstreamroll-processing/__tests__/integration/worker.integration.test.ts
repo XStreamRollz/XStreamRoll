@@ -1,4 +1,5 @@
 import nock from "nock"
+import type { ProcessedStreamEvent } from "../../src/session"
 
 jest.setTimeout(20000)
 
@@ -34,7 +35,7 @@ test("single event: polled -> session -> published", async () => {
       return [200, []]
     })
 
-  let publishedBody: any = null
+  let publishedBody: ProcessedStreamEvent | null = null
   const publishedPromise = new Promise<void>((resolve) => {
     nock("http://mock-api")
       .post("/streams/processed")
@@ -46,12 +47,12 @@ test("single event: polled -> session -> published", async () => {
   })
 
   // Act: import worker (starts polling)
-  const worker = require("../../src/worker")
+  const workerMod = await import("../../src/worker")
   // wait for publish
   await awaitWithTimeout(publishedPromise, 5000, "publish timeout")
 
   // shutdown and assert
-  await worker.shutdown("test")
+  await workerMod.shutdown("test")
   expect(publishedBody).not.toBeNull()
   expect(publishedBody.streamId).toBe("s1")
 })
@@ -76,7 +77,7 @@ test("multiple events same stream -> routed to same session", async () => {
       return [200, []]
     })
 
-  const received: any[] = []
+  const received: ProcessedStreamEvent[] = []
   const publishedPromise = new Promise<void>((resolve) => {
     nock("http://mock-api")
       .post("/streams/processed")
@@ -88,9 +89,9 @@ test("multiple events same stream -> routed to same session", async () => {
       })
   })
 
-  const worker = require("../../src/worker")
+  const workerMod = await import("../../src/worker")
   await awaitWithTimeout(publishedPromise, 5000, "publish timeout")
-  await worker.shutdown("test")
+  await workerMod.shutdown("test")
 
   expect(received.length).toBe(2)
   expect(received[0].sessionId).toBe(received[1].sessionId)
@@ -118,7 +119,7 @@ test("capacity exceeded -> event dropped, not published", async () => {
       return [200, []]
     })
 
-  const published: any[] = []
+  const published: ProcessedStreamEvent[] = []
   const publishedPromise = new Promise<void>((resolve) => {
     nock("http://mock-api")
       .post("/streams/processed")
@@ -130,9 +131,9 @@ test("capacity exceeded -> event dropped, not published", async () => {
       })
   })
 
-  const worker = require("../../src/worker")
+  const workerMod = await import("../../src/worker")
   await awaitWithTimeout(publishedPromise, 5000, "publish timeout")
-  await worker.shutdown("test")
+  await workerMod.shutdown("test")
 
   expect(published.length).toBe(1)
 })
@@ -166,12 +167,12 @@ test("graceful shutdown flushes pending publishes", async () => {
       return "ok"
     })
 
-  const worker = require("../../src/worker")
+  const workerMod = await import("../../src/worker")
 
   // give worker a moment to pick up the event
   await new Promise((r) => setTimeout(r, 100))
   // request shutdown and wait for it to complete (should wait for publish)
-  await worker.shutdown("test")
+  await workerMod.shutdown("test")
   expect(published).toBe(true)
 })
 
@@ -202,7 +203,7 @@ test("api error then recovery -> worker retries next poll", async () => {
       })
   })
 
-  const worker = require("../../src/worker")
+  const workerMod = await import("../../src/worker")
   await awaitWithTimeout(publishedPromise, 5000, "publish timeout")
-  await worker.shutdown("test")
+  await workerMod.shutdown("test")
 })
