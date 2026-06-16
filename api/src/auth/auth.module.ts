@@ -3,8 +3,8 @@ import { CacheModule } from "@nestjs/cache-manager"
 import { JwtModule } from "@nestjs/jwt"
 import { AuthController } from "./auth.controller"
 import { AuthService } from "./auth.service"
-import { PasswordResetService } from "./password-reset.service"
 import { UsersRepository } from "./users.repository"
+import { PasswordResetService } from "./password-reset.service"
 
 const JWT_EXPIRES_IN = "15m"
 

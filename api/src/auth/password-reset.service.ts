@@ -1,10 +1,5 @@
-import {
-  BadRequestException,
-  CACHE_MANAGER,
-  Inject,
-  Injectable,
-  Logger,
-} from "@nestjs/common"
+import { BadRequestException, Inject, Injectable, Logger } from "@nestjs/common"
+import { CACHE_MANAGER } from "@nestjs/cache-manager"
 import { Cache } from "cache-manager"
 import { Pool } from "pg"
 import * as bcrypt from "bcrypt"
@@ -40,9 +35,7 @@ export class PasswordResetService {
       )
       return
     }
-    await this.cache.set(rateKey, currentAttempts + 1, {
-      ttl: RATE_LIMIT_TTL_SECONDS,
-    })
+    await this.cache.set(rateKey, currentAttempts + 1, RATE_LIMIT_TTL_SECONDS)
 
     const user = await this.usersRepository.findByEmail(normalizedEmail)
     if (!user) {
@@ -83,9 +76,7 @@ export class PasswordResetService {
       )
       throw new BadRequestException("invalid or expired reset token")
     }
-    await this.cache.set(rateKey, currentAttempts + 1, {
-      ttl: RATE_LIMIT_TTL_SECONDS,
-    })
+    await this.cache.set(rateKey, currentAttempts + 1, RATE_LIMIT_TTL_SECONDS)
 
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS)
     const passwordChangedAt = new Date()

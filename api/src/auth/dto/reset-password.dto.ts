@@ -1,5 +1,5 @@
 import { IsString, Length, Matches } from "class-validator"
-import { ApiProperty } from "nestjs/swagger"
+import { ApiProperty } from "@nestjs/swagger"
 
 /** Payload accepted by `POST /auth/reset-password`. */
 export class ResetPasswordDto {
