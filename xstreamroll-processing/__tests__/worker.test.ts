@@ -4,6 +4,8 @@
  * destroy() on it — a no-op for the actual connection pool).
  */
 
+import http from "http"
+
 jest.mock("../src/config", () => ({
   env: {
     API_URL: "http://localhost:3001",
@@ -31,8 +33,7 @@ jest.mock("axios", () => {
 // Prevent process.exit from terminating the test runner.
 const exitSpy = jest.spyOn(process, "exit").mockImplementation((() => {}) as never)
 
-// Import after mocks so the module picks up the mocked config.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { httpAgent, shutdown } = require("../src/worker")
 
 afterAll(() => {
@@ -41,8 +42,6 @@ afterAll(() => {
 
 describe("worker HTTP agent", () => {
   it("exports a keep-alive http.Agent", () => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const http = require("http")
     expect(httpAgent).toBeInstanceOf(http.Agent)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect((httpAgent as any).keepAlive).toBe(true)
