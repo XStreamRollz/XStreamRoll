@@ -1,5 +1,7 @@
 import { Injectable, NestMiddleware } from "@nestjs/common"
 import { Request, Response, NextFunction } from "express"
+import { env } from "../config/env"
+import { getRequestIp, maskRequestIp } from "../common/ip-mask"
 
 const SENSITIVE_PATH_PATTERNS: RegExp[] = [/^\/auth\b/]
 
@@ -11,10 +13,7 @@ export class RequestLoggerMiddleware implements NestMiddleware {
     const start = process.hrtime.bigint()
     const isSensitive = SENSITIVE_PATH_PATTERNS.some((re) => re.test(req.path))
     const userId = req.user?.id ?? null
-    const ip =
-      (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ??
-      req.ip ??
-      null
+    const ip = maskRequestIp(getRequestIp(req), env.LOG_IP_MASKING)
 
     res.on("finish", () => {
       const durationMs =
