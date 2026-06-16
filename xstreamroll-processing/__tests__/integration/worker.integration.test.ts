@@ -10,13 +10,31 @@ function awaitWithTimeout<T>(p: Promise<T>, ms: number, msg = "timeout") {
   ])
 }
 
-afterEach(() => {
+let workerMod: { shutdown(signal: string): Promise<void> } | null = null
+let exitSpy: jest.SpyInstance | null = null
+
+beforeEach(() => {
+  exitSpy = jest
+    .spyOn(process, "exit")
+    .mockImplementation((() => undefined) as never)
+})
+
+afterEach(async () => {
+  if (workerMod) {
+    await workerMod.shutdown("test")
+    workerMod = null
+  }
+  exitSpy?.mockRestore()
+  exitSpy = null
   nock.cleanAll()
+  jest.clearAllTimers()
   jest.resetModules()
+  await new Promise((r) => setTimeout(r, 100))
 })
 
 test("single event: polled -> session -> published", async () => {
   // Arrange env and nock before importing the worker (worker starts on import)
+  process.env.NODE_ENV = "test"
   process.env.API_URL = "http://mock-api"
   process.env.POLL_INTERVAL_MS = "50"
 
@@ -39,22 +57,21 @@ test("single event: polled -> session -> published", async () => {
   const publishedPromise = new Promise<void>((resolve) => {
     nock("http://mock-api")
       .post("/streams/processed")
-      .reply(200, function (_uri, body) {
-        publishedBody = body
+      .reply(200, function (_uri, body: unknown) {
+        publishedBody = body as ProcessedStreamEvent
         resolve()
         return "ok"
       })
   })
 
   // Act: import worker (starts polling)
-  const workerMod = await import("../../src/worker")
+  workerMod = await import("../../src/worker")
   // wait for publish
   await awaitWithTimeout(publishedPromise, 5000, "publish timeout")
 
-  // shutdown and assert
-  await workerMod.shutdown("test")
   expect(publishedBody).not.toBeNull()
-  expect(publishedBody.streamId).toBe("s1")
+  const actual = publishedBody as unknown as ProcessedStreamEvent
+  expect(actual.streamId).toBe("s1")
 })
 
 test("multiple events same stream -> routed to same session", async () => {
@@ -82,16 +99,15 @@ test("multiple events same stream -> routed to same session", async () => {
     nock("http://mock-api")
       .post("/streams/processed")
       .times(2)
-      .reply(200, function (_u, body) {
-        received.push(body)
+      .reply(200, function (_u, body: unknown) {
+        received.push(body as ProcessedStreamEvent)
         if (received.length === 2) resolve()
         return "ok"
       })
   })
 
-  const workerMod = await import("../../src/worker")
+  workerMod = await import("../../src/worker")
   await awaitWithTimeout(publishedPromise, 5000, "publish timeout")
-  await workerMod.shutdown("test")
 
   expect(received.length).toBe(2)
   expect(received[0].sessionId).toBe(received[1].sessionId)
@@ -123,17 +139,16 @@ test("capacity exceeded -> event dropped, not published", async () => {
   const publishedPromise = new Promise<void>((resolve) => {
     nock("http://mock-api")
       .post("/streams/processed")
-      .reply(200, function (_u, body) {
-        published.push(body)
+      .reply(200, function (_u, body: unknown) {
+        published.push(body as ProcessedStreamEvent)
         // resolve after at most one publish (capacity should drop the other)
         if (published.length >= 1) resolve()
         return "ok"
       })
   })
 
-  const workerMod = await import("../../src/worker")
+  workerMod = await import("../../src/worker")
   await awaitWithTimeout(publishedPromise, 5000, "publish timeout")
-  await workerMod.shutdown("test")
 
   expect(published.length).toBe(1)
 })

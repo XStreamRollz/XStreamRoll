@@ -3,9 +3,26 @@ import type { StreamEvent, ProcessedStreamEvent } from "../../src/session"
 
 jest.setTimeout(20000)
 
-afterEach(() => {
+let workerMod: { shutdown(signal: string): Promise<void> } | null = null
+let exitSpy: jest.SpyInstance | null = null
+
+beforeEach(() => {
+  exitSpy = jest
+    .spyOn(process, "exit")
+    .mockImplementation((() => undefined) as never)
+})
+
+afterEach(async () => {
+  if (workerMod) {
+    await workerMod.shutdown("test")
+    workerMod = null
+  }
+  exitSpy?.mockRestore()
+  exitSpy = null
   nock.cleanAll()
+  jest.clearAllTimers()
   jest.resetModules()
+  await new Promise((r) => setTimeout(r, 100))
 })
 
 test("filtered events are not published (integration)", async () => {
@@ -21,6 +38,7 @@ test("filtered events are not published (integration)", async () => {
     }
   })
 
+  process.env.NODE_ENV = "test"
   process.env.API_URL = "http://mock-api"
   process.env.POLL_INTERVAL_MS = "50"
 
@@ -44,16 +62,15 @@ test("filtered events are not published (integration)", async () => {
   const publishedPromise = new Promise<void>((resolve) => {
     nock("http://mock-api")
       .post("/streams/processed")
-      .reply(200, function (_u, body) {
-        published.push(body)
+      .reply(200, function (_u, body: unknown) {
+        published.push(body as ProcessedStreamEvent)
         resolve()
         return "ok"
       })
   })
 
-  const workerMod = await import("../../src/worker")
+  workerMod = await import("../../src/worker")
   await publishedPromise
-  await workerMod.shutdown("test")
 
   // Only the unblocked event should have been published
   expect(published.length).toBeGreaterThanOrEqual(1)

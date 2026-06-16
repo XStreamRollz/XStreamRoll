@@ -38,7 +38,9 @@ let shuttingDown = false
 async function pollOnce(): Promise<void> {
   let events: StreamEvent[] = []
   try {
-    const response = await axiosInstance.get<StreamEvent[]>(`${API_URL}/streams/pending`)
+    const response = await axiosInstance.get<StreamEvent[]>(
+      `${API_URL}/streams/pending`,
+    )
     events = Array.isArray(response.data) ? response.data : []
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
@@ -47,7 +49,11 @@ async function pollOnce(): Promise<void> {
   }
 
   for (const event of events) {
-    if (!event || typeof event.streamId !== "string" || event.streamId.length === 0) {
+    if (
+      !event ||
+      typeof event.streamId !== "string" ||
+      event.streamId.length === 0
+    ) {
       console.warn(`[${WORKER_ID}] dropping malformed event`, event)
       continue
     }
@@ -86,7 +92,9 @@ async function start(): Promise<void> {
   void loop()
 }
 
-const gracefulShutdown = new GracefulShutdown({ timeoutMs: 15_000 })
+const gracefulShutdown = new GracefulShutdown({
+  timeoutMs: 15_000,
+})
 
 gracefulShutdown.register({
   name: "stop poll loop",
@@ -111,14 +119,19 @@ gracefulShutdown.register({
   },
 })
 
-gracefulShutdown.install()
+if (env.NODE_ENV !== "test") {
+  gracefulShutdown.install()
+}
 
 /** Exported for testing: triggers the graceful-shutdown sequence. */
 export const shutdown = (signal: string): Promise<void> =>
   gracefulShutdown.requestShutdown(signal as ShutdownReason)
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(), ms)
+    if (typeof timer.unref === "function") timer.unref()
+  })
 }
 
 void start()
