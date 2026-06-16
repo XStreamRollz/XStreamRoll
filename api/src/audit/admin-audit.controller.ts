@@ -6,6 +6,7 @@ import { PaginationQueryDto } from "../common/dto/pagination.dto"
 export class AdminAuditController {
   constructor(private readonly auditService: AuditService) {}
 
+  //get function
   @Get()
   async findAll(@Query() query: PaginationQueryDto) {
     const page = query.page ?? 1
