@@ -1,4 +1,6 @@
-import { CacheModule, Module } from "@nestjs/common"import { CacheModule } from "@nestjs/cache-manager"import { JwtModule } from "@nestjs/jwt"
+import { Module } from "@nestjs/common"
+import { CacheModule } from "@nestjs/cache-manager"
+import { JwtModule } from "@nestjs/jwt"
 import { AuthController } from "./auth.controller"
 import { AuthService } from "./auth.service"
 import { PasswordResetService } from "./password-reset.service"
