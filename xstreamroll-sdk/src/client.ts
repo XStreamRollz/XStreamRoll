@@ -1,5 +1,5 @@
 import axios, { type AxiosInstance } from "axios"
-import type { StreamEvent, StreamConfig, AuthTokens, CreateUserDto } from "./types"
+import type { StreamEvent, StreamConfig, Stream, AuthTokens, CreateUserDto } from "./types"
 
 /** Named environment presets for base URL resolution. */
 export type ClientEnv = "development" | "staging" | "production"
@@ -96,7 +96,7 @@ export class StreamingClient {
     }
   }
 
-  async getStreamStatus(streamId: string): Promise<any> {
+  async getStreamStatus(streamId: string): Promise<Stream> {
     try {
       const response = await this.http.get(`/streams/${streamId}`)
       return response.data

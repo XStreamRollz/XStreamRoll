@@ -16,8 +16,8 @@ export interface PagedTags extends PaginatedResult<Tag> {
 export class TagsService {
   constructor(private readonly tags: TagsRepository) {}
 
-  list(page: number, limit: number): PagedTags {
-    const { items, total } = this.tags.listPaginated(page, limit)
+  async list(page: number, limit: number): Promise<PagedTags> {
+    const { items, total } = await this.tags.listPaginated(page, limit)
     return {
       data: items,
       page,
@@ -31,24 +31,24 @@ export class TagsService {
    * Create-or-fetch a tag from a raw name, then attach it to the stream.
    * Returns the canonical Tag row (existing or freshly created).
    */
-  attachToStream(streamId: number, rawName: string): Tag {
+  async attachToStream(streamId: number, rawName: string): Promise<Tag> {
     const slug = slugify(rawName)
     if (!slug) {
       throw new BadRequestException(
         "name must contain at least one alphanumeric character",
       )
     }
-    const tag = this.tags.upsertBySlug(rawName.trim(), slug)
-    this.tags.attachToStream(streamId, tag.id)
+    const tag = await this.tags.upsertBySlug(rawName.trim(), slug)
+    await this.tags.attachToStream(streamId, tag.id)
     return tag
   }
 
-  detachFromStream(streamId: number, tagId: number): void {
-    const tag = this.tags.findById(tagId)
+  async detachFromStream(streamId: number, tagId: number): Promise<void> {
+    const tag = await this.tags.findById(tagId)
     if (!tag) {
       throw new NotFoundException(`tag ${tagId} not found`)
     }
-    const removed = this.tags.detachFromStream(streamId, tagId)
+    const removed = await this.tags.detachFromStream(streamId, tagId)
     if (!removed) {
       throw new NotFoundException(
         `tag ${tagId} is not attached to stream ${streamId}`,

@@ -81,6 +81,7 @@ async function bootstrap() {
       "bearer",
     )
     .addTag("health", "Liveness and readiness probes")
+    .addTag("streams", "Stream lifecycle CRUD")
     .build()
 
   const document = SwaggerModule.createDocument(app, swaggerConfig)

@@ -4,6 +4,8 @@ import { env } from "./config"
 import { EventFilter } from "./pipeline"
 import { SessionRegistry } from "./session-registry"
 import { ProcessedStreamEvent, StreamEvent } from "./session"
+import { Agent } from "http"
+import { GracefulShutdown } from "./lifecycle"
 
 const API_URL = env.API_URL
 const WORKER_ID = `worker-${Date.now()}`
@@ -31,6 +33,8 @@ const registry = new SessionRegistry(
 )
 
 const filter = new EventFilter()
+
+let shuttingDown = false
 
 async function pollOnce(): Promise<void> {
   let events: StreamEvent[] = []
@@ -83,25 +87,34 @@ async function start(): Promise<void> {
   void loop()
 }
 
-let shuttingDown = false
-export async function shutdown(signal: string): Promise<void> {
-  if (shuttingDown) return
-  shuttingDown = true
-  console.log(`[${WORKER_ID}] ${signal} received — draining sessions`)
-  try {
-    await registry.drainAll()
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    console.error(`[${WORKER_ID}] drain failed: ${message}`)
-  }
-  // Destroy the shared HTTP keep-alive pool so all sockets are closed.
-  httpAgent.destroy()
-  console.log(`[${WORKER_ID}] shutdown complete`)
-  process.exit(0)
-}
+const shutdown = new GracefulShutdown({ timeoutMs: 15_000 })
 
-process.on("SIGINT", () => void shutdown("SIGINT"))
-process.on("SIGTERM", () => void shutdown("SIGTERM"))
+shutdown.register({
+  name: "stop poll loop",
+  run: () => {
+    shuttingDown = true
+  },
+})
+
+shutdown.register({
+  name: "drain sessions",
+  run: async () => {
+    await registry.drainAll()
+  },
+})
+
+shutdown.register({
+  name: "close http pool",
+  run: () => {
+    // axios' default adapter uses the global http(s).Agent; calling
+    // destroy() on the agent releases keep-alive sockets so the
+    // process can exit promptly after drain.
+    const agent = new Agent()
+    agent.destroy()
+  },
+})
+
+shutdown.install()
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))

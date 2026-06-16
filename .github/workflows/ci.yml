@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  quality:
     runs-on: ubuntu-latest
 
     steps:
@@ -34,18 +34,49 @@ jobs:
       - name: Install processing dependencies
         run: cd xstreamroll-processing && npm install
 
-      - name: Run api tests with coverage
-        run: cd api && npm run test:cov --if-present
+      - name: Lint — api
+        run: cd api && npm run lint
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test
           JWT_SECRET: test-secret
           STREAM_API_KEY: test-api-key
 
-      - name: Run sdk tests with coverage
-        run: cd xstreamroll-sdk && npm run test:cov --if-present
+      - name: Lint — sdk
+        run: cd xstreamroll-sdk && npm run lint
 
-      - name: Run processing tests with coverage
-        run: cd xstreamroll-processing && npm run test:cov --if-present
+      - name: Lint — processing
+        run: cd xstreamroll-processing && npm run lint
+
+      - name: Lint — app
+        run: cd app && npm run lint
+
+      - name: Typecheck — api
+        run: cd api && npx tsc --noEmit
+
+      - name: Typecheck — sdk
+        run: cd xstreamroll-sdk && npx tsc --noEmit
+
+      - name: Typecheck — processing
+        run: cd xstreamroll-processing && npx tsc --noEmit
+
+      - name: Typecheck — app
+        run: cd app && npx tsc --noEmit
+
+      - name: Test — api (with coverage)
+        run: cd api && npm run test:cov
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+          JWT_SECRET: test-secret
+          STREAM_API_KEY: test-api-key
+
+      - name: Test — sdk (with coverage)
+        run: cd xstreamroll-sdk && npm run test:cov
+
+      - name: Test — processing (with coverage)
+        run: cd xstreamroll-processing && npm run test:cov
+
+      - name: Test — app (with coverage)
+        run: cd app && npm run test:cov
 
       - name: Upload api coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -72,4 +103,13 @@ jobs:
           files: ./xstreamroll-processing/coverage/lcov.info
           flags: processing
           name: processing-coverage
+          fail_ci_if_error: false
+
+      - name: Upload app coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./app/coverage/lcov.info
+          flags: app
+          name: app-coverage
           fail_ci_if_error: false
