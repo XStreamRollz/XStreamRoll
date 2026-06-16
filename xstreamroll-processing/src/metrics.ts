@@ -35,14 +35,53 @@ export function getMetrics(): Metrics {
 
 export function startMetricsServer(port = 3002): ReturnType<typeof createServer> {
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
-    if (req.method === "GET" && req.url === "/metrics") {
-      const body = JSON.stringify(getMetrics())
-      res.writeHead(200, { "Content-Type": "application/json" })
-      res.end(body)
-    } else {
-      res.writeHead(404)
-      res.end()
+    const url = req.url || ""
+    const accept = (req.headers.accept || "").toLowerCase()
+
+    if (req.method === "GET") {
+      if (url === "/metrics/json") {
+        const body = JSON.stringify(getMetrics())
+        res.writeHead(200, { "Content-Type": "application/json" })
+        res.end(body)
+        return
+      }
+
+      if (url === "/metrics" || url === "/metrics/" || url === "/metrics/prometheus") {
+        const wantsJson =
+          accept.includes("application/json") &&
+          !accept.includes("text/plain") &&
+          !accept.includes("*/*")
+
+        if (wantsJson) {
+          const body = JSON.stringify(getMetrics())
+          res.writeHead(200, { "Content-Type": "application/json" })
+          res.end(body)
+        } else {
+          const m = getMetrics()
+          const body = [
+            `# HELP xstreamroll_messages_processed_total Total messages processed by the worker`,
+            `# TYPE xstreamroll_messages_processed_total counter`,
+            `xstreamroll_messages_processed_total ${m.messagesProcessed}`,
+            `# HELP xstreamroll_errors_total Total errors encountered by the worker`,
+            `# TYPE xstreamroll_errors_total counter`,
+            `xstreamroll_errors_total ${m.errors}`,
+            `# HELP xstreamroll_queue_depth Current queue depth of the worker`,
+            `# TYPE xstreamroll_queue_depth gauge`,
+            `xstreamroll_queue_depth ${m.queueDepth}`,
+            `# HELP xstreamroll_uptime_seconds Uptime of the worker in seconds`,
+            `# TYPE xstreamroll_uptime_seconds gauge`,
+            `xstreamroll_uptime_seconds ${m.uptimeSeconds}`,
+          ].join("\n") + "\n"
+
+          res.writeHead(200, { "Content-Type": "text/plain; version=0.0.4" })
+          res.end(body)
+        }
+        return
+      }
     }
+
+    res.writeHead(404)
+    res.end()
   })
 
   server.listen(port, () => {
