@@ -23,6 +23,11 @@ interface MockUsersRepository {
   create: jest.Mock<Promise<User>>
 }
 
+interface MockPasswordResetService {
+  sendResetToken: jest.Mock<Promise<void>>
+  resetPassword: jest.Mock<Promise<void>>
+}
+
 function mockJwtService(): MockJwtService {
   return {
     sign: jest.fn(),
@@ -37,13 +42,22 @@ function mockUsersRepository(): MockUsersRepository {
   }
 }
 
+function mockPasswordResetService(): MockPasswordResetService {
+  return {
+    sendResetToken: jest.fn(),
+    resetPassword: jest.fn(),
+  }
+}
+
 function makeService(
   jwt: MockJwtService,
   users: MockUsersRepository,
+  passwordReset: MockPasswordResetService,
 ): AuthService {
   return new AuthService(
     jwt as unknown as JwtService,
     users as unknown as UsersRepository,
+    passwordReset as unknown as any,
   )
 }
 
@@ -66,12 +80,14 @@ function dummyUser(overrides: Partial<User> = {}): User {
 describe("AuthService", () => {
   let jwt: MockJwtService
   let users: MockUsersRepository
+  let passwordReset: MockPasswordResetService
   let service: AuthService
 
   beforeEach(() => {
     jwt = mockJwtService()
     users = mockUsersRepository()
-    service = makeService(jwt, users)
+    passwordReset = mockPasswordResetService()
+    service = makeService(jwt, users, passwordReset)
     jest.clearAllMocks()
   })
 
@@ -87,7 +103,9 @@ describe("AuthService", () => {
     it("creates a user and returns an access token with user profile", async () => {
       users.findByEmail.mockResolvedValue(null)
       users.findByUsername.mockResolvedValue(null)
-      users.create.mockResolvedValue(dummyUser({ email: dto.email, username: dto.username }))
+      users.create.mockResolvedValue(
+        dummyUser({ email: dto.email, username: dto.username }),
+      )
       jwt.sign.mockReturnValue("jwt.token.here")
       ;(bcrypt.hash as jest.Mock).mockResolvedValue("$2b$10$hashed")
 
@@ -123,7 +141,9 @@ describe("AuthService", () => {
 
     it("throws ConflictException when the username is already taken", async () => {
       users.findByEmail.mockResolvedValue(null)
-      users.findByUsername.mockResolvedValue(dummyUser({ username: dto.username }))
+      users.findByUsername.mockResolvedValue(
+        dummyUser({ username: dto.username }),
+      )
 
       await expect(service.register(dto)).rejects.toThrow(ConflictException)
       expect(users.create).not.toHaveBeenCalled()
@@ -139,7 +159,8 @@ describe("AuthService", () => {
       await service.register(dto)
 
       expect(bcrypt.hash).toHaveBeenCalledWith(dto.password, 12)
-      const [storedUsername, storedEmail, storedHash] = users.create.mock.calls[0]
+      const [storedUsername, storedEmail, storedHash] =
+        users.create.mock.calls[0]
       expect(storedUsername).toBe(dto.username)
       expect(storedEmail).toBe(dto.email)
       expect(storedHash).toBe("$2b$10$hashed")
@@ -149,8 +170,44 @@ describe("AuthService", () => {
       users.findByEmail.mockResolvedValue(dummyUser({ email: "dup@x.com" }))
 
       await expect(
-        service.register({ username: "dupuser", email: "dup@x.com", password: "someOtherPassword" }),
+        service.register({
+          username: "dupuser",
+          email: "dup@x.com",
+          password: "someOtherPassword",
+        }),
       ).rejects.toThrow(ConflictException)
+    })
+  })
+
+  // -- forgot password --------------------------------------------------
+
+  describe("forgotPassword", () => {
+    it("delegates reset requests to the password reset service", async () => {
+      const dto = { email: "user@x.com" }
+      passwordReset.sendResetToken.mockResolvedValue(undefined)
+
+      await service.forgotPassword(dto)
+
+      expect(passwordReset.sendResetToken).toHaveBeenCalledWith(dto.email)
+    })
+  })
+
+  // -- reset password ---------------------------------------------------
+
+  describe("resetPassword", () => {
+    it("delegates password resets to the password reset service", async () => {
+      const dto = {
+        token: "reset-token",
+        password: "NewP4ssw0rd!",
+      }
+      passwordReset.resetPassword.mockResolvedValue(undefined)
+
+      await service.resetPassword(dto)
+
+      expect(passwordReset.resetPassword).toHaveBeenCalledWith(
+        dto.token,
+        dto.password,
+      )
     })
   })
 
@@ -168,7 +225,10 @@ describe("AuthService", () => {
       const result = await service.login(dto)
 
       expect(users.findByEmail).toHaveBeenCalledWith(dto.email)
-      expect(bcrypt.compare).toHaveBeenCalledWith(dto.password, user.password_hash)
+      expect(bcrypt.compare).toHaveBeenCalledWith(
+        dto.password,
+        user.password_hash,
+      )
       expect(jwt.sign).toHaveBeenCalledWith({
         sub: user.id,
         email: dto.email,
@@ -229,7 +289,10 @@ describe("AuthService", () => {
 
       await service.login(dto)
 
-      expect(bcrypt.compare).toHaveBeenCalledWith(dto.password, user.password_hash)
+      expect(bcrypt.compare).toHaveBeenCalledWith(
+        dto.password,
+        user.password_hash,
+      )
       expect(jwt.sign).toHaveBeenCalledWith({
         sub: user.id,
         email: dto.email,
