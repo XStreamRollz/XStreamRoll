@@ -1,5 +1,13 @@
 import axios, { type AxiosInstance } from "axios"
-import type { StreamEvent, StreamConfig, Stream, AuthTokens, CreateUserDto } from "./types"
+import {
+  ApiError,
+  type StreamEvent,
+  type StreamConfig,
+  type Stream,
+  type AuthTokens,
+  type CreateUserDto,
+  type ApiErrorResponse,
+} from "./types"
 
 /** Named environment presets for base URL resolution. */
 export type ClientEnv = "development" | "staging" | "production"
@@ -46,6 +54,24 @@ export class StreamingClient {
           await this.refreshToken()
           original.headers.Authorization = `Bearer ${this.tokens!.accessToken}`
           return this.http(original)
+        }
+        return Promise.reject(error)
+      }
+    )
+
+    // Wrap errors in ApiError
+    this.http.interceptors.response.use(
+      (res) => res,
+      (error) => {
+        if (axios.isAxiosError(error) && error.response) {
+          const data = error.response.data as ApiErrorResponse
+          return Promise.reject(
+            new ApiError(
+              error.response.status,
+              typeof data?.message === "string" ? data.message : error.message,
+              data
+            )
+          )
         }
         return Promise.reject(error)
       }
