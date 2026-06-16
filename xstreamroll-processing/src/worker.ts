@@ -1,3 +1,4 @@
+import http from "http"
 import axios from "axios"
 import { env } from "./config"
 import { EventFilter } from "./pipeline"
@@ -12,11 +13,18 @@ const MAX_CONCURRENT_SESSIONS = Math.max(
   Number(process.env.MAX_CONCURRENT_SESSIONS ?? 32),
 )
 
+// Shared keep-alive agent so axios reuses TCP connections and we can
+// explicitly destroy the pool on graceful shutdown.
+export const httpAgent = new http.Agent({ keepAlive: true })
+
+// Axios instance that routes all requests through the shared agent.
+export const axiosInstance = axios.create({ httpAgent })
+
 const registry = new SessionRegistry(
   WORKER_ID,
   {
     async publish(event: ProcessedStreamEvent): Promise<void> {
-      await axios.post(`${API_URL}/streams/processed`, event)
+      await axiosInstance.post(`${API_URL}/streams/processed`, event)
     },
   },
   { maxConcurrentSessions: MAX_CONCURRENT_SESSIONS },
@@ -27,7 +35,7 @@ const filter = new EventFilter()
 async function pollOnce(): Promise<void> {
   let events: StreamEvent[] = []
   try {
-    const response = await axios.get<StreamEvent[]>(`${API_URL}/streams/pending`)
+    const response = await axiosInstance.get<StreamEvent[]>(`${API_URL}/streams/pending`)
     events = Array.isArray(response.data) ? response.data : []
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
@@ -76,7 +84,7 @@ async function start(): Promise<void> {
 }
 
 let shuttingDown = false
-async function shutdown(signal: string): Promise<void> {
+export async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return
   shuttingDown = true
   console.log(`[${WORKER_ID}] ${signal} received — draining sessions`)
@@ -86,6 +94,8 @@ async function shutdown(signal: string): Promise<void> {
     const message = err instanceof Error ? err.message : String(err)
     console.error(`[${WORKER_ID}] drain failed: ${message}`)
   }
+  // Destroy the shared HTTP keep-alive pool so all sockets are closed.
+  httpAgent.destroy()
   console.log(`[${WORKER_ID}] shutdown complete`)
   process.exit(0)
 }
