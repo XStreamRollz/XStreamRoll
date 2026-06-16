@@ -122,6 +122,7 @@ describe("AuthService", () => {
         sub: 1,
         email: dto.email,
         username: dto.username,
+        passwordChangedAt: expect.any(Number),
       })
       expect(result.accessToken).toBe("jwt.token.here")
       expect(result.user).toEqual({
@@ -233,6 +234,7 @@ describe("AuthService", () => {
         sub: user.id,
         email: dto.email,
         username: user.username,
+        passwordChangedAt: expect.any(Number),
       })
       expect(result.accessToken).toBe("jwt.token.here")
       expect(result.user).toEqual({
@@ -297,6 +299,7 @@ describe("AuthService", () => {
         sub: user.id,
         email: dto.email,
         username: user.username,
+        passwordChangedAt: expect.any(Number),
       })
     })
   })
