@@ -75,7 +75,8 @@ export class StreamsController {
   @UseGuards(AuthGuard)
   @ApiOperation({
     summary: "List streams",
-    description: "Returns a paginated list of streams with optional status filter.",
+    description:
+      "Returns a paginated list of streams with optional status filter.",
   })
   @ApiOkResponse({ description: "Paginated list of streams." })
   list(@Query() query: ListStreamsQueryDto) {
@@ -133,7 +134,7 @@ export class StreamsController {
   })
   @ApiNoContentResponse({ description: "Stream deleted." })
   @ApiNotFoundResponse({ description: "Stream not found." })
-  delete(@Param("id", ParseIntPipe) id: number): void {
-    this.streamsService.delete(id)
+  async delete(@Param("id", ParseIntPipe) id: number): Promise<void> {
+    await this.streamsService.delete(id)
   }
 }

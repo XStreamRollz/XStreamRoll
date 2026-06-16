@@ -56,10 +56,10 @@ export class StreamTagsController {
 
   @Delete(":tagId")
   @HttpCode(HttpStatus.NO_CONTENT)
-  detach(
+  async detach(
     @Param("id", ParseIntPipe) streamId: number,
     @Param("tagId", ParseIntPipe) tagId: number,
-  ): void {
-    this.tagsService.detachFromStream(streamId, tagId)
+  ): Promise<void> {
+    await this.tagsService.detachFromStream(streamId, tagId)
   }
 }

@@ -4,10 +4,13 @@ import { StreamTag, Tag } from "../tag.entity"
 /**
  * In-memory tags repository.
  *
- * This module is deliberately persistence-agnostic: the controller and
- * service only depend on the public methods exposed here. Once the
- * Postgres TypeORM/Prisma layer lands the class will be swapped for a
- * concrete DB-backed repository without touching higher layers.
+ * Kept for unit testing and local development without a database.
+ * The service layer depends on the {@link TAGS_REPOSITORY} injection
+ * token rather than this concrete class directly, so tests can swap
+ * implementations via the NestJS DI container.
+ *
+ * All methods are async to match the DB-backed implementation's
+ * interface — this makes the two implementations interchangeable.
  */
 @Injectable()
 export class TagsRepository {
@@ -15,11 +18,11 @@ export class TagsRepository {
   private readonly streamTags = new Map<string, StreamTag>() // key: `${streamId}:${tagId}`
   private nextId = 1
 
-  findBySlug(slug: string): Tag | undefined {
+  async findBySlug(slug: string): Promise<Tag | undefined> {
     return this.tagsBySlug.get(slug)
   }
 
-  findById(id: number): Tag | undefined {
+  async findById(id: number): Promise<Tag | undefined> {
     for (const tag of this.tagsBySlug.values()) {
       if (tag.id === id) return tag
     }
@@ -28,10 +31,10 @@ export class TagsRepository {
 
   /**
    * Idempotent insert: if a tag with the same slug already exists, the
-   * existing row is returned. This matches the "unique on slug" semantic
-   * we want from a future DB index.
+   * existing row is returned. Matches the unique-on-slug constraint
+   * in the database schema.
    */
-  upsertBySlug(name: string, slug: string): Tag {
+  async upsertBySlug(name: string, slug: string): Promise<Tag> {
     const existing = this.tagsBySlug.get(slug)
     if (existing) return existing
     const tag: Tag = {
@@ -45,10 +48,13 @@ export class TagsRepository {
   }
 
   /**
-   * Returns a stable, alphabetically-sorted page of tags plus a total
-   * count so the controller can produce a complete pagination envelope.
+   * Returns a stable, alphabetically-sorted (by slug) page of tags plus
+   * a total count for the pagination envelope.
    */
-  listPaginated(page: number, limit: number): { items: Tag[]; total: number } {
+  async listPaginated(
+    page: number,
+    limit: number,
+  ): Promise<{ items: Tag[]; total: number }> {
     const all = Array.from(this.tagsBySlug.values()).sort((a, b) =>
       a.slug.localeCompare(b.slug),
     )
@@ -59,7 +65,7 @@ export class TagsRepository {
     }
   }
 
-  attachToStream(streamId: number, tagId: number): StreamTag {
+  async attachToStream(streamId: number, tagId: number): Promise<StreamTag> {
     const key = `${streamId}:${tagId}`
     const existing = this.streamTags.get(key)
     if (existing) return existing
@@ -68,11 +74,11 @@ export class TagsRepository {
     return row
   }
 
-  detachFromStream(streamId: number, tagId: number): boolean {
+  async detachFromStream(streamId: number, tagId: number): Promise<boolean> {
     return this.streamTags.delete(`${streamId}:${tagId}`)
   }
 
-  isAttached(streamId: number, tagId: number): boolean {
+  async isAttached(streamId: number, tagId: number): Promise<boolean> {
     return this.streamTags.has(`${streamId}:${tagId}`)
   }
 }

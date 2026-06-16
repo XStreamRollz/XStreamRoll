@@ -4,24 +4,28 @@ import { Stream } from "../stream.entity"
 /**
  * In-memory streams repository.
  *
- * Persistence-agnostic: the controller and service depend only on the
- * public methods exposed here. When the Postgres layer is ready this
- * class can be swapped for a DB-backed repository without changing
- * higher layers.
+ * Kept for unit testing and local development without a database.
+ * The service layer depends on the {@link STREAMS_REPOSITORY} injection
+ * token rather than this concrete class directly, so tests can swap
+ * implementations via the NestJS DI container.
+ *
+ * All methods are async to match the DB-backed implementation's
+ * interface — this makes the two implementations interchangeable.
  */
 @Injectable()
 export class StreamsRepository {
   private readonly streamsById = new Map<number, Stream>()
   private nextId = 1
 
-  findById(id: number): Stream | undefined {
+  async findById(id: number): Promise<Stream | undefined> {
     return this.streamsById.get(id)
   }
 
   /**
-   * Returns all streams, optionally filtered by status.
+   * Returns all streams, optionally filtered by status,
+   * sorted newest-first (createdAt DESC).
    */
-  listFiltered(filter?: { status?: string }): Stream[] {
+  private listFiltered(filter?: { status?: string }): Stream[] {
     let results = Array.from(this.streamsById.values())
     if (filter?.status) {
       results = results.filter((s) => s.status === filter.status)
@@ -34,11 +38,11 @@ export class StreamsRepository {
   /**
    * Paginated listing.
    */
-  listPaginated(
+  async listPaginated(
     page: number,
     limit: number,
     filter?: { status?: string },
-  ): { items: Stream[]; total: number } {
+  ): Promise<{ items: Stream[]; total: number }> {
     const filtered = this.listFiltered(filter)
     const offset = (page - 1) * limit
     return {
@@ -47,7 +51,11 @@ export class StreamsRepository {
     }
   }
 
-  create(params: { userId: number; name: string; description?: string }): Stream {
+  async create(params: {
+    userId: number
+    name: string
+    description?: string
+  }): Promise<Stream> {
     const stream: Stream = {
       id: this.nextId++,
       userId: params.userId,
@@ -61,13 +69,14 @@ export class StreamsRepository {
     return stream
   }
 
-  update(
+  async update(
     id: number,
     changes: { name?: string; description?: string; status?: string },
-  ): Stream {
+  ): Promise<Stream> {
     const stream = this.streamsById.get(id)!
     if (changes.name !== undefined) stream.name = changes.name
-    if (changes.description !== undefined) stream.description = changes.description
+    if (changes.description !== undefined)
+      stream.description = changes.description
     if (changes.status !== undefined) {
       stream.status = changes.status as Stream["status"]
     }
@@ -75,7 +84,7 @@ export class StreamsRepository {
     return stream
   }
 
-  delete(id: number): boolean {
+  async delete(id: number): Promise<boolean> {
     return this.streamsById.delete(id)
   }
 }

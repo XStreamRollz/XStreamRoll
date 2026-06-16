@@ -15,7 +15,11 @@ export interface PagedStreams extends PaginatedResult<Stream> {
 export class StreamsService {
   constructor(private readonly repo: StreamsRepository) {}
 
-  create(dto: { userId: number; name: string; description?: string }): Stream {
+  async create(dto: {
+    userId: number
+    name: string
+    description?: string
+  }): Promise<Stream> {
     return this.repo.create({
       userId: dto.userId,
       name: dto.name.trim(),
@@ -23,12 +27,16 @@ export class StreamsService {
     })
   }
 
-  list(
+  async list(
     page: number,
     limit: number,
     filter?: { status?: string },
-  ): PagedStreams {
-    const { items, total } = this.repo.listPaginated(page, limit, filter)
+  ): Promise<PagedStreams> {
+    const { items, total } = await this.repo.listPaginated(
+      page,
+      limit,
+      filter,
+    )
     return {
       data: items,
       page,
@@ -38,21 +46,21 @@ export class StreamsService {
     }
   }
 
-  findById(id: number): Stream {
-    const stream = this.repo.findById(id)
+  async findById(id: number): Promise<Stream> {
+    const stream = await this.repo.findById(id)
     if (!stream) {
       throw new NotFoundException(`stream ${id} not found`)
     }
     return stream
   }
 
-  update(
+  async update(
     id: number,
     changes: { name?: string; description?: string; status?: string },
-  ): Stream {
-    const stream = this.findById(id)
+  ): Promise<Stream> {
+    const stream = await this.findById(id)
 
-    // Validate status transitions
+    // Validate status transitions before hitting the DB.
     if (changes.status !== undefined) {
       this.validateStatusTransition(stream.status, changes.status)
     }
@@ -64,8 +72,8 @@ export class StreamsService {
     })
   }
 
-  delete(id: number): void {
-    const exists = this.repo.delete(id)
+  async delete(id: number): Promise<void> {
+    const exists = await this.repo.delete(id)
     if (!exists) {
       throw new NotFoundException(`stream ${id} not found`)
     }
@@ -78,10 +86,7 @@ export class StreamsService {
    *   *        → error    (any status can transition to error)
    *   error    → inactive (recover from error)
    */
-  private validateStatusTransition(
-    current: string,
-    next: string,
-  ): void {
+  private validateStatusTransition(current: string, next: string): void {
     const allowed: Record<string, string[]> = {
       inactive: ["active", "error"],
       active: ["inactive", "error"],

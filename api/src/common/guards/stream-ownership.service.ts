@@ -1,36 +1,56 @@
-import { Injectable } from "@nestjs/common"
+import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common"
+import { Pool } from "pg"
+import { env } from "../../config/env"
 
 /**
- * Ownership lookup boundary. The real implementation will query the
- * `streams` table (`SELECT user_id FROM streams WHERE id = $1`); this
- * placeholder lets the rest of the pipeline ship and be tested without
- * blocking on the DB layer.
+ * Verifies stream ownership by querying the `streams` table directly.
  *
- * Configure deterministic ownership for tests / local dev via the
- * STREAM_OWNERSHIP_DEMO env var. Format:
+ * Replaces the previous demo-only implementation that relied on the
+ * STREAM_OWNERSHIP_DEMO environment variable with a deny-all fallback.
  *
- *     STREAM_OWNERSHIP_DEMO="1:1,1:2,2:7"
- *
- * means user 1 owns streams 1 and 2; user 2 owns stream 7. When the env
- * var is empty (production-by-default) the service falls back to a
- * deny-all policy, so the real DB-backed implementation MUST replace
- * this before the endpoints are made public.
+ * Uses a parameterized query to prevent SQL injection.
  */
 @Injectable()
 export class StreamOwnershipService {
-  private readonly demoAllow: ReadonlySet<string>
+  private readonly pool: Pool
+  private readonly logger = new Logger(StreamOwnershipService.name)
 
   constructor() {
-    const raw = process.env.STREAM_OWNERSHIP_DEMO ?? ""
-    this.demoAllow = new Set(
-      raw
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
-    )
+    this.pool = new Pool({ connectionString: env.DATABASE_URL })
+
+    this.pool.on("error", (err) => {
+      this.logger.error("Unexpected PostgreSQL pool error", err.stack)
+    })
   }
 
+  /**
+   * Returns true when the given user owns the given stream.
+   *
+   * Throws {@link ServiceUnavailableException} if the database is
+   * unreachable so upstream guards can surface a 503 rather than a
+   * misleading 403.
+   */
   async ownsStream(userId: number, streamId: number): Promise<boolean> {
-    return this.demoAllow.has(`${userId}:${streamId}`)
+    try {
+      const { rows } = await this.pool.query<{ user_id: number }>(
+        `SELECT user_id FROM streams WHERE id = $1`,
+        [streamId],
+      )
+
+      if (!rows[0]) {
+        // Stream does not exist — treat as not owned.
+        return false
+      }
+
+      return rows[0].user_id === userId
+    } catch (err) {
+      this.logger.error(
+        `DB error checking ownership for stream ${streamId}`,
+        (err as Error).stack,
+      )
+      throw new ServiceUnavailableException(
+        "Database is unavailable. Please try again later.",
+      )
+    }
   }
 }
