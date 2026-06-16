@@ -4,8 +4,7 @@ import { env } from "./config"
 import { EventFilter } from "./pipeline"
 import { SessionRegistry } from "./session-registry"
 import { ProcessedStreamEvent, StreamEvent } from "./session"
-import { Agent } from "http"
-import { GracefulShutdown } from "./lifecycle"
+import { GracefulShutdown, ShutdownReason } from "./lifecycle"
 
 const API_URL = env.API_URL
 const WORKER_ID = `worker-${Date.now()}`
@@ -87,34 +86,36 @@ async function start(): Promise<void> {
   void loop()
 }
 
-const shutdown = new GracefulShutdown({ timeoutMs: 15_000 })
+const gracefulShutdown = new GracefulShutdown({ timeoutMs: 15_000 })
 
-shutdown.register({
+gracefulShutdown.register({
   name: "stop poll loop",
   run: () => {
     shuttingDown = true
   },
 })
 
-shutdown.register({
+gracefulShutdown.register({
   name: "drain sessions",
   run: async () => {
     await registry.drainAll()
   },
 })
 
-shutdown.register({
+gracefulShutdown.register({
   name: "close http pool",
   run: () => {
-    // axios' default adapter uses the global http(s).Agent; calling
-    // destroy() on the agent releases keep-alive sockets so the
-    // process can exit promptly after drain.
-    const agent = new Agent()
-    agent.destroy()
+    // Destroy the shared keep-alive agent so all pooled sockets are
+    // released and the process can exit promptly after drain.
+    httpAgent.destroy()
   },
 })
 
-shutdown.install()
+gracefulShutdown.install()
+
+/** Exported for testing: triggers the graceful-shutdown sequence. */
+export const shutdown = (signal: string): Promise<void> =>
+  gracefulShutdown.requestShutdown(signal as ShutdownReason)
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
