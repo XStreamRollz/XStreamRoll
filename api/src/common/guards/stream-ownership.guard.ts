@@ -5,32 +5,36 @@ import {
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common"
-import { Request } from "express"
+import { JwtService } from "@nestjs/jwt"
+import type { Request } from "express"
+import { TokenDenylistService } from "../../auth/token-denylist.service"
 import { StreamOwnershipService } from "./stream-ownership.service"
 
 /**
  * Guard that ensures the requesting user owns the stream referenced by
- * the `:id` URL parameter. Until the JWT auth pipeline lands the
- * authenticated user id is sourced from the `X-User-Id` header; the
- * controller signature stays the same so the only thing that will need
- * updating later is *how* `userId` is extracted (e.g. `req.user.sub`).
+ * the `:id` URL parameter. Authentication is performed by validating the
+ * JWT from the Authorization header and rejecting revoked tokens.
  */
 @Injectable()
 export class StreamOwnershipGuard implements CanActivate {
-  constructor(private readonly ownership: StreamOwnershipService) {}
+  constructor(
+    private readonly ownership: StreamOwnershipService,
+    private readonly jwtService: JwtService,
+    private readonly tokenDenylistService: TokenDenylistService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<Request>()
+    const token = this.extractBearerToken(req.header("authorization") ?? "")
 
-    const rawUserId = (req.header("x-user-id") ?? "").trim()
-    if (!rawUserId) {
-      throw new UnauthorizedException(
-        "X-User-Id header is required (placeholder until JWT auth lands)",
-      )
+    if (await this.tokenDenylistService.isRevoked(token)) {
+      throw new UnauthorizedException("access token has been revoked")
     }
-    const userId = Number(rawUserId)
+
+    const payload = await this.verifyToken(token)
+    const userId = Number(payload.sub)
     if (!Number.isInteger(userId) || userId <= 0) {
-      throw new UnauthorizedException("X-User-Id must be a positive integer")
+      throw new UnauthorizedException("invalid access token")
     }
 
     const rawStreamId = req.params?.id
@@ -46,9 +50,27 @@ export class StreamOwnershipGuard implements CanActivate {
       )
     }
 
-    // Stash on the request so downstream handlers can read the actor
-    // without re-parsing the header.
     ;(req as Request & { auth?: { userId: number } }).auth = { userId }
     return true
+  }
+
+  private async verifyToken(token: string): Promise<{ sub: number | string }> {
+    try {
+      return (await this.jwtService.verifyAsync(token)) as {
+        sub: number | string
+      }
+    } catch {
+      throw new UnauthorizedException("invalid or expired access token")
+    }
+  }
+
+  private extractBearerToken(header: string): string {
+    const match = header.trim().match(/^Bearer\s+(.+)$/i)
+    if (!match) {
+      throw new UnauthorizedException(
+        "Authorization header must contain a Bearer token",
+      )
+    }
+    return match[1]
   }
 }

@@ -3,6 +3,7 @@ import { JwtService } from "@nestjs/jwt"
 import * as bcrypt from "bcrypt"
 import { AuthService } from "./auth.service"
 import { User, UsersRepository } from "./users.repository"
+import { TokenDenylistService } from "./token-denylist.service"
 
 jest.mock("bcrypt", () => ({
   hash: jest.fn(),
@@ -15,6 +16,8 @@ jest.mock("bcrypt", () => ({
 
 interface MockJwtService {
   sign: jest.Mock<string>
+  verifyAsync: jest.Mock<Promise<unknown>>
+  decode: jest.Mock<unknown>
 }
 
 interface MockUsersRepository {
@@ -28,9 +31,15 @@ interface MockPasswordResetService {
   resetPassword: jest.Mock<Promise<void>>
 }
 
+interface MockTokenDenylistService {
+  revoke: jest.Mock<Promise<void>>
+}
+
 function mockJwtService(): MockJwtService {
   return {
     sign: jest.fn(),
+    verifyAsync: jest.fn(),
+    decode: jest.fn(),
   }
 }
 
@@ -49,15 +58,21 @@ function mockPasswordResetService(): MockPasswordResetService {
   }
 }
 
+interface MockJwtDecodedPayload {
+  exp?: number
+}
+
 function makeService(
   jwt: MockJwtService,
   users: MockUsersRepository,
   passwordReset: MockPasswordResetService,
+  tokenDenylist: MockTokenDenylistService,
 ): AuthService {
   return new AuthService(
     jwt as unknown as JwtService,
     users as unknown as UsersRepository,
     passwordReset as unknown as any,
+    tokenDenylist as unknown as TokenDenylistService,
   )
 }
 
@@ -81,13 +96,15 @@ describe("AuthService", () => {
   let jwt: MockJwtService
   let users: MockUsersRepository
   let passwordReset: MockPasswordResetService
+  let tokenDenylist: MockTokenDenylistService
   let service: AuthService
 
   beforeEach(() => {
     jwt = mockJwtService()
     users = mockUsersRepository()
     passwordReset = mockPasswordResetService()
-    service = makeService(jwt, users, passwordReset)
+    tokenDenylist = { revoke: jest.fn() }
+    service = makeService(jwt, users, passwordReset, tokenDenylist)
     jest.clearAllMocks()
   })
 
@@ -213,6 +230,48 @@ describe("AuthService", () => {
   })
 
   // -- login -------------------------------------------------------------
+
+  describe("logout", () => {
+    const token = "valid.jwt.token"
+
+    it("revokes the current access token when valid", async () => {
+      jwt.verifyAsync.mockResolvedValue({ sub: 1 })
+      jwt.decode.mockReturnValue({ exp: Math.floor(Date.now() / 1000) + 300 })
+
+      await service.logout(`Bearer ${token}`)
+
+      expect(jwt.verifyAsync).toHaveBeenCalledWith(token)
+      expect(jwt.decode).toHaveBeenCalledWith(token)
+      expect(tokenDenylist.revoke).toHaveBeenCalledWith(
+        token,
+        expect.any(Number),
+      )
+    })
+
+    it("throws UnauthorizedException when the authorization header is missing", async () => {
+      await expect(service.logout("")).rejects.toThrow(UnauthorizedException)
+      expect(tokenDenylist.revoke).not.toHaveBeenCalled()
+    })
+
+    it("throws UnauthorizedException when the token is invalid", async () => {
+      jwt.verifyAsync.mockRejectedValue(new Error("invalid token"))
+
+      await expect(service.logout(`Bearer ${token}`)).rejects.toThrow(
+        UnauthorizedException,
+      )
+      expect(tokenDenylist.revoke).not.toHaveBeenCalled()
+    })
+
+    it("throws UnauthorizedException when the token has already expired", async () => {
+      jwt.verifyAsync.mockResolvedValue({ sub: 1 })
+      jwt.decode.mockReturnValue({ exp: Math.floor(Date.now() / 1000) - 10 })
+
+      await expect(service.logout(`Bearer ${token}`)).rejects.toThrow(
+        UnauthorizedException,
+      )
+      expect(tokenDenylist.revoke).not.toHaveBeenCalled()
+    })
+  })
 
   describe("login", () => {
     const dto = { email: "existing@example.com", password: "correctPassword" }
