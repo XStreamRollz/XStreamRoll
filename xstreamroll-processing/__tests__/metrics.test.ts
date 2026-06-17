@@ -5,6 +5,8 @@ import {
   getMetrics,
   incrementProcessed,
   incrementErrors,
+  markReady,
+  markShuttingDown,
   setQueueDepth,
   startMetricsServer,
 } from "../src/metrics"
@@ -117,5 +119,38 @@ describe("metrics server", () => {
     } catch (err: any) {
       expect(err.response.status).toBe(404)
     }
+  })
+
+  describe("health endpoints", () => {
+    afterEach(() => {
+      // Ensure readiness flag never leaks across tests.
+      markReady()
+    })
+
+    it("GET /livez returns 200 even when shutting down", async () => {
+      markShuttingDown()
+      const res = await axios.get(`${baseUrl}/livez`)
+      expect(res.status).toBe(200)
+      expect(res.data.status).toBe("ok")
+    })
+
+    it("GET /healthz returns 200 and ok payload when ready", async () => {
+      markReady()
+      const res = await axios.get(`${baseUrl}/healthz`)
+      expect(res.status).toBe(200)
+      expect(res.data.status).toBe("ok")
+      expect(typeof res.data.timestamp).toBe("string")
+    })
+
+    it("GET /healthz returns 503 when shutting down", async () => {
+      markShuttingDown()
+      try {
+        await axios.get(`${baseUrl}/healthz`)
+        throw new Error("expected request to fail")
+      } catch (err: any) {
+        expect(err.response.status).toBe(503)
+        expect(err.response.data.status).toBe("shutting-down")
+      }
+    })
   })
 })

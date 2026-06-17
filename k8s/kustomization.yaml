@@ -1,0 +1,56 @@
+# Kustomize entry point for the XStreamRoll platform.
+# ---------------------------------------------------------------------------
+# Apply with:
+#
+#   kubectl apply -k k8s/
+#
+# This produces the same set of resources as the multi-doc YAML files
+# in this directory plus a generated `postgres-init` ConfigMap built
+# from the real `database/schema.sql` file. No duplicate copy of the
+# schema is committed to source control.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: xstreamroll
+
+commonLabels:
+  app.kubernetes.io/part-of: xstreamroll
+
+# Without this flag, Kustomize appends a content-hash suffix to
+# ConfigMap names produced by configMapGenerator (e.g.
+# `postgres-init-abc12345`). The Postgres StatefulSet references the
+# unsuffixed `configMap.name: postgres-init`, so the volume mount will
+# fail without this option.
+generatorOptions:
+  disableNameSuffixHash: true
+
+resources:
+  - 00-namespace.yaml
+  - 10-postgres.yaml
+  - 20-api.yaml
+  - 30-app.yaml
+  - 40-processing.yaml
+  - 60-ingress.yaml
+
+configMapGenerator:
+  # Generates the postgres-init ConfigMap that the StatefulSet mounts
+  # at /docker-entrypoint-initdb.d/schema.sql. Kustomize reads the
+  # file content at build time so the deployed schema stays in sync
+  # with the canonical copy in database/.
+  - name: postgres-init
+    files:
+      - schema.sql=../database/schema.sql
+
+images:
+  # Pin a known image-tag per environment by overriding these with a
+  # `kustomize edit set image` patch in higher environments.
+  - name: ghcr.io/xstreamrollz/xstreamroll-api
+    newName: ghcr.io/xstreamrollz/xstreamroll-api
+    newTag: latest
+  - name: ghcr.io/xstreamrollz/xstreamroll-app
+    newName: ghcr.io/xstreamrollz/xstreamroll-app
+    newTag: latest
+  - name: ghcr.io/xstreamrollz/xstreamroll-processing
+    newName: ghcr.io/xstreamrollz/xstreamroll-processing
+    newTag: latest
