@@ -5,6 +5,7 @@ import { EventFilter } from "./pipeline"
 import { SessionRegistry } from "./session-registry"
 import { ProcessedStreamEvent, StreamEvent } from "./session"
 import { GracefulShutdown, ShutdownReason } from "./lifecycle"
+import { markShuttingDown, startMetricsServer } from "./metrics"
 
 const API_URL = env.API_URL
 const WORKER_ID = `worker-${Date.now()}`
@@ -17,6 +18,16 @@ const MAX_CONCURRENT_SESSIONS = Math.max(
 // Shared keep-alive agent so axios reuses TCP connections and we can
 // explicitly destroy the pool on graceful shutdown.
 export const httpAgent = new http.Agent({ keepAlive: true })
+
+/**
+ * HTTP server that exposes worker metrics and probes to Kubernetes.
+ * Started at module load only when NOT in tests so the production
+ * container has a stable port that the kubelet can probe. The server
+ * is held in module scope so the graceful shutdown sequence (registered
+ * below) can close it without losing the reference.
+ */
+export const metricsServer =
+  env.NODE_ENV !== "test" ? startMetricsServer(3002) : null
 
 // Axios instance that routes all requests through the shared agent.
 export const axiosInstance = axios.create({ httpAgent })
@@ -117,6 +128,24 @@ gracefulShutdown.register({
     // released and the process can exit promptly after drain.
     httpAgent.destroy()
   },
+})
+
+gracefulShutdown.register({
+  name: "stop metrics server",
+  run: () =>
+    new Promise<void>((resolve, reject) => {
+      // Flip the readiness flag first so any in-flight probe sees
+      // 503 and the kubelet removes us from service endpoints.
+      markShuttingDown()
+      if (!metricsServer) {
+        resolve()
+        return
+      }
+      metricsServer.close((err) => {
+        if (err) reject(err)
+        else resolve()
+      })
+    }),
 })
 
 if (env.NODE_ENV !== "test") {
