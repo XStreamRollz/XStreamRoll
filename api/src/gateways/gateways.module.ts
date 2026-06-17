@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common"
 import { JwtModule } from "@nestjs/jwt"
+import { MetricsModule } from "../metrics/metrics.module"
 import { StreamsGateway } from "./streams.gateway"
 
 /**
@@ -10,6 +11,7 @@ import { StreamsGateway } from "./streams.gateway"
  */
 @Module({
   imports: [
+    MetricsModule,
     JwtModule.registerAsync({
       useFactory: () => {
         const secret = process.env.JWT_SECRET

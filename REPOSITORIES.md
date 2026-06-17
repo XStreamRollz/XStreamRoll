@@ -18,26 +18,26 @@ This project is organized as a monorepo with 4 main services:
 - **Setup**:
   ```bash
   cd api
-  npm install
-  npm run start:dev
+  pnpm install
+  pnpm run dev
   ```
 
-## 3. Streaming SDK (`/streaming-sdk`)
+## 3. Streaming SDK (`/xstreamroll-sdk`)
 - **Framework**: TypeScript SDK
 - **Description**: Client library for publishing events and interacting with streams
 - **Setup**:
   ```bash
-  cd streaming-sdk
+  cd xstreamroll-sdk
   npm install
   npm run build
   ```
 
-## 4. Stream Processing (`/stream-processing`)
+## 4. Stream Processing (`/xstreamroll-processing`)
 - **Framework**: Node.js with TypeScript
 - **Description**: Dedicated service for processing real-time streaming data
 - **Setup**:
   ```bash
-  cd stream-processing
+  cd xstreamroll-processing
   npm install
   npm run start
   ```
@@ -49,7 +49,9 @@ This project is organized as a monorepo with 4 main services:
 
 ## Monorepo Management
 
-This project uses npm workspaces for dependency management. Available scripts:
+This project uses npm workspaces at the repo root. The `api/` package also
+commits a `pnpm-lock.yaml`, so direct package work there should use `pnpm`
+while the other packages use `npm`. Available root scripts:
 
 ```bash
 # Install all dependencies for all services

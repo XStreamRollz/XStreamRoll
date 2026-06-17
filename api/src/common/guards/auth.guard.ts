@@ -4,36 +4,59 @@ import {
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common"
+import { JwtService } from "@nestjs/jwt"
 import type { Request } from "express"
+import { TokenDenylistService } from "../../auth/token-denylist.service"
 
 /**
- * Lightweight auth guard that extracts the authenticated user id from the
- * `X-User-Id` header. This is a placeholder until the full JWT auth
- * pipeline lands — at that point the guard will read `req.user.sub`
- * instead.
+ * Auth guard that validates a JWT access token from the Authorization header
+ * and rejects revoked tokens.
  *
  * Apply with `@UseGuards(AuthGuard)` on controllers or individual
  * handlers that require authentication.
  */
 @Injectable()
 export class AuthGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly tokenDenylistService: TokenDenylistService,
+  ) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<Request>()
+    const token = this.extractBearerToken(req.header("authorization") ?? "")
 
-    const rawUserId = (req.header("x-user-id") ?? "").trim()
-    if (!rawUserId) {
-      throw new UnauthorizedException(
-        "X-User-Id header is required (placeholder until JWT auth lands)",
-      )
+    if (await this.tokenDenylistService.isRevoked(token)) {
+      throw new UnauthorizedException("access token has been revoked")
     }
-    const userId = Number(rawUserId)
+
+    const payload = await this.verifyToken(token)
+    const userId = Number(payload.sub)
     if (!Number.isInteger(userId) || userId <= 0) {
-      throw new UnauthorizedException("X-User-Id must be a positive integer")
+      throw new UnauthorizedException("invalid access token")
     }
 
-    // Stash on the request so downstream handlers / guards can access
-    // the authenticated user without re-parsing.
     ;(req as Request & { auth?: { userId: number } }).auth = { userId }
     return true
+  }
+
+  private async verifyToken(token: string): Promise<{ sub: number | string }> {
+    try {
+      return (await this.jwtService.verifyAsync(token)) as {
+        sub: number | string
+      }
+    } catch {
+      throw new UnauthorizedException("invalid or expired access token")
+    }
+  }
+
+  private extractBearerToken(header: string): string {
+    const match = header.trim().match(/^Bearer\s+(.+)$/i)
+    if (!match) {
+      throw new UnauthorizedException(
+        "Authorization header must contain a Bearer token",
+      )
+    }
+    return match[1]
   }
 }
