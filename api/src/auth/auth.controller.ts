@@ -1,14 +1,15 @@
+import { Body, Controller, HttpCode, HttpStatus, Post } from "@nestjs/common"
 import {
-  Body,
-  Controller,
-  HttpCode,
-  HttpStatus,
-  Post,
-} from "@nestjs/common"
-import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger"
+  ApiCreatedResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from "@nestjs/swagger"
 import { AuthResponse, AuthService } from "./auth.service"
 import { LoginDto } from "./dto/login.dto"
 import { RegisterDto } from "./dto/register.dto"
+import { ForgotPasswordDto } from "./dto/forgot-password.dto"
+import { ResetPasswordDto } from "./dto/reset-password.dto"
 
 @ApiTags("auth")
 @Controller("auth")
@@ -42,5 +43,45 @@ export class AuthController {
   })
   login(@Body() dto: LoginDto): Promise<AuthResponse> {
     return this.authService.login(dto)
+  }
+
+  @Post("forgot-password")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Request a password reset",
+    description:
+      "Accepts an email address and sends password reset instructions if the account exists. Always returns success to avoid email enumeration.",
+  })
+  @ApiOkResponse({
+    description:
+      "Password reset instructions will be sent if the email exists.",
+  })
+  async forgotPassword(
+    @Body() dto: ForgotPasswordDto,
+  ): Promise<{ message: string }> {
+    await this.authService.forgotPassword(dto)
+    return {
+      message:
+        "If the email address exists, password reset instructions have been sent.",
+    }
+  }
+
+  @Post("reset-password")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Reset a forgotten password",
+    description:
+      "Accepts a password reset token and a new password. Rejects invalid, expired, or already-used tokens.",
+  })
+  @ApiOkResponse({
+    description: "Password reset successful.",
+  })
+  async resetPassword(
+    @Body() dto: ResetPasswordDto,
+  ): Promise<{ message: string }> {
+    await this.authService.resetPassword(dto)
+    return {
+      message: "Password has been reset successfully.",
+    }
   }
 }

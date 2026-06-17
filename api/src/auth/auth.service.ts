@@ -7,7 +7,10 @@ import { JwtService } from "@nestjs/jwt"
 import * as bcrypt from "bcrypt"
 import { RegisterDto } from "./dto/register.dto"
 import { LoginDto } from "./dto/login.dto"
+import { ForgotPasswordDto } from "./dto/forgot-password.dto"
+import { ResetPasswordDto } from "./dto/reset-password.dto"
 import { User, UsersRepository } from "./users.repository"
+import { PasswordResetService } from "./password-reset.service"
 
 /** Rounds for bcrypt key derivation (auto-salt). */
 const BCRYPT_ROUNDS = 12
@@ -30,6 +33,7 @@ export class AuthService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly usersRepository: UsersRepository,
+    private readonly passwordResetService: PasswordResetService,
   ) {}
 
   /**
@@ -88,18 +92,28 @@ export class AuthService {
     }
   }
 
+  async forgotPassword(dto: ForgotPasswordDto): Promise<void> {
+    await this.passwordResetService.sendResetToken(dto.email)
+  }
+
+  async resetPassword(dto: ResetPasswordDto): Promise<void> {
+    await this.passwordResetService.resetPassword(dto.token, dto.password)
+  }
+
   /** Create a short-lived JWT access token for the given user. */
   private signToken(user: User): string {
     return this.jwtService.sign({
       sub: user.id,
       email: user.email,
       username: user.username,
+      passwordChangedAt:
+        user.password_changed_at?.getTime() ?? user.created_at.getTime(),
     })
   }
 }
 
 /** Strip the password hash from a user row before returning to clients. */
-function toSafeUser(row: User): SafeUser {
+export function toSafeUser(row: User): SafeUser {
   return {
     id: row.id,
     username: row.username,
