@@ -1,12 +1,7 @@
 import { Injectable } from "@nestjs/common"
+import { AdminStats } from "@xstreamroll/types"
 
-export interface AdminStats {
-  totalUsers: number
-  totalStreams: number
-  activeStreams: number
-  eventsLast24h: number
-  generatedAt: string
-}
+export type { AdminStats }
 
 /**
  * Aggregates platform-wide stats for the admin dashboard.

@@ -12,7 +12,10 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "paths": {
+      "@xstreamroll/types": ["../packages/types/src/index.ts"]
+    }
   },
   "include": ["src"],
   "exclude": ["node_modules"]
