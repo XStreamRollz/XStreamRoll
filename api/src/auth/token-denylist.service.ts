@@ -14,7 +14,7 @@ export class TokenDenylistService {
     }
 
     const key = this.cacheKey(token)
-    await this.cache.set(key, true, { ttl: ttlSeconds })
+    await this.cache.set(key, true, ttlSeconds)
   }
 
   async isRevoked(token: string): Promise<boolean> {
