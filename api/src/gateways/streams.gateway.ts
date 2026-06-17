@@ -1,4 +1,4 @@
-import { Logger } from "@nestjs/common"
+import { Logger, Optional } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 import {
   ConnectedSocket,
@@ -10,6 +10,7 @@ import {
   WebSocketServer,
 } from "@nestjs/websockets"
 import type { Server, Socket } from "socket.io"
+import { MetricsService } from "../metrics/metrics.service"
 import {
   STREAM_EVENTS,
   StreamErrorPayload,
@@ -59,7 +60,10 @@ export class StreamsGateway
   @WebSocketServer()
   public server!: Server
 
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    @Optional() private readonly metricsService?: MetricsService,
+  ) {}
 
   afterInit(_server: Server): void {
     this.logger.log("StreamsGateway initialised on namespace /streams")
@@ -75,6 +79,9 @@ export class StreamsGateway
 
       const payload = await this.jwtService.verifyAsync<JwtPayload>(token)
       client.data.userId = payload.sub
+
+      this.metricsService?.websocketConnectionsTotal.inc()
+      this.metricsService?.websocketActiveConnections.inc()
 
       this.logger.log(
         `client ${client.id} connected (user=${String(payload.sub)})`,
@@ -92,6 +99,7 @@ export class StreamsGateway
     // `try/catch` exists to make sure a buggy logger never throws back
     // into the framework and crashes the worker.
     try {
+      this.metricsService?.websocketActiveConnections.dec()
       this.logger.log(
         `client ${client.id} disconnected (user=${String(client.data?.userId ?? "anon")})`,
       )
