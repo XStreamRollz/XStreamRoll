@@ -1,10 +1,19 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from "@nestjs/common"
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Req,
+} from "@nestjs/common"
 import {
   ApiCreatedResponse,
+  ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
 } from "@nestjs/swagger"
+import type { Request } from "express"
 import { AuthResponse, AuthService } from "./auth.service"
 import { LoginDto } from "./dto/login.dto"
 import { RegisterDto } from "./dto/register.dto"
@@ -43,6 +52,19 @@ export class AuthController {
   })
   login(@Body() dto: LoginDto): Promise<AuthResponse> {
     return this.authService.login(dto)
+  }
+
+  @Post("logout")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: "Log out the current user",
+    description: "Revokes the current access token so it cannot be used again.",
+  })
+  @ApiNoContentResponse({
+    description: "Logout successful.",
+  })
+  logout(@Req() req: Request): Promise<void> {
+    return this.authService.logout(req.header("authorization") ?? "")
   }
 
   @Post("forgot-password")
