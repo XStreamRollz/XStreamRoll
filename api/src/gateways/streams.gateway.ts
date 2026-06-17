@@ -73,7 +73,11 @@ export class StreamsGateway
     try {
       const token = this.extractToken(client)
       if (!token) {
-        this.disconnectWithError(client, "MISSING_TOKEN", "Authentication token required")
+        this.disconnectWithError(
+          client,
+          "MISSING_TOKEN",
+          "Authentication token required",
+        )
         return
       }
 
@@ -88,8 +92,13 @@ export class StreamsGateway
       )
       client.emit("connected", { userId: payload.sub })
     } catch (err) {
-      const message = err instanceof Error ? err.message : "unknown verification error"
-      this.disconnectWithError(client, "INVALID_TOKEN", `JWT verification failed: ${message}`)
+      const message =
+        err instanceof Error ? err.message : "unknown verification error"
+      this.disconnectWithError(
+        client,
+        "INVALID_TOKEN",
+        `JWT verification failed: ${message}`,
+      )
     }
   }
 
@@ -134,6 +143,9 @@ export class StreamsGateway
     @ConnectedSocket() client: AuthenticatedSocket,
     payload: { streamId?: string | number } = {},
   ): { ok: boolean; room?: string; error?: string } {
+    if (!client.data?.userId) {
+      return { ok: false, error: "unauthenticated" }
+    }
     if (payload.streamId === undefined || payload.streamId === null) {
       return { ok: false, error: "streamId required" }
     }
@@ -149,15 +161,21 @@ export class StreamsGateway
    * ------------------------------------------------------------------ */
 
   emitStarted(payload: StreamStartedPayload): void {
-    this.server.to(this.roomFor(payload.streamId)).emit(STREAM_EVENTS.STARTED, payload)
+    this.server
+      .to(this.roomFor(payload.streamId))
+      .emit(STREAM_EVENTS.STARTED, payload)
   }
 
   emitStopped(payload: StreamStoppedPayload): void {
-    this.server.to(this.roomFor(payload.streamId)).emit(STREAM_EVENTS.STOPPED, payload)
+    this.server
+      .to(this.roomFor(payload.streamId))
+      .emit(STREAM_EVENTS.STOPPED, payload)
   }
 
   emitError(payload: StreamErrorPayload): void {
-    this.server.to(this.roomFor(payload.streamId)).emit(STREAM_EVENTS.ERROR, payload)
+    this.server
+      .to(this.roomFor(payload.streamId))
+      .emit(STREAM_EVENTS.ERROR, payload)
   }
 
   /* -------------------------------------------------------------- */
@@ -168,7 +186,10 @@ export class StreamsGateway
 
   private extractToken(client: Socket): string | null {
     // Preferred: socket.io handshake auth payload — `io(url, { auth: { token }})`
-    const handshakeAuth = (client.handshake?.auth ?? {}) as Record<string, unknown>
+    const handshakeAuth = (client.handshake?.auth ?? {}) as Record<
+      string,
+      unknown
+    >
     const rawAuthToken = handshakeAuth["token"]
     if (typeof rawAuthToken === "string" && rawAuthToken.length > 0) {
       return rawAuthToken
@@ -176,7 +197,10 @@ export class StreamsGateway
 
     // Fallback: `Authorization: Bearer <token>` header.
     const authHeader = client.handshake?.headers?.authorization
-    if (typeof authHeader === "string" && authHeader.toLowerCase().startsWith("bearer ")) {
+    if (
+      typeof authHeader === "string" &&
+      authHeader.toLowerCase().startsWith("bearer ")
+    ) {
       return authHeader.slice(7).trim() || null
     }
 
@@ -190,7 +214,11 @@ export class StreamsGateway
     return null
   }
 
-  private disconnectWithError(client: Socket, code: string, message: string): void {
+  private disconnectWithError(
+    client: Socket,
+    code: string,
+    message: string,
+  ): void {
     this.logger.warn(`rejecting client ${client.id}: [${code}] ${message}`)
     client.emit(STREAM_EVENTS.ERROR, {
       streamId: "",
