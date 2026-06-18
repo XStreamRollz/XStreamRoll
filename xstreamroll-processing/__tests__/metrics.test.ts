@@ -116,8 +116,9 @@ describe("metrics server", () => {
     await expect(axios.get(`${baseUrl}/invalid-route`)).rejects.toThrow()
     try {
       await axios.get(`${baseUrl}/invalid-route`)
-    } catch (err: any) {
-      expect(err.response.status).toBe(404)
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { status: number } }
+      expect(axiosError.response?.status).toBe(404)
     }
   })
 
@@ -147,9 +148,10 @@ describe("metrics server", () => {
       try {
         await axios.get(`${baseUrl}/healthz`)
         throw new Error("expected request to fail")
-      } catch (err: any) {
-        expect(err.response.status).toBe(503)
-        expect(err.response.data.status).toBe("shutting-down")
+      } catch (err: unknown) {
+        const axiosError = err as { response?: { status: number; data?: { status: string } } }
+        expect(axiosError.response?.status).toBe(503)
+        expect(axiosError.response?.data?.status).toBe("shutting-down")
       }
     })
   })

@@ -3,13 +3,14 @@ import type { AuthedRequest } from "./request-logger.middleware"
 
 let RequestLoggerMiddleware: typeof import("./request-logger.middleware").RequestLoggerMiddleware
 
-beforeAll(() => {
+beforeAll(async () => {
   process.env.DATABASE_URL ??= "postgres://localhost/test"
   process.env.JWT_SECRET ??= "test-jwt-secret"
   process.env.STREAM_API_KEY ??= "test-stream-api-key"
   process.env.LOG_IP_MASKING ??= "last-octet"
   jest.resetModules()
-  RequestLoggerMiddleware = require("./request-logger.middleware").RequestLoggerMiddleware
+  const module = await import("./request-logger.middleware")
+  RequestLoggerMiddleware = module.RequestLoggerMiddleware
 })
 
 type FakeResOptions = {
