@@ -1,6 +1,6 @@
 import { Test } from "@nestjs/testing"
 import { JwtService } from "@nestjs/jwt"
-import { StreamsGateway } from "./streams.gateway"
+import { StreamsGateway, resolveCorsOrigins } from "./streams.gateway"
 import { STREAM_EVENTS } from "./stream-events"
 
 type FakeHandshake = {
@@ -50,6 +50,43 @@ function makeServer(): {
   }
   return { server, events }
 }
+
+describe("resolveCorsOrigins", () => {
+  it("falls back to localhost:3000 when CORS_ORIGIN is unset", () => {
+    expect(resolveCorsOrigins(undefined)).toBe("http://localhost:3000")
+  })
+
+  it("falls back to localhost:3000 when CORS_ORIGIN is empty or blank", () => {
+    expect(resolveCorsOrigins("")).toBe("http://localhost:3000")
+    expect(resolveCorsOrigins("   ")).toBe("http://localhost:3000")
+  })
+
+  it("returns a single configured origin as a string", () => {
+    expect(resolveCorsOrigins("https://app.xstreamroll.com")).toBe(
+      "https://app.xstreamroll.com",
+    )
+  })
+
+  it("returns multiple comma-separated origins as a trimmed array", () => {
+    expect(
+      resolveCorsOrigins(
+        "https://app.xstreamroll.com, https://admin.xstreamroll.com",
+      ),
+    ).toEqual(["https://app.xstreamroll.com", "https://admin.xstreamroll.com"])
+  })
+
+  it("ignores empty entries in the list", () => {
+    expect(resolveCorsOrigins("https://a.com,,  ,https://b.com")).toEqual([
+      "https://a.com",
+      "https://b.com",
+    ])
+  })
+
+  it("never returns the insecure wildcard origin", () => {
+    expect(resolveCorsOrigins(undefined)).not.toBe("*")
+    expect(resolveCorsOrigins("https://a.com,https://b.com")).not.toContain("*")
+  })
+})
 
 describe("StreamsGateway", () => {
   let gateway: StreamsGateway
