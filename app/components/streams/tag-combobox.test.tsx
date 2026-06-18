@@ -42,7 +42,7 @@ describe("TagCombobox", () => {
 
   it("opens the popover and loads available tags (interaction / network test)", async () => {
     const user = userEvent.setup()
-    let resolveListTags: (value: PagedTags) => void
+    let resolveListTags: () => void
     const listTagsPromise = new Promise<PagedTags>((resolve) => {
       resolveListTags = () =>
         resolve({

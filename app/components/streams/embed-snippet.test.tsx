@@ -2,6 +2,8 @@ import { render, screen, act, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { EmbedSnippet } from "./embed-snippet"
 
+type MutableNavigator = Omit<Navigator, "clipboard"> & { clipboard?: unknown }
+
 describe("EmbedSnippet", () => {
   const mockWriteText = jest.fn()
   let originalClipboardDescriptor: PropertyDescriptor | undefined
@@ -50,15 +52,15 @@ describe("EmbedSnippet", () => {
         originalClipboardDescriptor,
       )
     } else {
-      delete (Navigator.prototype as Partial<Navigator>).clipboard
+      delete (Navigator.prototype as unknown as MutableNavigator).clipboard
     }
 
     try {
-      delete (window.navigator as Partial<Navigator>).clipboard
+      delete (window.navigator as unknown as MutableNavigator).clipboard
     } catch (e) {}
 
     try {
-      delete (navigator as Partial<Navigator>).clipboard
+      delete (navigator as unknown as MutableNavigator).clipboard
     } catch (e) {}
   })
 
