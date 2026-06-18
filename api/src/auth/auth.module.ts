@@ -6,11 +6,13 @@ import { AuthService } from "./auth.service"
 import { TokenDenylistService } from "./token-denylist.service"
 import { UsersRepository } from "./users.repository"
 import { PasswordResetService } from "./password-reset.service"
+import { AuditModule } from "../audit/audit.module"
 
 const JWT_EXPIRES_IN = "15m"
 
 @Module({
   imports: [
+    AuditModule,
     CacheModule.register({
       ttl: 3600,
       max: 1024,

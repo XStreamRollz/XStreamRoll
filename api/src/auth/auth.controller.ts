@@ -6,6 +6,7 @@ import {
   Post,
   Req,
 } from "@nestjs/common"
+import { Throttle } from "@nestjs/throttler"
 import {
   ApiCreatedResponse,
   ApiNoContentResponse,
@@ -27,6 +28,7 @@ export class AuthController {
 
   @Post("register")
   @HttpCode(HttpStatus.CREATED)
+  @Throttle({ default: { limit: 5, ttl: 900000 } })
   @ApiOperation({
     summary: "Register a new user",
     description:
@@ -36,12 +38,16 @@ export class AuthController {
   @ApiCreatedResponse({
     description: "Registration successful. JWT token returned.",
   })
-  register(@Body() dto: RegisterDto): Promise<AuthResponse> {
-    return this.authService.register(dto)
+  register(
+    @Body() dto: RegisterDto,
+    @Req() req: Request,
+  ): Promise<AuthResponse> {
+    return this.authService.register(dto, req)
   }
 
   @Post("login")
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 900000 } })
   @ApiOperation({
     summary: "Log in with email and password",
     description:
@@ -50,8 +56,8 @@ export class AuthController {
   @ApiOkResponse({
     description: "Login successful. JWT token returned.",
   })
-  login(@Body() dto: LoginDto): Promise<AuthResponse> {
-    return this.authService.login(dto)
+  login(@Body() dto: LoginDto, @Req() req: Request): Promise<AuthResponse> {
+    return this.authService.login(dto, req)
   }
 
   @Post("logout")

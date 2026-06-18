@@ -73,6 +73,7 @@ function makeService(
     users as unknown as UsersRepository,
     passwordReset as unknown as any,
     tokenDenylist as unknown as TokenDenylistService,
+    { log: jest.fn() } as any
   )
 }
 
@@ -126,7 +127,7 @@ describe("AuthService", () => {
       jwt.sign.mockReturnValue("jwt.token.here")
       ;(bcrypt.hash as jest.Mock).mockResolvedValue("$2b$10$hashed")
 
-      const result = await service.register(dto)
+      const result = await service.register(dto, { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any)
 
       expect(users.findByEmail).toHaveBeenCalledWith(dto.email)
       expect(users.findByUsername).toHaveBeenCalledWith(dto.username)
@@ -153,7 +154,7 @@ describe("AuthService", () => {
     it("throws ConflictException when the email is already taken", async () => {
       users.findByEmail.mockResolvedValue(dummyUser({ email: dto.email }))
 
-      await expect(service.register(dto)).rejects.toThrow(ConflictException)
+      await expect(service.register(dto, { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any)).rejects.toThrow(ConflictException)
       expect(users.create).not.toHaveBeenCalled()
     })
 
@@ -163,7 +164,7 @@ describe("AuthService", () => {
         dummyUser({ username: dto.username }),
       )
 
-      await expect(service.register(dto)).rejects.toThrow(ConflictException)
+      await expect(service.register(dto, { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any)).rejects.toThrow(ConflictException)
       expect(users.create).not.toHaveBeenCalled()
     })
 
@@ -174,7 +175,7 @@ describe("AuthService", () => {
       jwt.sign.mockReturnValue("token")
       ;(bcrypt.hash as jest.Mock).mockResolvedValue("$2b$10$hashed")
 
-      await service.register(dto)
+      await service.register(dto, { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any)
 
       expect(bcrypt.hash).toHaveBeenCalledWith(dto.password, 12)
       const [storedUsername, storedEmail, storedHash] =
@@ -192,7 +193,7 @@ describe("AuthService", () => {
           username: "dupuser",
           email: "dup@x.com",
           password: "someOtherPassword",
-        }),
+        }, { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any),
       ).rejects.toThrow(ConflictException)
     })
   })
@@ -282,7 +283,7 @@ describe("AuthService", () => {
       ;(bcrypt.compare as jest.Mock).mockResolvedValue(true)
       jwt.sign.mockReturnValue("jwt.token.here")
 
-      const result = await service.login(dto)
+      const result = await service.login(dto, { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any)
 
       expect(users.findByEmail).toHaveBeenCalledWith(dto.email)
       expect(bcrypt.compare).toHaveBeenCalledWith(
@@ -307,7 +308,7 @@ describe("AuthService", () => {
     it("throws UnauthorizedException when the email is not found", async () => {
       users.findByEmail.mockResolvedValue(null)
 
-      await expect(service.login(dto)).rejects.toThrow(UnauthorizedException)
+      await expect(service.login(dto, { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any)).rejects.toThrow(UnauthorizedException)
       expect(jwt.sign).not.toHaveBeenCalled()
     })
 
@@ -317,7 +318,7 @@ describe("AuthService", () => {
       ;(bcrypt.compare as jest.Mock).mockResolvedValue(false)
 
       await expect(
-        service.login({ email: dto.email, password: "wrongPassword" }),
+        service.login({ email: dto.email, password: "wrongPassword" }, { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any),
       ).rejects.toThrow(UnauthorizedException)
 
       expect(jwt.sign).not.toHaveBeenCalled()
@@ -327,7 +328,7 @@ describe("AuthService", () => {
       // Missing email scenario
       users.findByEmail.mockResolvedValueOnce(null)
       const e1 = await service
-        .login({ email: "no@user.com", password: "any" })
+        .login({ email: "no@user.com", password: "any" }, { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any)
         .catch((e) => e)
       expect(e1).toBeInstanceOf(UnauthorizedException)
 
@@ -335,7 +336,7 @@ describe("AuthService", () => {
       users.findByEmail.mockResolvedValueOnce(dummyUser({ email: dto.email }))
       ;(bcrypt.compare as jest.Mock).mockResolvedValueOnce(false)
       const e2 = await service
-        .login({ email: dto.email, password: "bad" })
+        .login({ email: dto.email, password: "bad" }, { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any)
         .catch((e) => e)
       expect(e2).toBeInstanceOf(UnauthorizedException)
 
@@ -348,7 +349,7 @@ describe("AuthService", () => {
       ;(bcrypt.compare as jest.Mock).mockResolvedValue(true)
       jwt.sign.mockReturnValue("token")
 
-      await service.login(dto)
+      await service.login(dto, { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any)
 
       expect(bcrypt.compare).toHaveBeenCalledWith(
         dto.password,
