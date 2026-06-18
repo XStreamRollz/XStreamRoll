@@ -1,6 +1,16 @@
 import { Response } from "express"
-import { RequestLoggerMiddleware } from "./request-logger.middleware"
 import type { AuthedRequest } from "./request-logger.middleware"
+
+let RequestLoggerMiddleware: typeof import("./request-logger.middleware").RequestLoggerMiddleware
+
+beforeAll(() => {
+  process.env.DATABASE_URL ??= "postgres://localhost/test"
+  process.env.JWT_SECRET ??= "test-jwt-secret"
+  process.env.STREAM_API_KEY ??= "test-stream-api-key"
+  process.env.LOG_IP_MASKING ??= "last-octet"
+  jest.resetModules()
+  RequestLoggerMiddleware = require("./request-logger.middleware").RequestLoggerMiddleware
+})
 
 type FakeResOptions = {
   statusCode?: number
@@ -98,7 +108,7 @@ describe("RequestLoggerMiddleware", () => {
       path: "/streams",
       statusCode: 201,
       userId: 42,
-      ip: "1.2.3.4",
+      ip: "1.2.3.0",
       bodyRedacted: false,
       contentLength: "128",
     })
