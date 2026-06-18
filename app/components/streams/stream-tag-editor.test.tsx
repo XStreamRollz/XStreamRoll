@@ -4,6 +4,7 @@ import { StreamTagEditor } from "@/src/app/dashboard/streams/stream-tag-editor"
 import {
   attachTagToStream,
   detachTagFromStream,
+  listTags,
   Tag,
   TagsApiError,
 } from "@/lib/api/tags"
@@ -30,7 +31,9 @@ const mockAttach = attachTagToStream as jest.MockedFunction<
 const mockDetach = detachTagFromStream as jest.MockedFunction<
   typeof detachTagFromStream
 >
+const mockListTags = listTags as jest.MockedFunction<typeof listTags>
 const mockToastError = toast.error as jest.MockedFunction<typeof toast.error>
+
 
 describe("StreamTagEditor", () => {
   const initialTags: Tag[] = [
@@ -127,8 +130,7 @@ describe("StreamTagEditor", () => {
     })
 
     // TagCombobox needs to be able to resolve listTags when opened
-    const { listTags } = require("@/lib/api/tags")
-    listTags.mockResolvedValueOnce({
+    mockListTags.mockResolvedValueOnce({
       items: [
         { id: 1, name: "Gaming", slug: "gaming", createdAt: "2026-06-18" },
         { id: 2, name: "Music", slug: "music", createdAt: "2026-06-18" },
@@ -164,8 +166,7 @@ describe("StreamTagEditor", () => {
     const user = userEvent.setup()
     mockAttach.mockRejectedValueOnce(new TagsApiError(400, "Tag limit reached"))
 
-    const { listTags } = require("@/lib/api/tags")
-    listTags.mockResolvedValueOnce({
+    mockListTags.mockResolvedValueOnce({
       items: [
         { id: 1, name: "Gaming", slug: "gaming", createdAt: "2026-06-18" },
         { id: 2, name: "Music", slug: "music", createdAt: "2026-06-18" },

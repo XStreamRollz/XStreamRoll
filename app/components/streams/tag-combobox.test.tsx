@@ -1,7 +1,7 @@
 import { render, screen, waitFor, act } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { TagCombobox } from "./tag-combobox"
-import { listTags, Tag } from "@/lib/api/tags"
+import { listTags, Tag, PagedTags } from "@/lib/api/tags"
 
 jest.mock("@/lib/api/tags")
 
@@ -42,8 +42,8 @@ describe("TagCombobox", () => {
 
   it("opens the popover and loads available tags (interaction / network test)", async () => {
     const user = userEvent.setup()
-    let resolveListTags: any
-    const listTagsPromise = new Promise((resolve) => {
+    let resolveListTags: (value: PagedTags) => void
+    const listTagsPromise = new Promise<PagedTags>((resolve) => {
       resolveListTags = () =>
         resolve({
           items: availableTags,
@@ -53,7 +53,7 @@ describe("TagCombobox", () => {
           hasMore: false,
         })
     })
-    mockListTags.mockReturnValueOnce(listTagsPromise as any)
+    mockListTags.mockReturnValueOnce(listTagsPromise)
 
     render(<TagCombobox value={selectedTags} onChange={jest.fn()} />)
 

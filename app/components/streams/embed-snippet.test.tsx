@@ -50,18 +50,15 @@ describe("EmbedSnippet", () => {
         originalClipboardDescriptor,
       )
     } else {
-      // @ts-ignore
-      delete Navigator.prototype.clipboard
+      delete (Navigator.prototype as Partial<Navigator>).clipboard
     }
 
     try {
-      // @ts-ignore
-      delete window.navigator.clipboard
+      delete (window.navigator as Partial<Navigator>).clipboard
     } catch (e) {}
 
     try {
-      // @ts-ignore
-      delete navigator.clipboard
+      delete (navigator as Partial<Navigator>).clipboard
     } catch (e) {}
   })
 
