@@ -25,6 +25,34 @@ interface AuthenticatedSocket extends Socket {
   }
 }
 
+/** Origin used when `CORS_ORIGIN` is unset or empty — keeps local dev working. */
+const DEFAULT_CORS_ORIGIN = "http://localhost:3000"
+
+/**
+ * Resolve the trusted WebSocket CORS origin(s) from the environment.
+ *
+ * Mirrors the REST API policy in `main.ts`
+ * (`process.env.CORS_ORIGIN || "http://localhost:3000"`) but additionally
+ * accepts a comma-separated list so several trusted origins can be allowed.
+ * Returns a single string when one origin is configured and an array when
+ * multiple are; socket.io matches the handshake `Origin` header against this
+ * value and rejects any origin not on the list, closing the Cross-Site
+ * WebSocket Hijacking hole left by the previous `origin: "*"`.
+ */
+export function resolveCorsOrigins(
+  raw: string | undefined = process.env.CORS_ORIGIN,
+): string | string[] {
+  const origins = (raw ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0)
+
+  if (origins.length === 0) {
+    return DEFAULT_CORS_ORIGIN
+  }
+  return origins.length === 1 ? origins[0] : origins
+}
+
 interface JwtPayload {
   sub: string | number
   [key: string]: unknown
@@ -50,7 +78,7 @@ interface JwtPayload {
  */
 @WebSocketGateway({
   namespace: "/streams",
-  cors: { origin: "*" },
+  cors: { origin: resolveCorsOrigins(), credentials: true },
 })
 export class StreamsGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
