@@ -7,6 +7,8 @@ import {
 import { Observable, tap } from "rxjs"
 import { Request } from "express"
 import { AuditService } from "./audit.service"
+import { env } from "../config/env"
+import { getRequestIp, maskRequestIp } from "../common/ip-mask"
 
 const SENSITIVE_ACTIONS: Record<string, string> = {
   "POST /auth/login": "login",
@@ -28,7 +30,7 @@ export class AuditInterceptor implements NestInterceptor {
 
     if (!action) return next.handle()
 
-    const ip = (req.headers["x-forwarded-for"] as string) ?? req.ip ?? ""
+    const ip = maskRequestIp(getRequestIp(req), env.LOG_IP_MASKING) ?? ""
     const userId = (req as Request & { user?: { id: number } }).user?.id ?? null
 
     return next.handle().pipe(

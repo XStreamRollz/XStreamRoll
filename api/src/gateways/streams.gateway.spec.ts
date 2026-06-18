@@ -1,5 +1,6 @@
 import { Test } from "@nestjs/testing"
 import { JwtService } from "@nestjs/jwt"
+import type { Server } from "socket.io"
 import { StreamsGateway } from "./streams.gateway"
 import { STREAM_EVENTS } from "./stream-events"
 
@@ -35,6 +36,8 @@ function makeSocket(overrides: Partial<FakeSocket> = {}): FakeSocket {
     ...overrides,
   }
 }
+
+type TestSocket = FakeSocket & { data: { userId?: string | number } }
 
 function makeServer(): {
   server: FakeServer
@@ -74,7 +77,7 @@ describe("StreamsGateway", () => {
       })
       jwtService.verifyAsync.mockResolvedValue({ sub: 42 })
 
-      await gateway.handleConnection(socket as unknown as any)
+      await gateway.handleConnection(socket as TestSocket)
 
       expect(jwtService.verifyAsync).toHaveBeenCalledWith("valid-token")
       expect(socket.data.userId).toBe(42)
@@ -86,7 +89,7 @@ describe("StreamsGateway", () => {
       const socket = makeSocket({ handshake: { auth: { token: "bad-token" } } })
       jwtService.verifyAsync.mockRejectedValue(new Error("jwt malformed"))
 
-      await gateway.handleConnection(socket as unknown as any)
+      await gateway.handleConnection(socket as TestSocket)
 
       expect(socket.emit).toHaveBeenCalledWith(
         STREAM_EVENTS.ERROR,
@@ -101,7 +104,7 @@ describe("StreamsGateway", () => {
     it("rejects a client with no token", async () => {
       const socket = makeSocket({ handshake: { auth: {} } })
 
-      await gateway.handleConnection(socket as unknown as any)
+      await gateway.handleConnection(socket as TestSocket)
 
       expect(socket.emit).toHaveBeenCalledWith(
         STREAM_EVENTS.ERROR,
@@ -123,7 +126,7 @@ describe("StreamsGateway", () => {
       })
       jwtService.verifyAsync.mockResolvedValue({ sub: "user-99" })
 
-      await gateway.handleConnection(socket as unknown as any)
+      await gateway.handleConnection(socket as TestSocket)
 
       expect(jwtService.verifyAsync).toHaveBeenCalledWith("header-token")
       expect(socket.emit).toHaveBeenCalledWith("connected", {
@@ -135,7 +138,7 @@ describe("StreamsGateway", () => {
   describe("stream room lifecycle", () => {
     it("allows an authenticated client to subscribe", () => {
       const socket = makeSocket({ data: { userId: 55 } })
-      const result = gateway.handleSubscribe(socket as unknown as any, {
+      const result = gateway.handleSubscribe(socket as TestSocket, {
         streamId: "abc",
       })
 
@@ -145,7 +148,7 @@ describe("StreamsGateway", () => {
 
     it("rejects an unauthenticated client from subscribing", () => {
       const socket = makeSocket({ data: {} })
-      const result = gateway.handleSubscribe(socket as unknown as any, {
+      const result = gateway.handleSubscribe(socket as TestSocket, {
         streamId: "abc",
       })
 
@@ -155,7 +158,7 @@ describe("StreamsGateway", () => {
 
     it("rejects an authenticated client from subscribing without a streamId", () => {
       const socket = makeSocket({ data: { userId: 55 } })
-      const result = gateway.handleSubscribe(socket as unknown as any, {})
+      const result = gateway.handleSubscribe(socket as TestSocket, {})
 
       expect(result).toEqual({ ok: false, error: "streamId required" })
       expect(socket.join).not.toHaveBeenCalled()
@@ -163,7 +166,7 @@ describe("StreamsGateway", () => {
 
     it("allows an authenticated client to unsubscribe", () => {
       const socket = makeSocket({ data: { userId: 55 } })
-      const result = gateway.handleUnsubscribe(socket as unknown as any, {
+      const result = gateway.handleUnsubscribe(socket as TestSocket, {
         streamId: "abc",
       })
 
@@ -173,7 +176,7 @@ describe("StreamsGateway", () => {
 
     it("rejects an unauthenticated client from unsubscribing", () => {
       const socket = makeSocket({ data: {} })
-      const result = gateway.handleUnsubscribe(socket as unknown as any, {
+      const result = gateway.handleUnsubscribe(socket as TestSocket, {
         streamId: "abc",
       })
 
@@ -183,7 +186,7 @@ describe("StreamsGateway", () => {
 
     it("rejects unsubscribe calls without a streamId", () => {
       const socket = makeSocket({ data: { userId: 55 } })
-      const result = gateway.handleUnsubscribe(socket as unknown as any, {})
+      const result = gateway.handleUnsubscribe(socket as TestSocket, {})
 
       expect(result).toEqual({ ok: false, error: "streamId required" })
       expect(socket.leave).not.toHaveBeenCalled()
@@ -191,8 +194,8 @@ describe("StreamsGateway", () => {
 
     it("supports duplicate subscriptions without failure", () => {
       const socket = makeSocket({ data: { userId: 55 } })
-      gateway.handleSubscribe(socket as unknown as any, { streamId: "abc" })
-      const second = gateway.handleSubscribe(socket as unknown as any, {
+      gateway.handleSubscribe(socket as TestSocket, { streamId: "abc" })
+      const second = gateway.handleSubscribe(socket as TestSocket, {
         streamId: "abc",
       })
 
@@ -204,7 +207,7 @@ describe("StreamsGateway", () => {
   describe("emit helpers", () => {
     it("broadcasts only to the correct stream room", () => {
       const { server, events } = makeServer()
-      gateway.server = server as unknown as any
+      gateway.server = server as unknown as Server
 
       gateway.emitStarted({
         streamId: "1",
@@ -260,7 +263,7 @@ describe("StreamsGateway", () => {
     it("does not throw when a socket disconnects", () => {
       const socket = makeSocket({ data: { userId: 99 } })
       expect(() =>
-        gateway.handleDisconnect(socket as unknown as any),
+        gateway.handleDisconnect(socket as TestSocket),
       ).not.toThrow()
     })
   })

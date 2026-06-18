@@ -6,6 +6,9 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   JWT_SECRET: z.string().min(1, "JWT_SECRET is required"),
   STREAM_API_KEY: z.string().min(1, "STREAM_API_KEY is required"),
+  LOG_IP_MASKING: z
+    .enum(["none", "last-octet", "full-hash"])
+    .default("last-octet"),
 })
 
 export type Env = z.infer<typeof envSchema>

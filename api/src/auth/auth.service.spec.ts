@@ -4,6 +4,7 @@ import * as bcrypt from "bcrypt"
 import { AuthService } from "./auth.service"
 import { User, UsersRepository } from "./users.repository"
 import { TokenDenylistService } from "./token-denylist.service"
+import { PasswordResetService } from "./password-reset.service"
 
 jest.mock("bcrypt", () => ({
   hash: jest.fn(),
@@ -58,10 +59,6 @@ function mockPasswordResetService(): MockPasswordResetService {
   }
 }
 
-interface MockJwtDecodedPayload {
-  exp?: number
-}
-
 function makeService(
   jwt: MockJwtService,
   users: MockUsersRepository,
@@ -71,7 +68,7 @@ function makeService(
   return new AuthService(
     jwt as unknown as JwtService,
     users as unknown as UsersRepository,
-    passwordReset as unknown as any,
+    passwordReset as unknown as PasswordResetService,
     tokenDenylist as unknown as TokenDenylistService,
   )
 }
