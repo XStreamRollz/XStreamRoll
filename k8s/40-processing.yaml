@@ -1,0 +1,103 @@
+# Stream-processing worker Deployment.
+# ---------------------------------------------------------------------------
+# Polls the API for events, processes them through the pipeline, and
+# publishes results back. The metrics+health HTTP server listens on
+# port 3002 inside the pod so the kubelet can probe readiness/liveness.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: processing-config
+  namespace: xstreamroll
+data:
+  NODE_ENV: production
+  API_URL: http://api:3001
+  POLL_INTERVAL_MS: "5000"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: processing
+  namespace: xstreamroll
+  labels:
+    app: processing
+spec:
+  # ClusterIP — not exposed publicly. The metrics+health endpoint is
+  # reachable from within the cluster for Prometheus scraping.
+  type: ClusterIP
+  selector:
+    app: processing
+  ports:
+    - name: http
+      port: 3002
+      targetPort: 3002
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: processing
+  namespace: xstreamroll
+  labels:
+    app: processing
+spec:
+  replicas: 1
+  strategy:
+    # Recreate avoids stale polls during a rolling update.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: processing
+  template:
+    metadata:
+      labels:
+        app: processing
+    spec:
+      # Greenshutdown timeout in src/lifecycle.ts is 15s; allow the
+      # kubelet a 30s window so the worker can flush in-flight polls
+      # before being SIGKILL'd.
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: processing
+          image: ghcr.io/xstreamrollz/xstreamroll-processing:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3002
+          envFrom:
+            - configMapRef:
+                  name: processing-config
+          # Readiness: returns 503 as soon as the worker begins
+          # shutting down, so the in-cluster Service removes this pod
+          # before the loop dies.
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Liveness: stays 200 throughout the drain so we don't get
+          # SIGKILLed mid-shutdown.
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

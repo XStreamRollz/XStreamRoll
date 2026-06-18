@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "next build",
+    "analyze": "cross-env ANALYZE=true npm run build",
     "dev": "next dev",
     "lint": "eslint .",
     "start": "next start",
@@ -83,6 +84,8 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "16.2.9",
+    "cross-env": "^7.0.3",
     "@tailwindcss/postcss": "^4.1.9",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

@@ -1,0 +1,39 @@
+# Ingress routing for external traffic.
+# ---------------------------------------------------------------------------
+# Routes:
+#   • http(s)://<host>/api/*    -> api:3001
+#   • http(s)://<host>/         -> app:3000
+#
+# Configure the spec.rules[0].host field to your hostname, and set
+# spec.tls if you have cert-manager (or any other issuer) producing
+# TLS secrets named `<host>-tls` in this namespace.
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: xstreamroll
+  namespace: xstreamroll
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+spec:
+  # Use the modern field instead of the deprecated
+  # `kubernetes.io/ingress.class` annotation (removed in 1.22+).
+  ingressClassName: nginx
+  # Replace with your real hostname in production.
+  rules:
+    - http:
+        paths:
+          - path: /api(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: api
+                port:
+                  number: 3001
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: app
+                port:
+                  number: 3000

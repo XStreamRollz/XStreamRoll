@@ -30,10 +30,11 @@ export class HealthController {
   @Get()
   @SkipThrottle()
   @ApiOperation({
-    summary: "Liveness probe",
+    summary: "Readiness probe",
     description:
       "Returns a fixed `ok` status and the current server timestamp. " +
-      "Also verifies the database connection for liveness checks.",
+      "Also verifies the database connection — if the DB is unreachable " +
+      "the probe returns `503` so Kubernetes can route traffic elsewhere.",
   })
   @ApiOkResponse({ type: HealthCheckResponseDto })
   async check(): Promise<HealthCheckResponseDto> {
@@ -47,5 +48,25 @@ export class HealthController {
         "Database connectivity check failed.",
       )
     }
+  }
+
+  /**
+   * Pure liveness probe — deliberately decoupled from the database so
+   * that a transient DB outage cannot trigger a pod restart loop. Use
+   * this for `livenessProbe` in the Deployment manifest; use `/health`
+   * for `readinessProbe` instead.
+   */
+  @Get("livez")
+  @SkipThrottle()
+  @ApiOperation({
+    summary: "Liveness probe (no DB check)",
+    description:
+      "Returns a fixed `ok` status and the current server timestamp. " +
+      "Does not touch the database — safe to use as a Kubernetes " +
+      "liveness probe.",
+  })
+  @ApiOkResponse({ type: HealthCheckResponseDto })
+  checkLiveness(): HealthCheckResponseDto {
+    return { status: "ok", timestamp: new Date().toISOString() }
   }
 }

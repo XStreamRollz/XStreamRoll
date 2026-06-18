@@ -37,3 +37,14 @@ psql -d "$DATABASE_URL" -f database/migrations/2026051501_add_stream_tags.down.s
 | File                                       | Adds                                  |
 | ------------------------------------------ | ------------------------------------- |
 | `2026051501_add_stream_tags.up.sql`        | `tags`, `stream_tags`, supporting indexes |
+| `2026061001_add_password_hash.up.sql`      | `users.password_hash` (nullable → backfill → `NOT NULL`, no default) |
+| `2026061002_add_user_password_hash.up.sql` | `users.password_hash` — redundant re-add, no-op after `2026061001` via `IF NOT EXISTS` |
+
+> **Note on `2026061001` / `2026061002`:** both migrations add the same
+> `users.password_hash` column. `2026061001_add_password_hash` is the
+> canonical one — it matches `database/schema.sql` exactly
+> (`VARCHAR(255) NOT NULL`, no default). `2026061002_add_user_password_hash`
+> previously collided on the `2026061001` counter (see issue #203); it has
+> been renumbered to keep counters unique. Because every `ADD COLUMN`
+> uses `IF NOT EXISTS`, applying both in order leaves the canonical,
+> default-free column in place and reproduces `schema.sql`.
