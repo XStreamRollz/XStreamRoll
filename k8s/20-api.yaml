@@ -2,8 +2,10 @@
 # ---------------------------------------------------------------------------
 # Exposing:
 #   • Service `api`:3001 -> pod :3001
-#   • Liveness  -> GET /livez (no DB dependency, safe to restart loop)
-#   • Readiness -> GET /health (pings the DB; 503 if Postgres is unreachable)
+#   • Liveness  -> GET /health/live  (no dependency checks; also aliased at
+#                  /health/livez for K8s convention compatibility)
+#   • Readiness -> GET /health (checks DB, heap memory, and event loop lag;
+#                  returns 503 if any dependency is unhealthy)
 #
 # Pulls the published image from GHCR:
 #   ghcr.io/xstreamrollz/xstreamroll-api:<tag>
@@ -119,8 +121,8 @@ spec:
                 secretKeyRef:
                   name: api-secrets
                   key: STREAM_API_KEY
-          # Readiness: pings the DB so the pod is removed from
-          # rotation when Postgres is unreachable (without restarting).
+          # Readiness: checks DB connectivity, heap memory usage, and event
+          # loop lag. The pod is removed from rotation on 503 without restart.
           readinessProbe:
             httpGet:
               path: /health
@@ -129,13 +131,12 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 3
             failureThreshold: 5
-          # Liveness: deliberately DB-free so transient DB outages do
-          # not cause a restart loop. The NestJS controller is mounted
-          # at @Controller('health'), so the actual path on the wire
-          # is /health/livez — not /livez.
+          # Liveness: deliberately dependency-free so a transient DB outage
+          # or memory spike cannot trigger an unwanted restart loop.
+          # /health/live is the canonical path; /health/livez is an alias.
           livenessProbe:
             httpGet:
-              path: /health/livez
+              path: /health/live
               port: http
             initialDelaySeconds: 30
             periodSeconds: 30
