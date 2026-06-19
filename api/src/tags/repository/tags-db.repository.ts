@@ -1,11 +1,12 @@
 import {
+  Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
   ServiceUnavailableException,
 } from "@nestjs/common"
 import { Pool } from "pg"
-import { env } from "../../config/env"
+import { PG_POOL } from "../../database/database.module"
 import { StreamTag, Tag } from "../tag.entity"
 
 /**
@@ -19,16 +20,9 @@ import { StreamTag, Tag } from "../tag.entity"
  */
 @Injectable()
 export class TagsDbRepository {
-  private readonly pool: Pool
   private readonly logger = new Logger(TagsDbRepository.name)
 
-  constructor() {
-    this.pool = new Pool({ connectionString: env.DATABASE_URL })
-
-    this.pool.on("error", (err) => {
-      this.logger.error("Unexpected PostgreSQL pool error", err.stack)
-    })
-  }
+  constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
 
   /** Map a raw DB row to the Tag entity shape. */
   private rowToTag(row: Record<string, unknown>): Tag {

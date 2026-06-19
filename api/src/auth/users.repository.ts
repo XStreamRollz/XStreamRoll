@@ -1,5 +1,6 @@
-import { Injectable } from "@nestjs/common"
+import { Inject, Injectable } from "@nestjs/common"
 import { Pool } from "pg"
+import { PG_POOL } from "../database/database.module"
 
 export interface User {
   id: number
@@ -18,7 +19,7 @@ export interface User {
  */
 @Injectable()
 export class UsersRepository {
-  private pool = new Pool({ connectionString: process.env.DATABASE_URL })
+  constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
 
   async findByEmail(email: string): Promise<User | null> {
     const { rows } = await this.pool.query(
