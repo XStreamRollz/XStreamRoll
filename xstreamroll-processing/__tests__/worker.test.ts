@@ -11,6 +11,8 @@ jest.mock("../src/config", () => ({
     API_URL: "http://localhost:3001",
     NODE_ENV: "test",
     POLL_INTERVAL_MS: "5000",
+    LOCK_BACKEND: "memory" as const,
+    LOCK_TTL_MS: 30_000,
   },
 }))
 
