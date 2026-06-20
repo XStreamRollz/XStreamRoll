@@ -4,6 +4,7 @@ import { Cache } from "cache-manager"
 import { Pool } from "pg"
 import * as bcrypt from "bcrypt"
 import * as crypto from "crypto"
+import { PG_POOL } from "../database/database.module"
 import { UsersRepository } from "./users.repository"
 
 const PASSWORD_RESET_TOKEN_BYTES = 32
@@ -14,14 +15,12 @@ const BCRYPT_ROUNDS = 12
 
 @Injectable()
 export class PasswordResetService {
-  private readonly pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-  })
   private readonly logger = new Logger(PasswordResetService.name)
 
   constructor(
     private readonly usersRepository: UsersRepository,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
+    @Inject(PG_POOL) private readonly pool: Pool,
   ) {}
 
   async sendResetToken(email: string): Promise<void> {

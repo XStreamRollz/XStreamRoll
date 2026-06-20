@@ -4,6 +4,7 @@ import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler"
 import { AdminModule } from "./admin/admin.module"
 import { AuditModule } from "./audit/audit.module"
 import { AuthModule } from "./auth/auth.module"
+import { DatabaseModule } from "./database/database.module"
 import { GatewaysModule } from "./gateways/gateways.module"
 import { HealthModule } from "./health/health.module"
 import { MetricsModule } from "./metrics/metrics.module"
@@ -19,6 +20,7 @@ import { TagsModule } from "./tags/tags.module"
         limit: parseInt(process.env.THROTTLE_LIMIT ?? "100"),
       },
     ]),
+    DatabaseModule,
     AdminModule,
     AuditModule,
     AuthModule,
