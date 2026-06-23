@@ -25,6 +25,9 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@xstreamroll/types": [
+        "../packages/types/src/index.ts"
       ]
     }
   },

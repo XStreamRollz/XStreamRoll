@@ -24,6 +24,7 @@
     ]
   },
   "dependencies": {
+    "@xstreamroll/types": "*",
     "axios": "^1.6.0"
   },
   "devDependencies": {

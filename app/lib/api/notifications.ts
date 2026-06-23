@@ -5,24 +5,7 @@
  *   POST   /notifications/:id/read  -> { id, readAt }
  */
 
-export interface Notification {
-  id: string
-  /** ISO-8601 timestamp. */
-  createdAt: string
-  /** ISO-8601 timestamp; null when the notification is unread. */
-  readAt: string | null
-  title: string
-  body: string
-  /** Optional URL the UI should navigate to on click. */
-  href?: string
-  /** Lightweight category — used to pick the icon. */
-  category?: "stream" | "system" | "billing" | "default"
-}
-
-export interface NotificationsPage {
-  items: Notification[]
-  unreadCount: number
-}
+export type { Notification, NotificationsPage } from "@xstreamroll/types"
 
 const DEFAULT_API_BASE = "http://localhost:3001"
 

@@ -4,6 +4,7 @@
   "description": "XStreamRoll Platform - Monorepo",
   "private": true,
   "workspaces": [
+    "packages/types",
     "app",
     "api",
     "xstreamroll-sdk",

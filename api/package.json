@@ -12,6 +12,7 @@
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\""
   },
   "dependencies": {
+    "@xstreamroll/types": "*",
     "@nestjs/cache-manager": "^2.3.0",
     "@nestjs/common": "^10.3.0",
     "@nestjs/core": "^10.3.0",

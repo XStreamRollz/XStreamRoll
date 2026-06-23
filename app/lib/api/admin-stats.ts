@@ -5,13 +5,7 @@
  *   GET /admin/stats -> AdminStats
  */
 
-export interface AdminStats {
-  totalUsers: number
-  totalStreams: number
-  activeStreams: number
-  eventsLast24h: number
-  generatedAt: string
-}
+export type { AdminStats } from "@xstreamroll/types"
 
 const DEFAULT_API_BASE = "http://localhost:3001"
 
