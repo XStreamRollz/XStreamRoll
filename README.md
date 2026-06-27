@@ -1,23 +1,15 @@
 # XStreamRoll
 
 [![codecov](https://codecov.io/gh/XStreamRollz/XStreamRoll/branch/main/graph/badge.svg)](https://codecov.io/gh/XStreamRollz/XStreamRoll)
+[![CI Status](https://github.com/XStreamRollz/XStreamRoll/actions/workflows/ci.yml/badge.svg)](https://github.com/XStreamRollz/XStreamRoll/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](./package.json)
 
 XStreamRoll is a powerful distributed streaming platform designed for developers and content creators who need real-time data streaming capabilities. The platform provides a complete ecosystem for building, managing, and scaling streaming applications with a modern web interface, robust API backend, client SDKs, and dedicated stream processing infrastructure. It's built for teams looking to deploy production-ready streaming solutions without the complexity of managing multiple disconnected services.
 
-## Repository Structure
-
-- **app/** - Next.js frontend application with modern UI components
-- **api/** - NestJS backend server with REST API and WebSocket support
-- **xstreamroll-sdk/** - TypeScript client SDK for easy integration
-- **xstreamroll-processing/** - Node.js stream processing worker for real-time data handling
-- **database/** - PostgreSQL schema and migrations
-
-## Setup Instructions
-
-### Prerequisites
-- Node.js 18+ and npm
-- PostgreSQL 14+
-- Git
+## 📐 Architecture Overview
+XStreamRoll is built with scalability in mind. 
+*(Insert Architecture Diagram Here - You can use a markdown image link once an asset is uploaded, e.g., `![Architecture Diagram](./docs/assets/arch.png)`)*
 
 ### Installation
 
@@ -61,6 +53,40 @@ XStreamRoll is a powerful distributed streaming platform designed for developers
    npm run dev:app    # Frontend on http://localhost:3000
    npm run dev:api    # API on http://localhost:3001
    ```
+The application should now be running at `http://localhost:3000`.
+
+## 📦 Package Breakdown
+This repository contains the following core packages:
+
+| Package | Description |
+|---------|-------------|
+| `core` | The main processing engine and state management. |
+| `api` | REST/GraphQL API endpoints for external integrations. |
+| `client` | Frontend dashboard for monitoring streams. |
+
+*For a full list, see [REPOSITORIES.md](./REPOSITORIES.md).*
+
+## 🛠️ Technology Stack
+
+| Category | Technology |
+|----------|------------|
+| **Language** | TypeScript / Node.js |
+| **Framework** | [e.g., Express / NestJS / React] |
+| **Database** | [e.g., PostgreSQL / Redis] |
+| **Tooling** | ESLint, Prettier, Jest |
+
+## 📖 API Documentation
+Once the local server is running, you can access the full OpenAPI/Swagger documentation at:
+👉 **`http://localhost:3000/docs`**
+
+## 💻 Development Workflow
+We use standard scripts for our development lifecycle:
+* `npm run lint` - Run code formatting and linting.
+* `npm run test` - Execute unit and integration tests.
+* `npm run build` - Compile TypeScript to production-ready JavaScript.
+
+## 🚢 Deployment
+Deployments are handled automatically via GitHub Actions. Pushing to the `main` branch triggers the CI/CD pipeline which builds the Docker images and deploys them to our staging environment.
 
 ### Testing
 
@@ -100,6 +126,11 @@ Ensure these ports are available in your environment or update the environment v
 - **Database**: PostgreSQL with optimized streaming schemas
 - **Development**: npm workspaces, ESLint, Prettier, Husky
 
-## Development
+## 🤝 Contributing
+We welcome contributions! Please read our guidelines before submitting a Pull Request:
+* [CONTRIBUTING.md](./CONTRIBUTING.md)
+* [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
+* [SECURITY.md](./SECURITY.md)
 
-XStreamRoll is designed as a production-ready platform with comprehensive type safety, modern development practices, and scalable architecture. Each service is containerized and can be deployed independently or as part of the complete platform ecosystem. The codebase follows TypeScript best practices and includes extensive documentation for easy onboarding.
+## 📄 License
+This project is licensed under the terms found in the [LICENSE](./LICENSE) file. *(Dependent on REPO-014).*
