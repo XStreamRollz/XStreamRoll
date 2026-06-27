@@ -9,7 +9,45 @@ XStreamRoll is a powerful distributed streaming platform designed for developers
 
 ## 📐 Architecture Overview
 XStreamRoll is built with scalability in mind. 
-*(Insert Architecture Diagram Here - You can use a markdown image link once an asset is uploaded, e.g., `![Architecture Diagram](./docs/assets/arch.png)`)*
+
+```mermaid
+flowchart TD
+    %% Define Styling
+    classDef primary fill:#2563eb,stroke:#1e40af,stroke-width:2px,color:#fff
+    classDef secondary fill:#475569,stroke:#334155,stroke-width:2px,color:#fff
+    classDef database fill:#059669,stroke:#047857,stroke-width:2px,color:#fff
+    classDef external fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#fff
+
+    %% External Entities
+    Sources((External Data\nStreams)):::external
+    User((End User)):::external
+
+    %% Application Boundaries
+    subgraph XStreamRoll [XStreamRoll System]
+    direction TB
+        
+        %% Packages
+        Client[Client Dashboard\nReact / UI]:::primary
+        API[API Gateway\nREST / GraphQL]:::primary
+        Core[Core Engine\nRolling Aggregation & State]:::primary
+        
+        %% Data Layer
+        subgraph DataLayer [Data Storage]
+         Redis[(Redis\nCache & Fast State)]:::database
+         Postgres[(PostgreSQL\nPersistent Storage)]:::database
+        end
+    end
+
+    %% Connections
+    Sources -->|Ingests Real-time Data| API
+    User -->|Views Dashboard| Client
+    Client -->|Queries/Subscribes| API
+    
+    API -->|Routes Traffic| Core
+    Core <-->|Manages State| Redis
+    Core <-->|Persists Data| Postgres
+    Core -.->|Pushes Updates| Client
+   ```
 
 ### Installation
 
@@ -133,4 +171,4 @@ We welcome contributions! Please read our guidelines before submitting a Pull Re
 * [SECURITY.md](./SECURITY.md)
 
 ## 📄 License
-This project is licensed under the terms found in the [LICENSE](./LICENSE) file. *(Dependent on REPO-014).*
+This project is licensed under the terms found in the [LICENSE](./LICENSE) file.
