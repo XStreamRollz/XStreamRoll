@@ -17,11 +17,13 @@ import {
   ApiBearerAuth,
   ApiConflictResponse,
   ApiCreatedResponse,
+  ApiForbiddenResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from "@nestjs/swagger"
 import type { Request } from "express"
 import { AuthGuard } from "../common/guards/auth.guard"
@@ -41,7 +43,6 @@ import { StreamsService } from "./streams.service"
  *   DELETE /streams/:id      Delete a stream (ownership required)
  */
 @ApiTags("streams")
-@ApiBearerAuth()
 @Controller("streams")
 export class StreamsController {
   constructor(private readonly streamsService: StreamsService) {}
@@ -52,11 +53,13 @@ export class StreamsController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @UseGuards(AuthGuard)
+  @ApiBearerAuth("bearer")
   @ApiOperation({
     summary: "Create a new stream",
     description: "Creates a new stream with the authenticated user as owner.",
   })
   @ApiCreatedResponse({ description: "Stream created successfully." })
+  @ApiUnauthorizedResponse({ description: "Authentication required." })
   create(
     @Body() body: CreateStreamDto,
     @Req() req: Request & { auth?: { userId: number } },
@@ -73,12 +76,14 @@ export class StreamsController {
    */
   @Get()
   @UseGuards(AuthGuard)
+  @ApiBearerAuth("bearer")
   @ApiOperation({
     summary: "List streams",
     description:
       "Returns a paginated list of streams with optional status filter.",
   })
   @ApiOkResponse({ description: "Paginated list of streams." })
+  @ApiUnauthorizedResponse({ description: "Authentication required." })
   list(@Query() query: ListStreamsQueryDto) {
     const page = query.page ?? 1
     const limit = query.limit ?? 20
@@ -92,12 +97,15 @@ export class StreamsController {
    */
   @Get(":id")
   @UseGuards(StreamOwnershipGuard)
+  @ApiBearerAuth("bearer")
   @ApiOperation({
     summary: "Get a stream",
     description: "Returns a single stream by id. Requires ownership.",
   })
   @ApiOkResponse({ description: "Stream found." })
   @ApiNotFoundResponse({ description: "Stream not found." })
+  @ApiUnauthorizedResponse({ description: "Authentication required." })
+  @ApiForbiddenResponse({ description: "You do not own this stream." })
   findById(@Param("id", ParseIntPipe) id: number) {
     return this.streamsService.findById(id)
   }
@@ -108,6 +116,7 @@ export class StreamsController {
    */
   @Patch(":id")
   @UseGuards(StreamOwnershipGuard)
+  @ApiBearerAuth("bearer")
   @ApiOperation({
     summary: "Update a stream",
     description: "Partially updates a stream. Requires ownership.",
@@ -115,6 +124,8 @@ export class StreamsController {
   @ApiOkResponse({ description: "Stream updated." })
   @ApiNotFoundResponse({ description: "Stream not found." })
   @ApiConflictResponse({ description: "Invalid status transition." })
+  @ApiUnauthorizedResponse({ description: "Authentication required." })
+  @ApiForbiddenResponse({ description: "You do not own this stream." })
   update(
     @Param("id", ParseIntPipe) id: number,
     @Body() body: UpdateStreamDto,
@@ -128,12 +139,15 @@ export class StreamsController {
   @Delete(":id")
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(StreamOwnershipGuard)
+  @ApiBearerAuth("bearer")
   @ApiOperation({
     summary: "Delete a stream",
     description: "Deletes a stream by id. Requires ownership.",
   })
   @ApiNoContentResponse({ description: "Stream deleted." })
   @ApiNotFoundResponse({ description: "Stream not found." })
+  @ApiUnauthorizedResponse({ description: "Authentication required." })
+  @ApiForbiddenResponse({ description: "You do not own this stream." })
   async delete(@Param("id", ParseIntPipe) id: number): Promise<void> {
     await this.streamsService.delete(id)
   }
