@@ -10,6 +10,7 @@
     "xstreamroll-processing"
   ],
   "scripts": {
+    "prepare": "husky",
     "dev": "concurrently \"npm run dev:app\" \"npm run dev:api\"",
     "dev:app": "cd app && npm run dev",
     "dev:api": "cd api && npm run dev",
@@ -35,6 +36,8 @@
     "class-validator": "^0.15.1",
     "concurrently": "^8.2.2",
     "eslint": "^8.57.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.8",
     "supertest": "^7.2.2"
   },
   "dependencies": {
