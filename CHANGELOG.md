@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `StreamOwnershipService` in API backend now safely queries the PostgreSQL database via parameterized queries instead of relying on demo environment variables.
 - Prepared `AdminStatsService` for database integration to aggregate platform-wide stats.
+- **Breaking (xstreamroll-sdk):** `StreamingClient` now uses the fetch-based `HttpClient` (with shared `withRetry`) instead of axios. The `axios` dependency has been removed from `@stellar/streaming-sdk`. Callers that relied on axios-specific error shapes (`AxiosError`, `error.isAxiosError`, axios interceptors on the client instance) must switch to `ApiError` / `HttpRequestError`. The public `StreamingClient` method surface is unchanged.
 
 ### Fixed
 
