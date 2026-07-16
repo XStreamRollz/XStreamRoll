@@ -141,6 +141,7 @@ describe("AuthService", () => {
         email: dto.email,
         username: dto.username,
         passwordChangedAt: expect.any(Number),
+        jti: expect.any(String),
       })
       expect(result.accessToken).toBe("jwt.token.here")
       expect(result.user).toEqual({
@@ -234,19 +235,32 @@ describe("AuthService", () => {
 
   describe("logout", () => {
     const token = "valid.jwt.token"
+    const jti = "f47ac10b-58cc-4372-a567-0e02b2c3d479"
 
-    it("revokes the current access token when valid", async () => {
+    it("revokes the current access token by its jti when valid", async () => {
       jwt.verifyAsync.mockResolvedValue({ sub: 1 })
-      jwt.decode.mockReturnValue({ exp: Math.floor(Date.now() / 1000) + 300 })
+      jwt.decode.mockReturnValue({
+        exp: Math.floor(Date.now() / 1000) + 300,
+        jti,
+      })
 
       await service.logout(`Bearer ${token}`)
 
       expect(jwt.verifyAsync).toHaveBeenCalledWith(token)
       expect(jwt.decode).toHaveBeenCalledWith(token)
       expect(tokenDenylist.revoke).toHaveBeenCalledWith(
-        token,
+        jti,
         expect.any(Number),
       )
+    })
+
+    it("does not revoke when the token predates the jti claim", async () => {
+      jwt.verifyAsync.mockResolvedValue({ sub: 1 })
+      jwt.decode.mockReturnValue({ exp: Math.floor(Date.now() / 1000) + 300 })
+
+      await service.logout(`Bearer ${token}`)
+
+      expect(tokenDenylist.revoke).not.toHaveBeenCalled()
     })
 
     it("throws UnauthorizedException when the authorization header is missing", async () => {
@@ -265,7 +279,10 @@ describe("AuthService", () => {
 
     it("throws UnauthorizedException when the token has already expired", async () => {
       jwt.verifyAsync.mockResolvedValue({ sub: 1 })
-      jwt.decode.mockReturnValue({ exp: Math.floor(Date.now() / 1000) - 10 })
+      jwt.decode.mockReturnValue({
+        exp: Math.floor(Date.now() / 1000) - 10,
+        jti,
+      })
 
       await expect(service.logout(`Bearer ${token}`)).rejects.toThrow(
         UnauthorizedException,
@@ -295,6 +312,7 @@ describe("AuthService", () => {
         email: dto.email,
         username: user.username,
         passwordChangedAt: expect.any(Number),
+        jti: expect.any(String),
       })
       expect(result.accessToken).toBe("jwt.token.here")
       expect(result.user).toEqual({
@@ -360,6 +378,7 @@ describe("AuthService", () => {
         email: dto.email,
         username: user.username,
         passwordChangedAt: expect.any(Number),
+        jti: expect.any(String),
       })
     })
   })

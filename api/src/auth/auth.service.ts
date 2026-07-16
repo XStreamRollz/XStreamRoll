@@ -5,6 +5,7 @@ import {
 } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 import * as bcrypt from "bcrypt"
+import { randomUUID } from "node:crypto"
 import type { Request } from "express"
 import { RegisterDto } from "./dto/register.dto"
 import { LoginDto } from "./dto/login.dto"
@@ -140,7 +141,9 @@ export class AuthService {
     const token = this.extractBearerToken(authorizationHeader)
     await this.verifyToken(token)
 
-    const payload = this.jwtService.decode(token) as { exp?: number } | null
+    const payload = this.jwtService.decode(token) as
+      | { exp?: number; jti?: string }
+      | null
     const expiresAt = typeof payload?.exp === "number" ? payload.exp : undefined
     if (!expiresAt) {
       throw new UnauthorizedException("invalid access token")
@@ -151,7 +154,15 @@ export class AuthService {
       throw new UnauthorizedException("access token has expired")
     }
 
-    await this.tokenDenylistService.revoke(token, ttlSeconds)
+    // Revoke by the token's `jti` (a short UUID) rather than the full JWT.
+    // Tokens issued before the `jti` claim existed cannot be individually
+    // revoked; they remain valid until they expire naturally. New tokens
+    // always carry a `jti`, so this branch only applies during the short
+    // transition window after deploy.
+    const jti = payload?.jti
+    if (typeof jti === "string" && jti.length > 0) {
+      await this.tokenDenylistService.revoke(jti, ttlSeconds)
+    }
   }
 
   private async verifyToken(token: string): Promise<void> {
@@ -203,6 +214,7 @@ export class AuthService {
       username: user.username,
       passwordChangedAt:
         user.password_changed_at?.getTime() ?? user.created_at.getTime(),
+      jti: randomUUID(),
     })
   }
 }
