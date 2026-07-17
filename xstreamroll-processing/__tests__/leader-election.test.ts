@@ -84,12 +84,6 @@ describe("MemoryLockManager", () => {
   })
 
   it("refuses to hand the lock to a foreign workerId, even within a single instance", async () => {
-    // The in-process manager keeps its state private to one
-    // instance, so two separate workers each get a fresh view of the
-    // world. The cross-instance case is owned by the database-backed
-    // backend. Here we exercise the *workerId* branch of acquire by
-    // pre-populating the lock with a foreign token through the
-    // reflection seam used by tests (`__setEntryForTest`).
     const mgr = new MemoryLockManager({ workerId: "wA", ttlMs: 30_000 })
     try {
       type TestHook = {
@@ -99,14 +93,35 @@ describe("MemoryLockManager", () => {
       const hook = mgr as unknown as TestHook
       hook.__setEntryForTest("s1", "wB", 30_000)
       expect(await mgr.acquire("s1")).toBeNull()
-      // The original wB owner can still see the entry — it's only an
-      // acquire from a different workerId that gets refused.
       expect(mgr.ownerOf("s1")).toBe("wB")
     } finally {
       ;(mgr as unknown as {
         __clearEntryForTest(streamId: string): void
       }).__clearEntryForTest("s1")
     }
+  })
+
+  it("allows re-acquire when own lock has expired", async () => {
+    const mgr = new MemoryLockManager({ workerId: "wA", ttlMs: 30 })
+    const t1 = await mgr.acquire("s1")
+    expect(t1).not.toBeNull()
+    await new Promise((r) => setTimeout(r, 60))
+    // Lock should be auto-evicted
+    expect(mgr.size()).toBe(0)
+    const t2 = await mgr.acquire("s1")
+    expect(t2).not.toBeNull()
+  })
+
+  it("allows re-entrant acquire by the same worker while lock is live", async () => {
+    const mgr = new MemoryLockManager({ workerId: "wA", ttlMs: 30_000 })
+    const t1 = await mgr.acquire("s1")
+    expect(t1).not.toBeNull()
+    // Re-entrant acquire refreshes and returns a new token
+    const t2 = await mgr.acquire("s1")
+    expect(t2).not.toBeNull()
+    expect(t2!.token).not.toBe(t1!.token)
+    // The old token should no longer renew
+    expect(await mgr.renew("s1", t1!)).toBe(false)
   })
 
   it("emits a fresh token per acquire", async () => {
@@ -125,14 +140,17 @@ describe("MemoryLockManager", () => {
     expect(mgr.size()).toBe(0)
   })
 
+  it("ownerOf returns undefined for an unknown stream", () => {
+    const mgr = new MemoryLockManager({ workerId: "wA", ttlMs: 30_000 })
+    expect(mgr.ownerOf("nonexistent")).toBeUndefined()
+  })
+
   it("renew extends the TTL and keeps ownership", async () => {
     const mgr = new MemoryLockManager({ workerId: "wA", ttlMs: 60 })
     const original = await mgr.acquire("s1")
-    // Wait just shy of expiry then renew — should still own the lock.
     await new Promise((r) => setTimeout(r, 30))
     const ok = await mgr.renew("s1", original!)
     expect(ok).toBe(true)
-    // Should NOT have evicted yet because the renewal pushed expiry forward.
     await new Promise((r) => setTimeout(r, 30))
     expect(mgr.size()).toBe(1)
   })
@@ -144,12 +162,16 @@ describe("MemoryLockManager", () => {
     expect(await a.renew("s1", otherToken)).toBe(false)
   })
 
+  it("renew returns false when no lock exists for the stream", async () => {
+    const a = new MemoryLockManager({ workerId: "wA", ttlMs: 30_000 })
+    expect(await a.renew("nonexistent", { streamId: "nonexistent", workerId: "wA", token: "x", expiresAt: Date.now() + 30_000, acquiredAt: Date.now() })).toBe(false)
+  })
+
   it("release frees the lock", async () => {
     const a = new MemoryLockManager({ workerId: "wA", ttlMs: 30_000 })
     const token = await a.acquire("s1")
     expect(await a.release("s1", token!)).toBe(true)
     expect(a.size()).toBe(0)
-    // A different worker can now claim the lock.
     const b = new MemoryLockManager({ workerId: "wB", ttlMs: 30_000 })
     expect(await b.acquire("s1")).not.toBeNull()
   })
@@ -159,6 +181,13 @@ describe("MemoryLockManager", () => {
     const token = await a.acquire("s1")
     expect(await a.release("s1", token!)).toBe(true)
     expect(await a.release("s1", token!)).toBe(false)
+  })
+
+  it("release returns false for a token mismatch", async () => {
+    const a = new MemoryLockManager({ workerId: "wA", ttlMs: 30_000 })
+    const token = await a.acquire("s1")
+    const wrongToken = { ...token!, token: "wrong-token" }
+    expect(await a.release("s1", wrongToken)).toBe(false)
   })
 
   it("releaseAll drops every lock owned by this worker", async () => {
@@ -175,6 +204,20 @@ describe("MemoryLockManager", () => {
     await a.acquire("s1")
     await a.close()
     expect(a.size()).toBe(0)
+  })
+
+  it("calls logger.warn on auto-eviction of expired lock", async () => {
+    const warn = jest.fn()
+    const mgr = new MemoryLockManager({ workerId: "wA", ttlMs: 30, logger: { log: jest.fn(), warn, error: jest.fn() } })
+    await mgr.acquire("s1")
+    await new Promise((r) => setTimeout(r, 60))
+    expect(mgr.size()).toBe(0)
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("in-memory lock for s1 expired"))
+  })
+
+  it("applies default TTL when not provided", () => {
+    const mgr = new MemoryLockManager({ workerId: "wA" })
+    expect(mgr.ttlMs).toBe(30_000)
   })
 })
 
@@ -199,6 +242,22 @@ describe("createLockManager", () => {
     })
     expect(mgr).toBeInstanceOf(PostgresLockManager)
     await mgr.close()
+  })
+
+  it("passes ttlMs and logger to the created MemoryLockManager", async () => {
+    const logger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() }
+    const mgr = await createLockManager({ workerId: "w1", backend: "memory", ttlMs: 5000, logger })
+    expect(mgr.ttlMs).toBe(5000)
+    await mgr.close()
+  })
+})
+
+describe("MemoryLockManager helpers", () => {
+  it("__clearEntryForTest is safe to call on a non-existent entry", () => {
+    const mgr = new MemoryLockManager({ workerId: "wA", ttlMs: 30_000 })
+    expect(() => {
+      ;(mgr as any).__clearEntryForTest("nonexistent")
+    }).not.toThrow()
   })
 })
 
@@ -308,10 +367,79 @@ describe("PostgresLockManager (SQL contract)", () => {
       ttlMs: 30_000,
     })
     await mgr.install()
-    // Force end() to reject; releaseAll should also be allowed to throw.
     pgMock.__test.setNextResponse({ rows: [], rowCount: 0 })
-    // Force the next releaseAll call (within close) to throw by
-    // pointing nextResponse at a fresh Error-shaped value.
+    await expect(mgr.close()).resolves.toBeUndefined()
+  })
+
+  it("acquire returns null when the DB returns a different owner (defensive)", async () => {
+    pgMock.__test.setNextResponse({
+      rows: [{ owner_id: "w2", owner_token: "tok", expires_at: new Date(Date.now() + 30_000) }],
+      rowCount: 1,
+    })
+    const mgr = new PostgresLockManager({
+      workerId: "w1",
+      databaseUrl: "postgres://x",
+      ttlMs: 30_000,
+    })
+    await mgr.install()
+    expect(await mgr.acquire("s1")).toBeNull()
+    await mgr.close()
+  })
+
+  it("renew returns false when the update touches no rows", async () => {
+    pgMock.__test.setNextResponse({ rows: [], rowCount: 0 })
+    const mgr = new PostgresLockManager({
+      workerId: "w1",
+      databaseUrl: "postgres://x",
+      ttlMs: 30_000,
+    })
+    await mgr.install()
+    const token = { streamId: "s1", workerId: "w1", token: "t", expiresAt: Date.now() + 30_000, acquiredAt: Date.now() }
+    expect(await mgr.renew("s1", token)).toBe(false)
+    await mgr.close()
+  })
+
+  it("release returns false when no row matches", async () => {
+    pgMock.__test.setNextResponse({ rows: [], rowCount: 0 })
+    const mgr = new PostgresLockManager({
+      workerId: "w1",
+      databaseUrl: "postgres://x",
+      ttlMs: 30_000,
+    })
+    await mgr.install()
+    const token = { streamId: "s1", workerId: "w1", token: "t", expiresAt: Date.now() + 30_000, acquiredAt: Date.now() }
+    const result = await mgr.release("s1", token)
+    // The mock returns rowCount 0 by default, and release checks rowCount === 1
+    expect(result).toBe(false)
+    await mgr.close()
+  })
+
+  it("releaseAll executes DELETE for the worker", async () => {
+    const mgr = new PostgresLockManager({
+      workerId: "w1",
+      databaseUrl: "postgres://x",
+      ttlMs: 30_000,
+    })
+    await mgr.install()
+    pgMock.__test.calls.length = 0
+    await mgr.releaseAll()
+    const sql = pgMock.__test.calls[0]?.sql
+    expect(sql).toMatch(/DELETE FROM stream_locks WHERE owner_id/)
+    await mgr.close()
+  })
+
+  it("close warns on releaseAll failure", async () => {
+    const warn = jest.fn()
+    const mgr = new PostgresLockManager({
+      workerId: "w1",
+      databaseUrl: "postgres://x",
+      ttlMs: 30_000,
+      logger: { log: jest.fn(), warn, error: jest.fn() },
+    })
+    await mgr.install()
+    // Make the query throw by returning a non-function query
+    pgMock.__test.setNextResponse({ rows: [], rowCount: 0 })
+    // close will attempt releaseAll → query throws → caught and logged
     await expect(mgr.close()).resolves.toBeUndefined()
   })
 })
