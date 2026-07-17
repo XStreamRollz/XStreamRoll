@@ -24,7 +24,9 @@
     "lint": "eslint --max-warnings=0 api xstreamroll-sdk xstreamroll-processing",
     "lint:fix": "eslint --fix api xstreamroll-sdk xstreamroll-processing",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "generate:sdk": "npm run build --workspace=api && npm run generate:types --workspace=xstreamroll-sdk",
+    "generate:sdk:check": "npm run generate:sdk && git diff --exit-code xstreamroll-sdk/src/generated/schema.d.ts"
   },
   "devDependencies": {
     "@types/supertest": "^7.2.0",
