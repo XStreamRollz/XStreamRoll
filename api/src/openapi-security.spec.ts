@@ -111,6 +111,14 @@ describe("OpenAPI security markers", () => {
     })
   })
 
+  it("GET /streams/{id}/analytics is bearer-secured with 401 and 403 (StreamOwnershipGuard)", () => {
+    expectBearerSecured(paths["/streams/{id}/analytics"]?.get)
+    expectResponses(paths["/streams/{id}/analytics"]?.get, {
+      unauthorized: true,
+      forbidden: true,
+    })
+  })
+
   it("PATCH /streams/{id} is bearer-secured with 401 and 403 (StreamOwnershipGuard)", () => {
     expectBearerSecured(paths["/streams/{id}"]?.patch)
     expectResponses(paths["/streams/{id}"]?.patch, {
