@@ -24,9 +24,14 @@
     "lint": "eslint --max-warnings=0 api xstreamroll-sdk xstreamroll-processing",
     "lint:fix": "eslint --fix api xstreamroll-sdk xstreamroll-processing",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "changelog": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -s",
+    "changelog:first-release": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -s --first-release",
+    "prepare": "husky"
   },
   "devDependencies": {
+    "@commitlint/cli": "^19.6.1",
+    "@commitlint/config-conventional": "^19.6.0",
     "@types/supertest": "^7.2.0",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
@@ -34,7 +39,10 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "concurrently": "^8.2.2",
+    "conventional-changelog-cli": "^5.0.0",
+    "conventional-changelog-conventionalcommits": "^8.0.0",
     "eslint": "^8.57.1",
+    "husky": "^9.1.7",
     "supertest": "^7.2.2"
   },
   "dependencies": {
