@@ -147,6 +147,12 @@ jobs:
           node-version: "20"
           cache: "npm"
 
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Install & build types package
+        run: cd packages/types && npm install && npm run build
+
       - name: Install app dependencies
         run: cd app && npm install
 
