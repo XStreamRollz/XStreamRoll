@@ -11,6 +11,7 @@ import { MetricsModule } from "./metrics/metrics.module"
 import { RequestLoggerMiddleware } from "./middleware/request-logger.middleware"
 import { StreamsModule } from "./streams/streams.module"
 import { TagsModule } from "./tags/tags.module"
+import { UsersModule } from "./users/users.module"
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { TagsModule } from "./tags/tags.module"
     MetricsModule,
     StreamsModule,
     TagsModule,
+    UsersModule,
   ],
   providers: [
     {
