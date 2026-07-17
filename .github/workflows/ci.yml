@@ -39,6 +39,16 @@ jobs:
       - name: Install processing dependencies
         run: cd xstreamroll-processing && npm install
 
+      - name: Validate root scripts (lint, test, build)
+        run: |
+          npm run lint
+          npm test
+          npm run build
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+          JWT_SECRET: test-secret
+          STREAM_API_KEY: test-api-key
+
       - name: Lint — api
         run: cd api && npm run lint
         env:

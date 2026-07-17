@@ -4,6 +4,7 @@
 [![CI Status](https://github.com/XStreamRollz/XStreamRoll/actions/workflows/ci.yml/badge.svg)](https://github.com/XStreamRollz/XStreamRoll/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](./package.json)
+[![Contributing](https://img.shields.io/badge/contributing-guide-purple.svg)](./CONTRIBUTING.md)
 
 XStreamRoll is a powerful distributed streaming platform designed for developers and content creators who need real-time data streaming capabilities. The platform provides a complete ecosystem for building, managing, and scaling streaming applications with a modern web interface, robust API backend, client SDKs, and dedicated stream processing infrastructure. It's built for teams looking to deploy production-ready streaming solutions without the complexity of managing multiple disconnected services.
 
@@ -119,9 +120,10 @@ Once the local server is running, you can access the full OpenAPI/Swagger docume
 
 ## 💻 Development Workflow
 We use standard scripts for our development lifecycle:
-* `npm run lint` - Run code formatting and linting.
-* `npm run test` - Execute unit and integration tests.
-* `npm run build` - Compile TypeScript to production-ready JavaScript.
+* `npm run lint` - Lint all packages.
+* `npm test` - Run unit and integration tests across all packages.
+* `npm run build` - Build app and api packages.
+* `npm run build:all` - Build all packages.
 
 ## 🚢 Deployment
 Deployments are handled automatically via GitHub Actions. Pushing to the `main` branch triggers the CI/CD pipeline which builds the Docker images and deploys them to our staging environment.
@@ -130,11 +132,12 @@ Deployments are handled automatically via GitHub Actions. Pushing to the `main` 
 
 ```bash
 # Run tests for all services
-npm run test
+npm test
 
 # Run tests for specific services
 npm run test:app
 npm run test:api
+npm run test:processing
 npm run test:sdk
 ```
 
