@@ -16,9 +16,10 @@ If anything below is unclear, please open an issue using one of the [issue templ
    - [Per-Package Setup](#per-package-setup)
 4. [Branching Strategy](#branching-strategy)
 5. [Commit Message Conventions](#commit-message-conventions)
-6. [Pull Request Process](#pull-request-process)
-7. [Code Review Expectations](#code-review-expectations)
-8. [Reporting Issues](#reporting-issues)
+6. [Automated Changelog](#automated-changelog)
+7. [Pull Request Process](#pull-request-process)
+8. [Code Review Expectations](#code-review-expectations)
+9. [Reporting Issues](#reporting-issues)
 
 ---
 
@@ -173,7 +174,12 @@ Conventions:
 
 ## Commit Message Conventions
 
-We follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/). Each commit must look like:
+We follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/).
+Every commit message is **automatically validated** by
+[`commitlint`](https://commitlint.js.org/) via a Husky `commit-msg` git hook — invalid
+messages are rejected before they leave your machine.
+
+### Format
 
 ```
 <type>(<scope>): <subject>
@@ -183,17 +189,34 @@ We follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1
 <footer>
 ```
 
-**Allowed types:** `feat`, `fix`, `chore`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `revert`.
+### Types
 
-**Scope** is the affected package or area: `api`, `app`, `sdk`, `processing`, `db`, `ci`, `deps`, etc.
+| Type | When to use |
+| --------- | ------------------------------------------------ |
+| `feat` | A new user-facing feature |
+| `fix` | A bug fix |
+| `docs` | Documentation-only changes |
+| `style` | Formatting, missing semicolons, no logic change |
+| `refactor` | Code restructuring without feature/fix |
+| `perf` | Performance improvements |
+| `test` | Adding or fixing tests |
+| `build` | Changes to build system or external dependencies |
+| `ci` | CI/CD configuration changes |
+| `chore` | Maintenance tasks with no production impact |
+| `revert` | Reverts a previous commit |
 
-**Subject rules:**
+### Scopes
 
-- Imperative mood, lowercase, no trailing period.
-- ≤ 72 characters.
+Use the package or area being changed: `api`, `app`, `sdk`, `processing`, `db`,
+`ci`, `deps`, `devops`, `k8s`, `auth`, `security`, `health`, `repo`, `migration`.
+
+### Subject rules
+
+- Imperative mood, **lowercase**, no trailing period.
+- **≤ 72 characters** (enforced by commitlint).
 - Reference the issue in the footer with `Refs #<id>` or `Closes #<id>`.
 
-**Examples:**
+### Examples
 
 ```
 feat(api): add GET /tags endpoint with pagination
@@ -212,12 +235,65 @@ Closes #6
 ```
 
 ```
-docs(repo): add contributing guide
+docs(repo): add conventional commit guide to contributing
 
-Closes #102
+Closes #388
 ```
 
-Breaking changes append `!` after the type/scope and include a `BREAKING CHANGE:` footer.
+### Breaking changes
+
+Append `!` after the type/scope and add a `BREAKING CHANGE:` footer:
+
+```
+feat(api)!: rename /streams endpoint to /feeds
+
+BREAKING CHANGE: All clients must update their base path from /streams to /feeds.
+```
+
+---
+
+## Automated Changelog
+
+The `CHANGELOG.md` is generated automatically from conventional commit messages using
+[`conventional-changelog`](https://github.com/conventional-changelog/conventional-changelog).
+
+### Generating the changelog
+
+```bash
+# Append commits since the last git tag to CHANGELOG.md
+npm run changelog
+
+# First-time setup — generate the full history (already done for v1.0.0)
+npm run changelog:first-release
+```
+
+Run `npm run changelog` before tagging a new release and commit the result:
+
+```bash
+npm run changelog
+git add CHANGELOG.md
+git commit -m "chore(repo): update changelog for vX.Y.Z"
+git tag vX.Y.Z
+git push --follow-tags
+```
+
+### Commit linting (local enforcement)
+
+After running `npm install`, the Husky `commit-msg` hook is installed automatically
+(via the `prepare` script). It runs `commitlint` against every new commit:
+
+```
+✔  feat(api): add stream pagination  ← accepted
+✘  Added stream pagination           ← rejected (no type, uppercase)
+```
+
+If you need to temporarily bypass the hook (e.g., WIP commit on a local branch):
+
+```bash
+git commit --no-verify -m "wip: scratch"
+```
+
+> **Do not** use `--no-verify` on commits that will be pushed to `main`.
 
 ---
 
