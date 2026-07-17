@@ -149,6 +149,31 @@ Environment variables of interest:
 
 ---
 
+### Mutation Testing
+
+Mutation testing (powered by [Stryker](https://stryker-mutator.io/)) verifies that your tests actually detect bugs rather than merely executing code. A high mutation score means the test suite would catch real logic errors, not just cover lines.
+
+**Running mutation tests locally:**
+
+```bash
+# API — targets auth/ and common/guards/
+cd api
+npm run test:mutation
+
+# Processing — targets session.ts and leader-election.ts
+cd xstreamroll-processing
+npm run test:mutation
+```
+
+Stryker outputs an HTML report to `reports/mutation/index.html` in each package. Open it in a browser to see which mutants survived (i.e., which code paths lack proper assertions).
+
+**Thresholds:**
+
+- A score below 70% causes the run to fail (enforced both locally and in CI).
+- The goal is to maintain ≥ 70% mutation coverage for security-critical modules: `api/src/auth/`, `api/src/common/guards/`, `xstreamroll-processing/src/session.ts`, and `xstreamroll-processing/src/leader-election.ts`.
+
+---
+
 ## Branching Strategy
 
 We use trunk-based development with short-lived feature branches off `main`.

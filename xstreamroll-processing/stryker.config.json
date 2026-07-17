@@ -1,0 +1,34 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "packageManager": "npm",
+  "mutate": [
+    "src/session.ts",
+    "src/leader-election.ts"
+  ],
+  "testRunner": "jest",
+  "jest": {
+    "projectType": "custom",
+    "configFile": "package.json",
+    "enableFindRelatedTests": true
+  },
+  "reporters": [
+    "html",
+    "json",
+    "progress",
+    "clear-text"
+  ],
+  "thresholds": {
+    "high": 80,
+    "low": 70,
+    "break": 70
+  },
+  "coverageAnalysis": "perTest",
+  "concurrency": 2,
+  "timeoutMS": 60000,
+  "tempDirName": ".stryker-tmp",
+  "cleanTempDir": true,
+  "buildCommand": "npx tsc --noEmit",
+  "warnings": {
+    "unknownOptions": false
+  }
+}

@@ -9,6 +9,7 @@
     "build": "tsc",
     "test": "jest",
     "test:cov": "jest --coverage",
+    "test:mutation": "stryker run",
     "lint": "eslint --config ../eslint.config.js src __tests__"
   },
   "jest": {
@@ -30,6 +31,8 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "^8.7.1",
+    "@stryker-mutator/jest-runner": "^8.7.1",
     "@types/jest": "^29.5.14",
     "@types/node": "^20.10.0",
     "@types/pg": "^8.20.0",
