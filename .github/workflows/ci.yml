@@ -119,6 +119,52 @@ jobs:
           name: app-coverage
           fail_ci_if_error: false
 
+  mutation-testing:
+    runs-on: ubuntu-latest
+    needs: quality
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install api dependencies
+        run: cd api && npm install
+
+      - name: Install processing dependencies
+        run: cd xstreamroll-processing && npm install
+
+      - name: Mutation test — api (auth/, common/guards/)
+        run: cd api && npm run test:mutation
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+          JWT_SECRET: test-secret
+          STREAM_API_KEY: test-api-key
+        continue-on-error: true
+
+      - name: Mutation test — processing (session.ts, leader-election.ts)
+        run: cd xstreamroll-processing && npm run test:mutation
+        continue-on-error: true
+
+      - name: Upload api mutation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: stryker-report-api
+          path: api/reports/mutation/
+          if-no-files-found: warn
+
+      - name: Upload processing mutation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: stryker-report-processing
+          path: xstreamroll-processing/reports/mutation/
+          if-no-files-found: warn
+
   bundle-analysis:
     runs-on: ubuntu-latest
     needs: quality
