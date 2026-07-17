@@ -29,6 +29,7 @@ import type { Request } from "express"
 import { AuthGuard } from "../common/guards/auth.guard"
 import { StreamOwnershipGuard } from "../common/guards/stream-ownership.guard"
 import { CreateStreamDto } from "./dto/create-stream.dto"
+import { ListStreamEventsQueryDto } from "./dto/list-stream-events.query.dto"
 import { ListStreamsQueryDto } from "./dto/list-streams.query.dto"
 import { UpdateStreamDto } from "./dto/update-stream.dto"
 import { StreamsService } from "./streams.service"
@@ -108,6 +109,35 @@ export class StreamsController {
   @ApiForbiddenResponse({ description: "You do not own this stream." })
   findById(@Param("id", ParseIntPipe) id: number) {
     return this.streamsService.findById(id)
+  }
+
+  /**
+   * Get historical events for a stream, ordered chronologically.
+   * Requires stream ownership.
+   */
+  @Get(":id/events")
+  @UseGuards(StreamOwnershipGuard)
+  @ApiBearerAuth("bearer")
+  @ApiOperation({
+    summary: "Replay stream events",
+    description:
+      "Returns paginated historical events for a stream. " +
+      "Use `since` to replay events after a given timestamp or " +
+      "`cursor` to continue from a previous page. " +
+      "Events are returned oldest-first.",
+  })
+  @ApiOkResponse({ description: "Paginated list of stream events." })
+  @ApiUnauthorizedResponse({ description: "Authentication required." })
+  @ApiForbiddenResponse({ description: "You do not own this stream." })
+  getEvents(
+    @Param("id", ParseIntPipe) id: number,
+    @Query() query: ListStreamEventsQueryDto,
+  ) {
+    return this.streamsService.getStreamEvents(id, {
+      since: query.since,
+      limit: query.limit,
+      cursor: query.cursor,
+    })
   }
 
   /**

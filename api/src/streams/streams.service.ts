@@ -4,11 +4,17 @@ import {
   NotFoundException,
 } from "@nestjs/common"
 import { PaginatedResult } from "../common/dto/pagination.dto"
+import { StreamEventRecord } from "./stream-event.entity"
 import { Stream } from "./stream.entity"
 import { StreamsRepository } from "./repository/streams.repository"
 
 export interface PagedStreams extends PaginatedResult<Stream> {
   hasMore: boolean
+}
+
+export interface StreamEventPage {
+  events: StreamEventRecord[]
+  nextCursor: number | null
 }
 
 @Injectable()
@@ -77,6 +83,21 @@ export class StreamsService {
     if (!exists) {
       throw new NotFoundException(`stream ${id} not found`)
     }
+  }
+
+  async getStreamEvents(
+    streamId: number,
+    params: { since?: string; limit?: number; cursor?: number },
+  ): Promise<StreamEventPage> {
+    const stream = await this.findById(streamId)
+
+    const events = await this.repo.findEventsByStreamId(streamId, {
+      since: params.since,
+      limit: params.limit ?? 20,
+      cursor: params.cursor,
+    })
+
+    return events
   }
 
   /**

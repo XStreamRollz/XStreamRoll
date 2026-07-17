@@ -8,6 +8,7 @@ import {
 import { Pool } from "pg"
 import { PG_POOL } from "../../database/database.module"
 import { Stream } from "../stream.entity"
+import { StreamEventRecord } from "../stream-event.entity"
 
 /**
  * PostgreSQL-backed streams repository.
@@ -23,6 +24,17 @@ export class StreamsDbRepository {
   private readonly logger = new Logger(StreamsDbRepository.name)
 
   constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
+
+  /** Map a raw DB row to a StreamEventRecord. */
+  private rowToStreamEvent(row: Record<string, unknown>): StreamEventRecord {
+    return {
+      id: row.id as number,
+      streamId: row.stream_id as number,
+      eventType: row.event_type as string,
+      payload: row.event_data as Record<string, unknown>,
+      occurredAt: row.created_at as Date,
+    }
+  }
 
   /** Map a raw DB row to the Stream entity shape. */
   private rowToStream(row: Record<string, unknown>): Stream {
@@ -43,6 +55,49 @@ export class StreamsDbRepository {
     throw new ServiceUnavailableException(
       "Database is unavailable. Please try again later.",
     )
+  }
+
+  async findEventsByStreamId(
+    streamId: number,
+    params: { since?: string; limit: number; cursor?: number },
+  ): Promise<{ events: StreamEventRecord[]; nextCursor: number | null }> {
+    try {
+      const conditions: string[] = ["stream_id = $1"]
+      const queryParams: unknown[] = [streamId]
+      let idx = 2
+
+      if (params.since) {
+        conditions.push(`created_at >= $${idx++}`)
+        queryParams.push(params.since)
+      }
+
+      if (params.cursor) {
+        conditions.push(`id > $${idx++}`)
+        queryParams.push(params.cursor)
+      }
+
+      const limit = params.limit
+      queryParams.push(limit + 1)
+
+      const { rows } = await this.pool.query<Record<string, unknown>>(
+        `SELECT id, stream_id, event_type, event_data, created_at
+         FROM stream_events
+         WHERE ${conditions.join(" AND ")}
+         ORDER BY created_at ASC, id ASC
+         LIMIT $${idx}`,
+        queryParams,
+      )
+
+      const hasMore = rows.length > limit
+      if (hasMore) rows.pop()
+
+      return {
+        events: rows.map((r) => this.rowToStreamEvent(r)),
+        nextCursor: hasMore ? (rows[rows.length - 1]?.id as number) : null,
+      }
+    } catch (err) {
+      this.handleDbError(err, "findEventsByStreamId")
+    }
   }
 
   async findById(id: number): Promise<Stream | undefined> {
