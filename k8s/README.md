@@ -70,6 +70,60 @@ kubectl -n xstreamroll create secret generic api-secrets \
 For production, prefer External Secrets Operator or Sealed Secrets so
 plaintext values never leave your secret manager.
 
+## Deploying a specific version
+
+The manifests in this directory use `0.0.0-dev` as a placeholder tag for
+local development. **Never apply this to a real environment.** Every
+production or staging deploy must pin images to a specific, immutable tag
+produced by the release workflow.
+
+The release workflow (`.github/workflows/release.yml`) pushes two tags per
+release:
+
+| Tag format | Example | Use |
+|---|---|---|
+| Semver | `v1.2.3` | Human-readable, used for rollbacks |
+| Short SHA | `sha-abc1234` | Immutable, used for precise rollback |
+| `latest` | `latest` | Convenience alias — **do not use in manifests** |
+
+### Deploying by semver tag
+
+```bash
+VERSION=v1.2.3   # semver tag from the GitHub release
+
+kustomize edit set image \
+  ghcr.io/xstreamrollz/xstreamroll-api:${VERSION} \
+  ghcr.io/xstreamrollz/xstreamroll-app:${VERSION} \
+  ghcr.io/xstreamrollz/xstreamroll-processing:${VERSION}
+
+kubectl apply -k k8s/
+```
+
+### Deploying by commit SHA (recommended for production)
+
+```bash
+SHA=sha-abc1234   # short SHA tag from the release workflow
+
+kustomize edit set image \
+  ghcr.io/xstreamrollz/xstreamroll-api:${SHA} \
+  ghcr.io/xstreamrollz/xstreamroll-app:${SHA} \
+  ghcr.io/xstreamrollz/xstreamroll-processing:${SHA}
+
+kubectl apply -k k8s/
+```
+
+### Rolling back
+
+```bash
+# Roll back the API to the previous semver
+PREVIOUS=v1.2.2
+kustomize edit set image ghcr.io/xstreamrollz/xstreamroll-api:${PREVIOUS}
+kubectl apply -k k8s/
+
+# Or use kubectl rollout undo for a quick in-cluster rollback
+kubectl -n xstreamroll rollout undo deployment/api
+```
+
 ## Applying
 
 ### With Kustomize (recommended)

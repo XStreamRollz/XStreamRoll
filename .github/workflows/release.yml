@@ -44,6 +44,7 @@ jobs:
           images: ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}
           tags: |
             type=semver,pattern={{version}}
+            type=sha,prefix=sha-,format=short
             type=raw,value=latest
 
       - name: Build and push
