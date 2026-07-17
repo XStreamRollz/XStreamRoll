@@ -15,11 +15,30 @@ jest.mock("../common/guards/auth.guard", () => ({
 }))
 
 import { StreamsController } from "./streams.controller"
+import { CreateStreamDto } from "./dto/create-stream.dto"
+import { UpdateStreamDto } from "./dto/update-stream.dto"
+import { StreamsService } from "./streams.service"
+import type { Request } from "express"
+import type { Cache } from "cache-manager"
+
+type MockStreamsService = {
+  create: jest.Mock
+  list: jest.Mock
+  findById: jest.Mock
+  getAnalytics: jest.Mock
+  update: jest.Mock
+  delete: jest.Mock
+}
+
+type MockCache = {
+  get: jest.Mock
+  set: jest.Mock
+}
 
 describe("StreamsController", () => {
   let controller: StreamsController
-  let mockService: any
-  let mockCache: any
+  let mockService: MockStreamsService
+  let mockCache: MockCache
 
   beforeEach(() => {
     mockService = {
@@ -34,23 +53,26 @@ describe("StreamsController", () => {
       get: jest.fn(),
       set: jest.fn(),
     }
-    controller = new StreamsController(mockService, mockCache)
+    controller = new StreamsController(
+      mockService as unknown as StreamsService,
+      mockCache as unknown as Cache,
+    )
   })
 
   it("create delegates to service with auth userId", async () => {
     const dto = { name: "s", description: "d" }
-    const req: any = { auth: { userId: 7 } }
+    const req = { auth: { userId: 7 } } as Request & { auth: { userId: number } }
     const expected = { id: 1 }
     mockService.create.mockResolvedValue(expected)
 
-    const res = await controller.create(dto as any, req)
+    const res = await controller.create(dto as CreateStreamDto, req)
     expect(res).toBe(expected)
     expect(mockService.create).toHaveBeenCalledWith({ userId: 7, name: dto.name, description: dto.description })
   })
 
   it("list delegates to service with defaults", async () => {
     mockService.list.mockResolvedValue({ data: [], page: 1, limit: 20, total: 0, hasMore: false })
-    const res = await controller.list({} as any)
+    const res = await controller.list({})
     expect(mockService.list).toHaveBeenCalledWith(1, 20, { status: undefined })
     expect(res.data).toBeDefined()
   })
@@ -88,7 +110,7 @@ describe("StreamsController", () => {
   it("update delegates to service", async () => {
     const dto = { name: "n" }
     mockService.update.mockResolvedValue({ id: 9 })
-    const res = await controller.update(9, dto as any)
+    const res = await controller.update(9, dto as UpdateStreamDto)
     expect(mockService.update).toHaveBeenCalledWith(9, dto)
     expect(res).toEqual({ id: 9 })
   })

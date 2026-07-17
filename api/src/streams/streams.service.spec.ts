@@ -1,10 +1,18 @@
 import { ConflictException, NotFoundException } from "@nestjs/common"
 import { StreamsService } from "./streams.service"
 import { Stream } from "./stream.entity"
+import { StreamsRepository } from "./repository/streams.repository"
 
 describe("StreamsService", () => {
   let service: StreamsService
-  let mockRepo: any
+  let mockRepo: {
+    create: jest.Mock
+    listPaginated: jest.Mock
+    findById: jest.Mock
+    getAnalytics: jest.Mock
+    update: jest.Mock
+    delete: jest.Mock
+  }
 
   beforeEach(() => {
     mockRepo = {
@@ -15,7 +23,7 @@ describe("StreamsService", () => {
       update: jest.fn(),
       delete: jest.fn(),
     }
-    service = new StreamsService(mockRepo)
+    service = new StreamsService(mockRepo as unknown as StreamsRepository)
   })
 
   it("create with valid data returns stream", async () => {
