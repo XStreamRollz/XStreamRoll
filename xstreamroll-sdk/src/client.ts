@@ -4,6 +4,7 @@ import {
   type StreamEvent,
   type StreamConfig,
   type Stream,
+  type StreamEventRecord,
   type AuthTokens,
   type CreateUserDto,
   type ApiErrorResponse,
@@ -114,6 +115,31 @@ export class StreamingClient {
       console.error("Failed to get stream status:", error)
       throw error
     }
+  }
+
+  /**
+   * Retrieve historical events for a stream (event replay).
+   *
+   * @param streamId - The stream to fetch events for.
+   * @param params   - Optional filtering and pagination parameters.
+   */
+  async getStreamEvents(
+    streamId: string,
+    params?: {
+      since?: string
+      limit?: number
+      cursor?: number
+    },
+  ): Promise<{ events: StreamEventRecord[]; nextCursor: string | null }> {
+    const searchParams = new URLSearchParams()
+    if (params?.since) searchParams.set("since", params.since)
+    if (params?.limit) searchParams.set("limit", String(params.limit))
+    if (params?.cursor) searchParams.set("cursor", String(params.cursor))
+
+    const qs = searchParams.toString()
+    const path = qs ? `/streams/${streamId}/events?${qs}` : `/streams/${streamId}/events`
+
+    return this.requestJson(path, { method: "GET" })
   }
 
   /**

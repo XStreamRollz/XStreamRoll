@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common"
 import { Stream } from "../stream.entity"
+import { StreamEventRecord } from "../stream-event.entity"
 
 /**
  * In-memory streams repository.
@@ -15,7 +16,9 @@ import { Stream } from "../stream.entity"
 @Injectable()
 export class StreamsRepository {
   private readonly streamsById = new Map<number, Stream>()
+  private readonly eventsByStreamId = new Map<number, StreamEventRecord[]>()
   private nextId = 1
+  private nextEventId = 1
 
   async findById(id: number): Promise<Stream | undefined> {
     return this.streamsById.get(id)
@@ -49,6 +52,34 @@ export class StreamsRepository {
       items: filtered.slice(offset, offset + limit),
       total: filtered.length,
     }
+  }
+
+  async findEventsByStreamId(
+    streamId: number,
+    params: { since?: string; limit: number; cursor?: number },
+  ): Promise<{ events: StreamEventRecord[]; nextCursor: number | null }> {
+    const all = this.eventsByStreamId.get(streamId) ?? []
+
+    let filtered = all
+
+    if (params.since) {
+      const sinceDate = new Date(params.since)
+      filtered = filtered.filter((e) => e.occurredAt >= sinceDate)
+    }
+
+    if (params.cursor) {
+      const cursorIndex = filtered.findIndex((e) => e.id === params.cursor)
+      if (cursorIndex !== -1) {
+        filtered = filtered.slice(cursorIndex + 1)
+      }
+    }
+
+    const limit = params.limit
+    const events = filtered.slice(0, limit)
+    const nextCursor =
+      filtered.length > limit ? filtered[limit - 1].id : null
+
+    return { events, nextCursor }
   }
 
   async create(params: {

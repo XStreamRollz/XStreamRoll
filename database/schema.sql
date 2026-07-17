@@ -45,6 +45,8 @@ CREATE INDEX idx_stream_data_timestamp ON stream_data(timestamp);
 -- Index for efficient event querying
 CREATE INDEX idx_stream_events_stream_id ON stream_events(stream_id);
 CREATE INDEX idx_stream_events_created_at ON stream_events(created_at);
+CREATE INDEX idx_stream_events_stream_id_created_at_desc
+    ON stream_events(stream_id, created_at DESC);
 
 -- ---------------------------------------------------------------------
 -- Categorization: tags applied to streams
