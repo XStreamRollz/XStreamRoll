@@ -1,3 +1,4 @@
+import "./tracing" // Must be the first import — OTEL patches modules before they load
 import { ValidationPipe } from "@nestjs/common"
 import { NestFactory } from "@nestjs/core"
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger"

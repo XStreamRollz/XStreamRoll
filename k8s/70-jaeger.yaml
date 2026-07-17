@@ -1,0 +1,79 @@
+# Example Jaeger all-in-one deployment for development and integration testing.
+# ---------------------------------------------------------------------------
+# This manifest deploys the Jaeger all-in-one image (collector + query UI in
+# a single container). It is intentionally NOT production-grade — it uses
+# ephemeral in-memory storage and a single replica. For production, deploy
+# Jaeger via the Jaeger Operator or use a managed OTEL-compatible backend
+# (Grafana Tempo, Honeycomb, Datadog, etc.) and skip this file entirely.
+#
+# Compatible collectors:
+#   - Jaeger all-in-one        (this file)
+#   - OpenTelemetry Collector  (configure an OTLP receiver + Jaeger exporter)
+#   - Grafana Tempo            (drop-in OTLP/HTTP compatible)
+#
+# After applying, reach the Jaeger UI via port-forward:
+#   kubectl -n xstreamroll port-forward svc/jaeger 16686:16686
+#   open http://localhost:16686
+#
+# Point the API and processing worker at the collector:
+#   OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger.xstreamroll.svc.cluster.local:4318
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger
+  namespace: xstreamroll
+  labels:
+    app: jaeger
+spec:
+  type: ClusterIP
+  selector:
+    app: jaeger
+  ports:
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+    - name: ui
+      port: 16686
+      targetPort: 16686
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger
+  namespace: xstreamroll
+  labels:
+    app: jaeger
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jaeger
+  template:
+    metadata:
+      labels:
+        app: jaeger
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: jaeger
+          image: jaegertracing/all-in-one:1.57
+          env:
+            - name: COLLECTOR_OTLP_ENABLED
+              value: "true"
+          ports:
+            - name: otlp-http
+              containerPort: 4318
+            - name: ui
+              containerPort: 16686
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
