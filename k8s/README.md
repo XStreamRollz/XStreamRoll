@@ -118,6 +118,43 @@ kubectl -n xstreamroll exec deploy/api -- wget -q -O - http://localhost:3001/liv
 kubectl -n xstreamroll exec deploy/processing -- wget -q -O - http://localhost:3002/healthz
 ```
 
+## Release process
+
+Images are published by `.github/workflows/release.yml` and are restricted
+to commits that live on `main`. Pushing a `v*.*.*` tag from any other branch
+is rejected before any build step runs.
+
+### Cutting a release
+
+1. Merge all changes to `main` and ensure CI is green.
+2. Create and push a semver tag from `main`:
+
+   ```bash
+   git checkout main && git pull
+   git tag v1.2.3
+   git push origin v1.2.3
+   ```
+
+3. The release workflow runs the `verify-branch` job to confirm the tag
+   is on `main`, then builds and pushes three images under the `production`
+   GitHub environment (which requires reviewer approval if configured).
+
+4. Each image receives two immutable tags:
+   - `v1.2.3` — semver
+   - `sha-<short>` — commit SHA for precise identification
+
+   A `latest` convenience alias is also pushed but **must not be used in
+   Kubernetes manifests**.
+
+5. Build provenance attestations are attached to every image via
+   `actions/attest-build-provenance`. Verify an image's attestation with:
+
+   ```bash
+   gh attestation verify \
+     oci://ghcr.io/xstreamrollz/xstreamroll-api:v1.2.3 \
+     --repo OlaGreat/XStreamRoll
+   ```
+
 ## Acceptance criteria mapping
 
 | Issue #217 criterion | Where it lands |
