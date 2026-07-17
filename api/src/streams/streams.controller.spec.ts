@@ -19,16 +19,22 @@ import { StreamsController } from "./streams.controller"
 describe("StreamsController", () => {
   let controller: StreamsController
   let mockService: any
+  let mockCache: any
 
   beforeEach(() => {
     mockService = {
       create: jest.fn(),
       list: jest.fn(),
       findById: jest.fn(),
+      getAnalytics: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
     }
-    controller = new StreamsController(mockService)
+    mockCache = {
+      get: jest.fn(),
+      set: jest.fn(),
+    }
+    controller = new StreamsController(mockService, mockCache)
   })
 
   it("create delegates to service with auth userId", async () => {
@@ -54,6 +60,29 @@ describe("StreamsController", () => {
     const res = await controller.findById(5)
     expect(mockService.findById).toHaveBeenCalledWith(5)
     expect(res).toEqual({ id: 5 })
+  })
+
+  it("getAnalytics returns cached analytics when available", async () => {
+    const cached = { streamId: 5, totalEventsProcessed: { last24h: 1, last7d: 2, last30d: 3 } }
+    mockCache.get.mockResolvedValue(cached)
+
+    const res = await controller.getAnalytics(5)
+
+    expect(res).toBe(cached)
+    expect(mockCache.get).toHaveBeenCalledWith("streams:5:analytics")
+    expect(mockService.getAnalytics).not.toHaveBeenCalled()
+  })
+
+  it("getAnalytics delegates and caches fresh analytics", async () => {
+    const analytics = { streamId: 5, totalEventsProcessed: { last24h: 1, last7d: 2, last30d: 3 } }
+    mockCache.get.mockResolvedValue(undefined)
+    mockService.getAnalytics.mockResolvedValue(analytics)
+
+    const res = await controller.getAnalytics(5)
+
+    expect(res).toBe(analytics)
+    expect(mockService.getAnalytics).toHaveBeenCalledWith(5)
+    expect(mockCache.set).toHaveBeenCalledWith("streams:5:analytics", analytics, 60000)
   })
 
   it("update delegates to service", async () => {

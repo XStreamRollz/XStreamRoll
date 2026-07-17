@@ -1,3 +1,4 @@
+import { CacheModule } from "@nestjs/cache-manager"
 import { Module } from "@nestjs/common"
 import { AuthModule } from "../auth/auth.module"
 import { AuthGuard } from "../common/guards/auth.guard"
@@ -22,7 +23,13 @@ import { StreamsService } from "./streams.service"
 const isTest = process.env.NODE_ENV === "test"
 
 @Module({
-  imports: [AuthModule],
+  imports: [
+    AuthModule,
+    CacheModule.register({
+      ttl: 60_000,
+      max: 512,
+    }),
+  ],
   controllers: [StreamsController],
   providers: [
     StreamsService,

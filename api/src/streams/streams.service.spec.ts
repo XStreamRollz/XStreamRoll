@@ -11,6 +11,7 @@ describe("StreamsService", () => {
       create: jest.fn(),
       listPaginated: jest.fn(),
       findById: jest.fn(),
+      getAnalytics: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
     }
@@ -96,5 +97,38 @@ describe("StreamsService", () => {
   it("delete non-existent stream throws NotFoundException", async () => {
     mockRepo.delete.mockResolvedValue(false)
     await expect(service.delete(999)).rejects.toThrow(NotFoundException)
+  })
+
+  it("getAnalytics checks stream existence before loading analytics", async () => {
+    const stream: Stream = {
+      id: 4,
+      userId: 1,
+      name: "s",
+      description: null,
+      status: "active",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
+    const analytics = {
+      streamId: 4,
+      totalEventsProcessed: { last24h: 1, last7d: 2, last30d: 3 },
+      errorRate: { window: "30d", totalEvents: 3, errorEvents: 1, percentage: 33.33 },
+      processingLatency: { window: "30d", averageMs: 10, p99Ms: 25 },
+      eventsPerMinute: [],
+      generatedAt: new Date().toISOString(),
+    }
+    mockRepo.findById.mockResolvedValue(stream)
+    mockRepo.getAnalytics.mockResolvedValue(analytics)
+
+    await expect(service.getAnalytics(4)).resolves.toBe(analytics)
+    expect(mockRepo.findById).toHaveBeenCalledWith(4)
+    expect(mockRepo.getAnalytics).toHaveBeenCalledWith(4)
+  })
+
+  it("getAnalytics missing stream throws NotFoundException", async () => {
+    mockRepo.findById.mockResolvedValue(undefined)
+
+    await expect(service.getAnalytics(404)).rejects.toThrow(NotFoundException)
+    expect(mockRepo.getAnalytics).not.toHaveBeenCalled()
   })
 })

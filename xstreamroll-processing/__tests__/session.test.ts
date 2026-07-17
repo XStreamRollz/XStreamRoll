@@ -34,6 +34,22 @@ describe("StreamSession", () => {
     expect(published[0].streamId).toBe("s1")
     expect(published[0].workerId).toBe("w1")
     expect(published[0].sessionId).toBe(s.id)
+    expect(typeof published[0].processingLatencyMs).toBe("number")
+  })
+
+  it("publishes null latency for invalid event timestamps", async () => {
+    const published: ProcessedStreamEvent[] = []
+    const s = new StreamSession("s1", "w1", {
+      publish: async (e) => {
+        published.push(e)
+      },
+    })
+    s.start()
+    s.enqueue({ streamId: "s1", data: {}, timestamp: "not-a-date" })
+    for (let i = 0; i < 20 && published.length === 0; i++) {
+      await new Promise((r) => setTimeout(r, 5))
+    }
+    expect(published[0].processingLatencyMs).toBeNull()
   })
 
   it("rejects new events when not running", () => {

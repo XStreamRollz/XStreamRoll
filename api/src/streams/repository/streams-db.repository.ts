@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common"
 import { Pool } from "pg"
 import { PG_POOL } from "../../database/database.module"
+import { StreamAnalyticsDto } from "../dto/stream-analytics.dto"
 import { Stream } from "../stream.entity"
 
 /**
@@ -190,4 +191,97 @@ export class StreamsDbRepository {
       this.handleDbError(err, "delete")
     }
   }
+
+  async getAnalytics(streamId: number): Promise<StreamAnalyticsDto> {
+    try {
+      const { rows } = await this.pool.query<{
+        last_24h: string
+        last_7d: string
+        last_30d: string
+        error_events_30d: string
+        average_latency_ms: number | string | null
+        p99_latency_ms: number | string | null
+      }>(
+        `WITH scoped AS (
+           SELECT event_type, created_at, processing_latency_ms
+           FROM stream_events
+           WHERE stream_id = $1
+             AND created_at >= NOW() - INTERVAL '30 days'
+         )
+         SELECT
+           COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '24 hours')::int AS last_24h,
+           COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days')::int AS last_7d,
+           COUNT(*)::int AS last_30d,
+           COUNT(*) FILTER (WHERE LOWER(event_type) = 'error')::int AS error_events_30d,
+           AVG(processing_latency_ms)::float AS average_latency_ms,
+           (percentile_cont(0.99) WITHIN GROUP (ORDER BY processing_latency_ms)
+             FILTER (WHERE processing_latency_ms IS NOT NULL))::float AS p99_latency_ms
+         FROM scoped`,
+        [streamId],
+      )
+
+      const { rows: seriesRows } = await this.pool.query<{
+        minute: Date
+        count: string | number
+      }>(
+        `WITH buckets AS (
+           SELECT generate_series(
+             date_trunc('minute', NOW()) - INTERVAL '59 minutes',
+             date_trunc('minute', NOW()),
+             INTERVAL '1 minute'
+           ) AS minute
+         )
+         SELECT buckets.minute,
+                COUNT(stream_events.id)::int AS count
+         FROM buckets
+         LEFT JOIN stream_events
+           ON stream_events.stream_id = $1
+          AND stream_events.created_at >= buckets.minute
+          AND stream_events.created_at < buckets.minute + INTERVAL '1 minute'
+         GROUP BY buckets.minute
+         ORDER BY buckets.minute ASC`,
+        [streamId],
+      )
+
+      const stats = rows[0]
+      const last30d = Number(stats?.last_30d ?? 0)
+      const errorEvents = Number(stats?.error_events_30d ?? 0)
+
+      return {
+        streamId,
+        totalEventsProcessed: {
+          last24h: Number(stats?.last_24h ?? 0),
+          last7d: Number(stats?.last_7d ?? 0),
+          last30d,
+        },
+        errorRate: {
+          window: "30d",
+          totalEvents: last30d,
+          errorEvents,
+          percentage: last30d === 0 ? 0 : roundPercent((errorEvents / last30d) * 100),
+        },
+        processingLatency: {
+          window: "30d",
+          averageMs: nullableNumber(stats?.average_latency_ms),
+          p99Ms: nullableNumber(stats?.p99_latency_ms),
+        },
+        eventsPerMinute: seriesRows.map((row) => ({
+          minute: row.minute.toISOString(),
+          count: Number(row.count),
+        })),
+        generatedAt: new Date().toISOString(),
+      }
+    } catch (err) {
+      this.handleDbError(err, "getAnalytics")
+    }
+  }
+}
+
+function nullableNumber(value: number | string | null | undefined): number | null {
+  if (value === null || value === undefined) return null
+  return Number(value)
+}
+
+function roundPercent(value: number): number {
+  return Math.round(value * 100) / 100
 }
