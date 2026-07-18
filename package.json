@@ -27,6 +27,7 @@
     "format:check": "prettier --check ."
   },
   "devDependencies": {
+    "@types/nodemailer": "^8.0.1",
     "@types/supertest": "^7.2.0",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
