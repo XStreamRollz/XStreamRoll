@@ -68,10 +68,15 @@ export class AuthGuard implements CanActivate {
 
   private async verifyToken(
     token: string,
-  ): Promise<{ sub: number | string; passwordChangedAt?: number }> {
+  ): Promise<{
+    sub: number | string
+    jti?: string
+    passwordChangedAt?: number
+  }> {
     try {
       return (await this.jwtService.verifyAsync(token)) as {
         sub: number | string
+        jti?: string
         passwordChangedAt?: number
       }
     } catch {
