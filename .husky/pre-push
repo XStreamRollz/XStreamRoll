@@ -1,0 +1,16 @@
+echo "Running type-checks on all packages..."
+
+npx tsc --noEmit -p api/tsconfig.json &
+TSC_API=$!
+
+npx tsc --noEmit -p xstreamroll-sdk/tsconfig.json &
+TSC_SDK=$!
+
+npx tsc --noEmit -p xstreamroll-processing/tsconfig.json &
+TSC_PROCESSING=$!
+
+wait $TSC_API || { echo "❌ TypeScript error in api/"; exit 1; }
+wait $TSC_SDK || { echo "❌ TypeScript error in xstreamroll-sdk/"; exit 1; }
+wait $TSC_PROCESSING || { echo "❌ TypeScript error in xstreamroll-processing/"; exit 1; }
+
+echo "✅ Type-checks passed."
