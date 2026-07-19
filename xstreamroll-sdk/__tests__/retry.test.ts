@@ -112,4 +112,18 @@ describe("HttpClient retry integration", () => {
     await expect(http.request("/test")).rejects.toBeInstanceOf(HttpRequestError)
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
+
+  it("wraps raw network failures in HttpRequestError", async () => {
+    global.fetch = jest.fn().mockRejectedValue(new TypeError("fetch failed"))
+    const http = new HttpClient("http://localhost:3001", {
+      maxAttempts: 1,
+      baseDelayMs: 1,
+      jitterMs: 0,
+      sleep: async () => {},
+    })
+    await expect(http.request("/test")).rejects.toMatchObject({
+      name: "HttpRequestError",
+      message: "fetch failed",
+    })
+  })
 })

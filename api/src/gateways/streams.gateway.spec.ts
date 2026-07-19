@@ -1,7 +1,7 @@
 import { Test } from "@nestjs/testing"
 import { JwtService } from "@nestjs/jwt"
 import { StreamsGateway, resolveCorsOrigins } from "./streams.gateway"
-import { STREAM_EVENTS } from "./stream-events"
+import { NOTIFICATION_EVENTS, STREAM_EVENTS } from "./stream-events"
 
 type FakeHandshake = {
   auth?: Record<string, unknown>
@@ -117,6 +117,7 @@ describe("StreamsGateway", () => {
       expect(socket.data.userId).toBe(42)
       expect(socket.emit).toHaveBeenCalledWith("connected", { userId: 42 })
       expect(socket.disconnect).not.toHaveBeenCalled()
+      expect(socket.join).toHaveBeenCalledWith("user:42")
     })
 
     it("rejects a client with an invalid JWT", async () => {
@@ -287,6 +288,33 @@ describe("StreamsGateway", () => {
             occurredAt: "2026-06-16T00:00:00Z",
             code: "ERR",
             message: "boom",
+          },
+        },
+      ])
+    })
+
+    it("broadcasts notifications only to the target user's room", () => {
+      const { server, events } = makeServer()
+      gateway.server = server as unknown as any
+
+      gateway.emitNotification({
+        id: 1,
+        userId: 42,
+        type: "stream:error",
+        payload: { streamId: "1" },
+        createdAt: "2026-06-16T00:00:00Z",
+      })
+
+      expect(events).toEqual([
+        {
+          room: "user:42",
+          event: NOTIFICATION_EVENTS.NEW,
+          payload: {
+            id: 1,
+            userId: 42,
+            type: "stream:error",
+            payload: { streamId: "1" },
+            createdAt: "2026-06-16T00:00:00Z",
           },
         },
       ])

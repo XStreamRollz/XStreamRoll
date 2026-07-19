@@ -1,3 +1,19 @@
+// ─── Generated types from OpenAPI spec ─────────────────────────────────────
+// Regenerate with `npm run generate:types` (requires API server running).
+import type { components } from "./generated/schema"
+
+export type { components }
+
+// Convenience aliases for generated DTOs
+export type RegisterDto = components["schemas"]["RegisterDto"]
+export type LoginDto = components["schemas"]["LoginDto"]
+export type ForgotPasswordDto = components["schemas"]["ForgotPasswordDto"]
+export type ResetPasswordDto = components["schemas"]["ResetPasswordDto"]
+export type CreateStreamDto = components["schemas"]["CreateStreamDto"]
+export type UpdateStreamDto = components["schemas"]["UpdateStreamDto"]
+export type CreateTagDto = components["schemas"]["CreateTagDto"]
+export type HealthCheckResponseDto = components["schemas"]["HealthCheckResponseDto"]
+
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 /** Configuration for the StreamingClient. */
@@ -66,21 +82,6 @@ export interface Stream {
   visibility: StreamVisibility
   createdAt: string
   updatedAt: string
-}
-
-/** Payload for creating a new stream. */
-export interface CreateStreamDto {
-  name: string
-  description?: string
-  visibility?: StreamVisibility
-}
-
-/** Payload for updating an existing stream. */
-export interface UpdateStreamDto {
-  name?: string
-  description?: string
-  status?: StreamStatus
-  visibility?: StreamVisibility
 }
 
 // ─── Stream Events ────────────────────────────────────────────────────────────

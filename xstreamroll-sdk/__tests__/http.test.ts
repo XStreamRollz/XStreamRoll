@@ -77,4 +77,38 @@ describe("HttpClient interceptors", () => {
     await http.request("/streams/123")
     expect(mockFetch.mock.calls[0][0]).toBe("http://localhost:3001/streams/123")
   })
+
+  it("get() issues a GET request", async () => {
+    const mockFetch = makeFetchMock()
+    global.fetch = mockFetch
+    const http = new HttpClient("http://localhost:3001")
+
+    await http.get("/streams/1")
+    expect(mockFetch.mock.calls[0][0]).toBe("http://localhost:3001/streams/1")
+    expect((mockFetch.mock.calls[0][1] as RequestInit).method).toBe("GET")
+  })
+
+  it("post() JSON-serialises the body and sets Content-Type", async () => {
+    const mockFetch = makeFetchMock(201, "")
+    global.fetch = mockFetch
+    const http = new HttpClient("http://localhost:3001")
+
+    await http.post("/auth/login", { email: "a@b.com", password: "x" })
+    const init = mockFetch.mock.calls[0][1] as RequestInit
+    expect(init.method).toBe("POST")
+    expect(init.body).toBe(JSON.stringify({ email: "a@b.com", password: "x" }))
+    expect((init.headers as Record<string, string>)["Content-Type"]).toBe("application/json")
+  })
+
+  it("post() with no body omits Content-Type and body", async () => {
+    const mockFetch = makeFetchMock()
+    global.fetch = mockFetch
+    const http = new HttpClient("http://localhost:3001")
+
+    await http.post("/auth/logout")
+    const init = mockFetch.mock.calls[0][1] as RequestInit
+    expect(init.method).toBe("POST")
+    expect(init.body).toBeUndefined()
+    expect((init.headers as Record<string, string>)["Content-Type"]).toBeUndefined()
+  })
 })

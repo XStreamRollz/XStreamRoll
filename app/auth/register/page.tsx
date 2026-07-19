@@ -16,6 +16,7 @@ export const registerSchema = z.object({
   password: z
     .string()
     .min(8, 'Password must be at least 8 characters')
+    .max(128, 'Password must be at most 128 characters')
     .regex(/[A-Za-z]/, 'Password must contain at least one letter')
     .regex(/[0-9]/, 'Password must contain at least one digit'),
 });
@@ -29,9 +30,11 @@ export default function RegisterPage() {
     register,
     handleSubmit,
     setError,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isValid, isValidating },
   } = useForm<FormData>({
     resolver: zodResolver(registerSchema),
+    mode: 'onChange',
+    reValidateMode: 'onChange',
   });
 
   const onSubmit = async (data: FormData) => {
@@ -75,48 +78,73 @@ export default function RegisterPage() {
         </div>
 
         <div>
+          <label htmlFor="username" className="sr-only">
+            Username
+          </label>
           <input
+            id="username"
             {...register('username')}
             placeholder="Username"
+            aria-invalid={errors.username ? 'true' : 'false'}
+            aria-describedby={errors.username ? 'username-error' : undefined}
             className="w-full border p-2"
           />
           {errors.username && (
-            <p className="text-red-500">{errors.username.message}</p>
+            <p id="username-error" role="alert" aria-live="assertive" className="text-red-500">
+              {errors.username.message}
+            </p>
           )}
         </div>
 
         <div>
+          <label htmlFor="email" className="sr-only">
+            Email
+          </label>
           <input
+            id="email"
             {...register('email')}
             placeholder="Email"
+            aria-invalid={errors.email ? 'true' : 'false'}
+            aria-describedby={errors.email ? 'email-error' : undefined}
             className="w-full border p-2"
           />
           {errors.email && (
-            <p className="text-red-500">{errors.email.message}</p>
+            <p id="email-error" role="alert" aria-live="assertive" className="text-red-500">
+              {errors.email.message}
+            </p>
           )}
         </div>
 
         <div>
+          <label htmlFor="password" className="sr-only">
+            Password
+          </label>
           <input
+            id="password"
             type="password"
             {...register('password')}
             placeholder="Password"
+            aria-invalid={errors.password ? 'true' : 'false'}
+            aria-describedby={errors.password ? 'password-error' : undefined}
             className="w-full border p-2"
           />
           {errors.password && (
-            <p className="text-red-500">{errors.password.message}</p>
+            <p id="password-error" role="alert" aria-live="assertive" className="text-red-500">
+              {errors.password.message}
+            </p>
           )}
         </div>
 
         {errors.root && (
-          <p className="text-sm text-red-500" role="alert">
+          <p id="root-error" className="text-sm text-red-500" role="alert" aria-live="assertive">
             {errors.root.message}
           </p>
         )}
 
         <button
-          disabled={isSubmitting}
+          disabled={isSubmitting || isValidating || !isValid}
           className="w-full bg-black p-2 text-white disabled:opacity-50"
+          aria-disabled={isSubmitting || isValidating || !isValid}
         >
           Create account
         </button>
