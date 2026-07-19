@@ -230,9 +230,9 @@ Breaking changes append `!` after the type/scope and include a `BREAKING CHANGE:
    ```
 2. **Run quality gates locally**:
    ```bash
-   npm run lint
-   npm run build
-   npm test
+   npm run lint          # Lint all packages
+   npm run build         # Build app + api
+   npm test              # Test all packages
    ```
 3. **Open the PR** using `gh pr create` or the GitHub UI.
    - Title format: `<type>(<scope>): <summary>` (matches Conventional Commits).
