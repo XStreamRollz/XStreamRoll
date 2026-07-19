@@ -59,6 +59,38 @@ export class UsersRepository {
     return rows[0]
   }
 
+  async updateProfile(
+    id: number,
+    data: { username?: string; email?: string },
+  ): Promise<User> {
+    const sets: string[] = []
+    const values: (string | number)[] = []
+    let idx = 1
+
+    if (data.username !== undefined) {
+      sets.push(`username = $${idx++}`)
+      values.push(data.username)
+    }
+    if (data.email !== undefined) {
+      sets.push(`email = $${idx++}`)
+      values.push(data.email)
+    }
+
+    if (sets.length === 0) {
+      return this.findById(id) as Promise<User>
+    }
+
+    values.push(id)
+    const { rows } = await this.pool.query(
+      `UPDATE users
+       SET ${sets.join(", ")}
+       WHERE id = $${idx}
+       RETURNING id, username, email, password_hash, created_at, password_changed_at`,
+      values,
+    )
+    return rows[0]
+  }
+
   async updatePasswordHash(
     id: number,
     passwordHash: string,

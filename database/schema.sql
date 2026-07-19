@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS stream_events (
     event_type VARCHAR(100),
     event_data JSONB NOT NULL,
     processed_by VARCHAR(100),
+    processing_latency_ms INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -88,6 +89,10 @@ CREATE INDEX IF NOT EXISTS idx_streams_user_id_status
 
 CREATE INDEX IF NOT EXISTS idx_stream_events_stream_id_occurred_at
     ON stream_events(stream_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_stream_events_stream_id_created_at_latency
+    ON stream_events(stream_id, created_at DESC)
+    INCLUDE (event_type, processing_latency_ms);
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email
     ON users(email);

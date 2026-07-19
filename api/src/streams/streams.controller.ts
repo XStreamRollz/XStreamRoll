@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Inject,
   Param,
   ParseIntPipe,
   Patch,
@@ -13,6 +14,7 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common"
+import { CACHE_MANAGER } from "@nestjs/cache-manager"
 import {
   ApiBearerAuth,
   ApiConflictResponse,
@@ -26,12 +28,16 @@ import {
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger"
 import type { Request } from "express"
+import { Cache } from "cache-manager"
 import { AuthGuard } from "../common/guards/auth.guard"
 import { StreamOwnershipGuard } from "../common/guards/stream-ownership.guard"
 import { CreateStreamDto } from "./dto/create-stream.dto"
 import { ListStreamsQueryDto } from "./dto/list-streams.query.dto"
+import { StreamAnalyticsDto } from "./dto/stream-analytics.dto"
 import { UpdateStreamDto } from "./dto/update-stream.dto"
 import { StreamsService } from "./streams.service"
+
+const STREAM_ANALYTICS_CACHE_TTL_MS = 60_000
 
 /**
  * Full CRUD for streams.
@@ -45,7 +51,10 @@ import { StreamsService } from "./streams.service"
 @ApiTags("streams")
 @Controller("streams")
 export class StreamsController {
-  constructor(private readonly streamsService: StreamsService) {}
+  constructor(
+    private readonly streamsService: StreamsService,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
+  ) {}
 
   /**
    * Create a new stream. The authenticated user becomes the owner.
@@ -90,6 +99,36 @@ export class StreamsController {
     return this.streamsService.list(page, limit, {
       status: query.status,
     })
+  }
+
+  /**
+   * Get aggregate analytics for a stream. Requires stream ownership.
+   */
+  @Get(":id/analytics")
+  @UseGuards(StreamOwnershipGuard)
+  @ApiBearerAuth("bearer")
+  @ApiOperation({
+    summary: "Get stream analytics",
+    description:
+      "Returns cached aggregate event counts, error rate, processing latency, and per-minute volume for a stream. Requires ownership.",
+  })
+  @ApiOkResponse({
+    description: "Stream analytics found.",
+    type: StreamAnalyticsDto,
+  })
+  @ApiNotFoundResponse({ description: "Stream not found." })
+  @ApiUnauthorizedResponse({ description: "Authentication required." })
+  @ApiForbiddenResponse({ description: "You do not own this stream." })
+  async getAnalytics(
+    @Param("id", ParseIntPipe) id: number,
+  ): Promise<StreamAnalyticsDto> {
+    const cacheKey = `streams:${id}:analytics`
+    const cached = await this.cache.get<StreamAnalyticsDto>(cacheKey)
+    if (cached) return cached
+
+    const analytics = await this.streamsService.getAnalytics(id)
+    await this.cache.set(cacheKey, analytics, STREAM_ANALYTICS_CACHE_TTL_MS)
+    return analytics
   }
 
   /**
