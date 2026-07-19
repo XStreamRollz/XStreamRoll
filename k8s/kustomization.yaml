@@ -43,14 +43,25 @@ configMapGenerator:
       - schema.sql=../database/schema.sql
 
 images:
-  # Pin a known image-tag per environment by overriding these with a
-  # `kustomize edit set image` patch in higher environments.
+  # !! These tags are placeholders for local development only.
+  # Before deploying to any real environment, pin each image to a
+  # specific semver or SHA tag produced by the release workflow:
+  #
+  #   VERSION=v1.2.3  # or sha-<short-sha> from release.yml
+  #   kustomize edit set image \
+  #     ghcr.io/xstreamrollz/xstreamroll-api:${VERSION} \
+  #     ghcr.io/xstreamrollz/xstreamroll-app:${VERSION} \
+  #     ghcr.io/xstreamrollz/xstreamroll-processing:${VERSION}
+  #   kubectl apply -k k8s/
+  #
+  # See k8s/README.md — "Deploying a specific version" for full CI/CD
+  # integration guidance.
   - name: ghcr.io/xstreamrollz/xstreamroll-api
     newName: ghcr.io/xstreamrollz/xstreamroll-api
-    newTag: latest
+    newTag: "0.0.0-dev"
   - name: ghcr.io/xstreamrollz/xstreamroll-app
     newName: ghcr.io/xstreamrollz/xstreamroll-app
-    newTag: latest
+    newTag: "0.0.0-dev"
   - name: ghcr.io/xstreamrollz/xstreamroll-processing
     newName: ghcr.io/xstreamrollz/xstreamroll-processing
-    newTag: latest
+    newTag: "0.0.0-dev"

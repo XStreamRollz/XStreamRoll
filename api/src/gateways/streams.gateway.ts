@@ -12,6 +12,8 @@ import {
 import type { Server, Socket } from "socket.io"
 import { MetricsService } from "../metrics/metrics.service"
 import {
+  NOTIFICATION_EVENTS,
+  NotificationCreatedPayload,
   STREAM_EVENTS,
   StreamErrorPayload,
   StreamStartedPayload,
@@ -112,6 +114,11 @@ export class StreamsGateway
       const payload = await this.jwtService.verifyAsync<JwtPayload>(token)
       client.data.userId = payload.sub
 
+      // Every authenticated client joins its own per-user room so
+      // server-initiated pushes (e.g. notifications) can target a user
+      // without requiring an explicit subscribe handshake.
+      void client.join(this.userRoomFor(payload.sub))
+
       this.metricsService?.websocketConnectionsTotal.inc()
       this.metricsService?.websocketActiveConnections.inc()
 
@@ -206,10 +213,24 @@ export class StreamsGateway
       .emit(STREAM_EVENTS.ERROR, payload)
   }
 
+  /**
+   * Push a newly created notification to every socket the target user has
+   * open. Scoped to the user's own room so other clients never see it.
+   */
+  emitNotification(payload: NotificationCreatedPayload): void {
+    this.server
+      .to(this.userRoomFor(payload.userId))
+      .emit(NOTIFICATION_EVENTS.NEW, payload)
+  }
+
   /* -------------------------------------------------------------- */
 
   private roomFor(streamId: string | number): string {
     return `stream:${String(streamId)}`
+  }
+
+  private userRoomFor(userId: string | number): string {
+    return `user:${String(userId)}`
   }
 
   private extractToken(client: Socket): string | null {

@@ -10,11 +10,33 @@ env:
   IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
 
 jobs:
-  build-and-push:
+  # Guard: verify the tag points to a commit on main. Any tag pushed
+  # from a feature or compromised branch is rejected before any image
+  # is built or published.
+  verify-branch:
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure tag is on main
+        run: |
+          if ! git branch -r --contains "${{ github.sha }}" | grep -qE '(^|\s)origin/main$'; then
+            echo "::error::Tag ${{ github.ref_name }} does not point to a commit on origin/main. Releases must be cut from main."
+            exit 1
+          fi
+
+  build-and-push:
+    needs: verify-branch
+    runs-on: ubuntu-latest
+    environment: production
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
 
     strategy:
       matrix:
@@ -44,12 +66,21 @@ jobs:
           images: ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}
           tags: |
             type=semver,pattern={{version}}
+            type=sha,prefix=sha-,format=short
             type=raw,value=latest
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true

@@ -4,8 +4,9 @@ import {
   NotFoundException,
 } from "@nestjs/common"
 import { PaginatedResult } from "../common/dto/pagination.dto"
-import { Stream } from "./stream.entity"
+import { StreamAnalyticsDto } from "./dto/stream-analytics.dto"
 import { StreamsRepository } from "./repository/streams.repository"
+import { Stream } from "./stream.entity"
 
 export interface PagedStreams extends PaginatedResult<Stream> {
   hasMore: boolean
@@ -77,6 +78,11 @@ export class StreamsService {
     if (!exists) {
       throw new NotFoundException(`stream ${id} not found`)
     }
+  }
+
+  async getAnalytics(id: number): Promise<StreamAnalyticsDto> {
+    await this.findById(id)
+    return this.repo.getAnalytics(id)
   }
 
   /**

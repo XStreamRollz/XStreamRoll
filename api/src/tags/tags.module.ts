@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common"
+import { AuthModule } from "../auth/auth.module"
 import { StreamOwnershipGuard } from "../common/guards/stream-ownership.guard"
 import { StreamOwnershipService } from "../common/guards/stream-ownership.service"
 import { TagsDbRepository } from "./repository/tags-db.repository"
@@ -20,6 +21,7 @@ import { TagsService } from "./tags.service"
 const isTest = process.env.NODE_ENV === "test"
 
 @Module({
+  imports: [AuthModule],
   controllers: [TagsListController, StreamTagsController],
   providers: [
     TagsService,

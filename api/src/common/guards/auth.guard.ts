@@ -7,6 +7,7 @@ import {
 import { JwtService } from "@nestjs/jwt"
 import type { Request } from "express"
 import { TokenDenylistService } from "../../auth/token-denylist.service"
+import { UsersRepository } from "../../auth/users.repository"
 
 /**
  * Auth guard that validates a JWT access token from the Authorization header
@@ -20,6 +21,7 @@ export class AuthGuard implements CanActivate {
   constructor(
     private readonly jwtService: JwtService,
     private readonly tokenDenylistService: TokenDenylistService,
+    private readonly usersRepository: UsersRepository,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -44,17 +46,33 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException("invalid access token")
     }
 
+    const tokenPwdChangedAt =
+      (payload as { passwordChangedAt?: number }).passwordChangedAt ?? 0
+    if (tokenPwdChangedAt > 0) {
+      const user = await this.usersRepository.findById(userId)
+      if (!user) {
+        throw new UnauthorizedException("user not found")
+      }
+      const actualPwdChangedAt =
+        user.password_changed_at?.getTime() ?? user.created_at.getTime()
+      if (tokenPwdChangedAt < actualPwdChangedAt) {
+        throw new UnauthorizedException(
+          "access token is no longer valid, please log in again",
+        )
+      }
+    }
+
     ;(req as Request & { auth?: { userId: number } }).auth = { userId }
     return true
   }
 
   private async verifyToken(
     token: string,
-  ): Promise<{ sub: number | string; jti?: string }> {
+  ): Promise<{ sub: number | string; passwordChangedAt?: number }> {
     try {
       return (await this.jwtService.verifyAsync(token)) as {
         sub: number | string
-        jti?: string
+        passwordChangedAt?: number
       }
     } catch {
       throw new UnauthorizedException("invalid or expired access token")
