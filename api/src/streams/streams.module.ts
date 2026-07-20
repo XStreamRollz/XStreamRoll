@@ -1,5 +1,6 @@
 import { CacheModule } from "@nestjs/cache-manager"
 import { Module } from "@nestjs/common"
+import { streamsCacheConfig } from "../config/cache.config"
 import { AuthModule } from "../auth/auth.module"
 import { AuthGuard } from "../common/guards/auth.guard"
 import { StreamOwnershipGuard } from "../common/guards/stream-ownership.guard"
@@ -25,10 +26,7 @@ const isTest = process.env.NODE_ENV === "test"
 @Module({
   imports: [
     AuthModule,
-    CacheModule.register({
-      ttl: 60_000,
-      max: 512,
-    }),
+    CacheModule.register(streamsCacheConfig()),
   ],
   controllers: [StreamsController],
   providers: [
