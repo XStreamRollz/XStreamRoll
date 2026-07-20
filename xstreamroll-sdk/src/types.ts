@@ -112,6 +112,48 @@ export interface StreamEventRecord {
   occurredAt: string
 }
 
+// ─── Webhooks ─────────────────────────────────────────────────────────────────
+
+/** Payload for `subscribeWebhook()` / `POST /webhooks`. */
+export interface CreateWebhookDto {
+  streamId: string | number
+  url: string
+  events: StreamEventType[]
+}
+
+/**
+ * A registered webhook subscription. `secret` is only ever present in the
+ * response returned by `subscribeWebhook()` at creation time — store it
+ * immediately, since it is needed to verify future delivery signatures via
+ * {@link verifyWebhookSignature}.
+ */
+export interface WebhookSubscription {
+  id: string | number
+  userId: string | number
+  streamId: string | number
+  url: string
+  events: StreamEventType[]
+  secret: string
+  active: boolean
+  createdAt: string
+}
+
+/** A single delivery attempt, as returned by `GET /webhooks/:id/deliveries`. */
+export interface WebhookDelivery {
+  id: string | number
+  webhookSubscriptionId: string | number
+  event: StreamEventType
+  payload: Record<string, unknown>
+  status: "pending" | "success" | "failed"
+  attemptCount: number
+  lastStatusCode: number | null
+  lastResponseBody: string | null
+  lastError: string | null
+  nextAttemptAt: string | null
+  deliveredAt: string | null
+  createdAt: string
+}
+
 // ─── Pagination ───────────────────────────────────────────────────────────────
 
 /** Standard paginated API response wrapper. */

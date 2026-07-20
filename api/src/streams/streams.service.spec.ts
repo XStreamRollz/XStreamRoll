@@ -2,6 +2,7 @@ import { ConflictException, NotFoundException } from "@nestjs/common"
 import { StreamsService } from "./streams.service"
 import { Stream } from "./stream.entity"
 import { StreamsRepository } from "./repository/streams.repository"
+import { WebhooksService } from "../webhooks/webhooks.service"
 
 describe("StreamsService", () => {
   let service: StreamsService
@@ -13,6 +14,7 @@ describe("StreamsService", () => {
     update: jest.Mock
     delete: jest.Mock
   }
+  let mockWebhooksService: { dispatchStreamEvent: jest.Mock }
 
   beforeEach(() => {
     mockRepo = {
@@ -23,7 +25,13 @@ describe("StreamsService", () => {
       update: jest.fn(),
       delete: jest.fn(),
     }
-    service = new StreamsService(mockRepo as unknown as StreamsRepository)
+    mockWebhooksService = {
+      dispatchStreamEvent: jest.fn().mockResolvedValue(undefined),
+    }
+    service = new StreamsService(
+      mockRepo as unknown as StreamsRepository,
+      mockWebhooksService as unknown as WebhooksService,
+    )
   })
 
   it("create with valid data returns stream", async () => {
@@ -82,6 +90,47 @@ describe("StreamsService", () => {
     const res = await service.update(1, { status: "active" })
     expect(res).toEqual(updated)
     expect(mockRepo.update).toHaveBeenCalledWith(1, { name: undefined, description: undefined, status: "active" })
+  })
+
+  it("update status inactive -> active dispatches a stream:started webhook event", async () => {
+    const existing: Stream = { id: 1, userId: 7, name: "s", description: null, status: "inactive", createdAt: new Date(), updatedAt: new Date() }
+    const updated: Stream = { ...existing, status: "active" }
+    mockRepo.findById.mockResolvedValue(existing)
+    mockRepo.update.mockResolvedValue(updated)
+
+    await service.update(1, { status: "active" })
+
+    expect(mockWebhooksService.dispatchStreamEvent).toHaveBeenCalledWith(
+      1,
+      "stream:started",
+      expect.objectContaining({ streamId: 1, userId: 7 }),
+    )
+  })
+
+  it("update status active -> inactive dispatches a stream:stopped webhook event", async () => {
+    const existing: Stream = { id: 1, userId: 7, name: "s", description: null, status: "active", createdAt: new Date(), updatedAt: new Date() }
+    const updated: Stream = { ...existing, status: "inactive" }
+    mockRepo.findById.mockResolvedValue(existing)
+    mockRepo.update.mockResolvedValue(updated)
+
+    await service.update(1, { status: "inactive" })
+
+    expect(mockWebhooksService.dispatchStreamEvent).toHaveBeenCalledWith(
+      1,
+      "stream:stopped",
+      expect.objectContaining({ streamId: 1, userId: 7 }),
+    )
+  })
+
+  it("update without a status change does not dispatch a webhook event", async () => {
+    const existing: Stream = { id: 1, userId: 7, name: "s", description: null, status: "active", createdAt: new Date(), updatedAt: new Date() }
+    const updated: Stream = { ...existing, name: "renamed" }
+    mockRepo.findById.mockResolvedValue(existing)
+    mockRepo.update.mockResolvedValue(updated)
+
+    await service.update(1, { name: "renamed" })
+
+    expect(mockWebhooksService.dispatchStreamEvent).not.toHaveBeenCalled()
   })
 
   it("update status active -> active throws ConflictException", async () => {
