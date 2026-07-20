@@ -9,7 +9,7 @@ let schemaApplied = false
 
 export async function applySchema(pool: Pool): Promise<void> {
   if (schemaApplied) return
-  const schemaPath = resolve(__dirname, "../../database/schema.sql")
+  const schemaPath = resolve(__dirname, "../../../database/schema.sql")
   const schema = readFileSync(schemaPath, "utf8")
   await pool.query(schema)
   schemaApplied = true
