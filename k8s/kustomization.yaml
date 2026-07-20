@@ -33,6 +33,9 @@ resources:
   - 40-processing.yaml
   - 50-redis.yaml
   - 60-ingress.yaml
+  # Uncomment to deploy a development-only Jaeger all-in-one trace collector.
+  # See k8s/70-jaeger.yaml for configuration and usage notes.
+  # - 70-jaeger.yaml
 
 configMapGenerator:
   # Generates the postgres-init ConfigMap that the StatefulSet mounts
