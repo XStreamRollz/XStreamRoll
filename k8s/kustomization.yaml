@@ -31,6 +31,7 @@ resources:
   - 20-api.yaml
   - 30-app.yaml
   - 40-processing.yaml
+  - 50-redis.yaml
   - 60-ingress.yaml
 
 configMapGenerator:
