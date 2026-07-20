@@ -1,4 +1,5 @@
 import { Response } from "express"
+
 import { RequestLoggerMiddleware } from "./request-logger.middleware"
 import type { AuthedRequest } from "./request-logger.middleware"
 
@@ -11,21 +12,23 @@ type FakeResOptions = {
  * Build a fake Express Request shaped as AuthedRequest.
  * Only the properties read by the middleware are populated.
  */
-function makeReq(overrides: Partial<{
-  method: string
-  path: string
-  originalUrl: string
-  ip: string
-  headers: Record<string, string>
-  user: { id: number | string } | null
-}> = {}): AuthedRequest {
+function makeReq(
+  overrides: Partial<{
+    method: string
+    path: string
+    originalUrl: string
+    ip: string
+    headers: Record<string, string>
+    user: { id: number | string } | null
+  }> = {},
+): AuthedRequest {
   return {
     method: overrides.method ?? "GET",
     path: overrides.path ?? "/streams",
     originalUrl: overrides.originalUrl ?? "/streams",
     ip: overrides.ip ?? "127.0.0.1",
     headers: overrides.headers ?? { "user-agent": "jest" },
-    user: "user" in overrides ? overrides.user ?? undefined : undefined,
+    user: "user" in overrides ? (overrides.user ?? undefined) : undefined,
   } as AuthedRequest
 }
 
@@ -34,7 +37,10 @@ function makeReq(overrides: Partial<{
  * helper that triggers the registered "finish" listener, simulating
  * Express' response-completion lifecycle.
  */
-function makeRes(opts: FakeResOptions = {}): { res: Response; fire: () => void } {
+function makeRes(opts: FakeResOptions = {}): {
+  res: Response
+  fire: () => void
+} {
   const listeners: Record<string, Array<() => void>> = {}
   const res = {
     statusCode: opts.statusCode ?? 200,

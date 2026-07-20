@@ -2,10 +2,10 @@
 
 ## Supported Versions
 
-| Version | Supported |
-|---------|-----------|
-| latest (main) | ✅ |
-| older releases | ❌ |
+| Version        | Supported |
+| -------------- | --------- |
+| latest (main)  | ✅        |
+| older releases | ❌        |
 
 ## Reporting a Vulnerability
 
@@ -14,6 +14,7 @@
 Report vulnerabilities privately via GitHub's [Security Advisories](https://github.com/XStreamRollz/XStreamRoll/security/advisories/new) or by emailing the maintainers directly (see repository contact info).
 
 Include:
+
 - Description of the vulnerability
 - Steps to reproduce
 - Potential impact
@@ -21,11 +22,11 @@ Include:
 
 ## Response SLA
 
-| Severity | Acknowledgment | Resolution Target |
-|----------|---------------|-------------------|
-| Critical | 48 hours | 7 days |
-| High | 48 hours | 14 days |
-| Medium/Low | 48 hours | 30 days |
+| Severity   | Acknowledgment | Resolution Target |
+| ---------- | -------------- | ----------------- |
+| Critical   | 48 hours       | 7 days            |
+| High       | 48 hours       | 14 days           |
+| Medium/Low | 48 hours       | 30 days           |
 
 ## Disclosure Policy
 

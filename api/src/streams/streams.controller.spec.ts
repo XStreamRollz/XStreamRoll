@@ -1,3 +1,11 @@
+import type { Cache } from "cache-manager"
+import type { Request } from "express"
+
+import { CreateStreamDto } from "./dto/create-stream.dto"
+import { UpdateStreamDto } from "./dto/update-stream.dto"
+import { StreamsController } from "./streams.controller"
+import { StreamsService } from "./streams.service"
+
 // Prevent loading guard implementations which trigger env validation at import time.
 jest.mock("../common/guards/stream-ownership.guard", () => ({
   StreamOwnershipGuard: class {
@@ -13,13 +21,6 @@ jest.mock("../common/guards/auth.guard", () => ({
     }
   },
 }))
-
-import { StreamsController } from "./streams.controller"
-import { CreateStreamDto } from "./dto/create-stream.dto"
-import { UpdateStreamDto } from "./dto/update-stream.dto"
-import { StreamsService } from "./streams.service"
-import type { Request } from "express"
-import type { Cache } from "cache-manager"
 
 type MockStreamsService = {
   create: jest.Mock
@@ -61,17 +62,29 @@ describe("StreamsController", () => {
 
   it("create delegates to service with auth userId", async () => {
     const dto = { name: "s", description: "d" }
-    const req = { auth: { userId: 7 } } as Request & { auth: { userId: number } }
+    const req = { auth: { userId: 7 } } as Request & {
+      auth: { userId: number }
+    }
     const expected = { id: 1 }
     mockService.create.mockResolvedValue(expected)
 
     const res = await controller.create(dto as CreateStreamDto, req)
     expect(res).toBe(expected)
-    expect(mockService.create).toHaveBeenCalledWith({ userId: 7, name: dto.name, description: dto.description })
+    expect(mockService.create).toHaveBeenCalledWith({
+      userId: 7,
+      name: dto.name,
+      description: dto.description,
+    })
   })
 
   it("list delegates to service with defaults", async () => {
-    mockService.list.mockResolvedValue({ data: [], page: 1, limit: 20, total: 0, hasMore: false })
+    mockService.list.mockResolvedValue({
+      data: [],
+      page: 1,
+      limit: 20,
+      total: 0,
+      hasMore: false,
+    })
     const res = await controller.list({})
     expect(mockService.list).toHaveBeenCalledWith(1, 20, { status: undefined })
     expect(res.data).toBeDefined()
@@ -85,7 +98,10 @@ describe("StreamsController", () => {
   })
 
   it("getAnalytics returns cached analytics when available", async () => {
-    const cached = { streamId: 5, totalEventsProcessed: { last24h: 1, last7d: 2, last30d: 3 } }
+    const cached = {
+      streamId: 5,
+      totalEventsProcessed: { last24h: 1, last7d: 2, last30d: 3 },
+    }
     mockCache.get.mockResolvedValue(cached)
 
     const res = await controller.getAnalytics(5)
@@ -96,7 +112,10 @@ describe("StreamsController", () => {
   })
 
   it("getAnalytics delegates and caches fresh analytics", async () => {
-    const analytics = { streamId: 5, totalEventsProcessed: { last24h: 1, last7d: 2, last30d: 3 } }
+    const analytics = {
+      streamId: 5,
+      totalEventsProcessed: { last24h: 1, last7d: 2, last30d: 3 },
+    }
     mockCache.get.mockResolvedValue(undefined)
     mockService.getAnalytics.mockResolvedValue(analytics)
 
@@ -104,7 +123,11 @@ describe("StreamsController", () => {
 
     expect(res).toBe(analytics)
     expect(mockService.getAnalytics).toHaveBeenCalledWith(5)
-    expect(mockCache.set).toHaveBeenCalledWith("streams:5:analytics", analytics, 60000)
+    expect(mockCache.set).toHaveBeenCalledWith(
+      "streams:5:analytics",
+      analytics,
+      60000,
+    )
   })
 
   it("update delegates to service", async () => {

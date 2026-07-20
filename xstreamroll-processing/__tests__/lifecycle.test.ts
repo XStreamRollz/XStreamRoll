@@ -1,4 +1,5 @@
 import axios from "axios"
+
 import { SessionLifecycleManager } from "../src/session/lifecycle"
 
 jest.mock("axios")
@@ -26,11 +27,11 @@ describe("SessionLifecycleManager", () => {
     expect(mgr.getState()).toBe("active")
     expect(mockedPatch).toHaveBeenCalledWith(
       "http://localhost:3001/streams/stream-1",
-      expect.objectContaining({ status: "starting" })
+      expect.objectContaining({ status: "starting" }),
     )
     expect(mockedPatch).toHaveBeenCalledWith(
       "http://localhost:3001/streams/stream-1",
-      expect.objectContaining({ status: "active" })
+      expect.objectContaining({ status: "active" }),
     )
   })
 
@@ -41,7 +42,7 @@ describe("SessionLifecycleManager", () => {
     expect(mgr.getState()).toBe("ended")
     expect(mockedPatch).toHaveBeenCalledWith(
       "http://localhost:3001/streams/stream-1",
-      expect.objectContaining({ status: "ended" })
+      expect.objectContaining({ status: "ended" }),
     )
   })
 
@@ -52,7 +53,7 @@ describe("SessionLifecycleManager", () => {
     expect(mgr.getState()).toBe("error")
     expect(mockedPatch).toHaveBeenCalledWith(
       "http://localhost:3001/streams/stream-1",
-      expect.objectContaining({ status: "error", reason: "connection lost" })
+      expect.objectContaining({ status: "error", reason: "connection lost" }),
     )
   })
 

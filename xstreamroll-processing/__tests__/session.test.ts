@@ -1,7 +1,15 @@
-import { StreamSession, type StreamEvent, type ProcessedStreamEvent } from "../src/session"
+import {
+  type ProcessedStreamEvent,
+  type StreamEvent,
+  StreamSession,
+} from "../src/session"
 
 function makeEvent(streamId = "s1"): StreamEvent {
-  return { streamId, data: { type: "data" }, timestamp: new Date().toISOString() }
+  return {
+    streamId,
+    data: { type: "data" },
+    timestamp: new Date().toISOString(),
+  }
 }
 
 describe("StreamSession", () => {
@@ -27,7 +35,11 @@ describe("StreamSession", () => {
     s.enqueue(makeEvent())
     s.enqueue(makeEvent())
     // wait for pump to drain
-    for (let i = 0; i < 20 && (s.pendingCount() > 0 || published.length < 2); i++) {
+    for (
+      let i = 0;
+      i < 20 && (s.pendingCount() > 0 || published.length < 2);
+      i++
+    ) {
       await new Promise((r) => setTimeout(r, 5))
     }
     expect(published).toHaveLength(2)

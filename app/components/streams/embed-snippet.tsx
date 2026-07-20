@@ -1,7 +1,8 @@
 "use client"
 
-import * as React from "react"
 import { Check, Copy } from "lucide-react"
+import * as React from "react"
+
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -91,8 +92,8 @@ export function EmbedSnippet({
       <CardHeader>
         <CardTitle className="text-lg">Embed snippet</CardTitle>
         <CardDescription>
-          Paste this snippet into any site to embed the stream. The snippet
-          uses the stream's public id — no secrets are exposed.
+          Paste this snippet into any site to embed the stream. The snippet uses
+          the stream's public id — no secrets are exposed.
         </CardDescription>
       </CardHeader>
       <CardContent>

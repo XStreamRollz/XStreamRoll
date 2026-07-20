@@ -26,9 +26,11 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "generate:sdk": "npm run build --workspace=api && npm run generate:types --workspace=xstreamroll-sdk",
-    "generate:sdk:check": "npm run generate:sdk && git diff --exit-code xstreamroll-sdk/src/generated/schema.d.ts"
+    "generate:sdk:check": "npm run generate:sdk && git diff --exit-code xstreamroll-sdk/src/generated/schema.d.ts",
+    "prepare": "husky"
   },
   "devDependencies": {
+    "@trivago/prettier-plugin-sort-imports": "^6.0.2",
     "@types/nodemailer": "^8.0.1",
     "@types/supertest": "^7.2.0",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
@@ -38,7 +40,15 @@
     "class-validator": "^0.15.1",
     "concurrently": "^8.2.2",
     "eslint": "^8.57.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.1.0",
+    "prettier": "^3.9.5",
     "supertest": "^7.2.2"
+  },
+  "lint-staged": {
+    "*.{js,ts,jsx,tsx}": [
+      "prettier --write"
+    ]
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

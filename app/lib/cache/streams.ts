@@ -1,11 +1,8 @@
-import "server-only"
 import { revalidateTag } from "next/cache"
+import "server-only"
+
+import { CACHE_TAGS, CACHE_TTL_SECONDS, streamDetailTag } from "./cache-config"
 import { cached } from "./cached"
-import {
-  CACHE_TAGS,
-  CACHE_TTL_SECONDS,
-  streamDetailTag,
-} from "./cache-config"
 
 const DEFAULT_API_BASE = "http://localhost:3001"
 
@@ -70,7 +67,9 @@ export const getStreamList = cached(
   },
 )
 
-export async function getStreamDetail(id: number | string): Promise<StreamSummary> {
+export async function getStreamDetail(
+  id: number | string,
+): Promise<StreamSummary> {
   const fn = cached(
     async (streamId: string) => {
       const res = await fetch(`${apiBase()}/streams/${streamId}`, {

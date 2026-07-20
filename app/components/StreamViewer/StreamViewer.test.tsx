@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react"
-import { StreamViewer } from "./StreamViewer"
+
 import { useStreamSocket } from "../../hooks/useStreamSocket"
+import { StreamViewer } from "./StreamViewer"
 
 // Mock the useStreamSocket hook
 jest.mock("../../hooks/useStreamSocket")

@@ -1,12 +1,14 @@
 import http from "http"
+
 import axios from "axios"
+
 import { env } from "./config"
-import { EventFilter } from "./pipeline"
-import { SessionRegistry } from "./session-registry"
-import { ProcessedStreamEvent, StreamEvent } from "./session"
+import { type LockManager, createLockManager } from "./leader-election"
 import { GracefulShutdown, ShutdownReason } from "./lifecycle"
 import { markShuttingDown, startMetricsServer } from "./metrics"
-import { createLockManager, type LockManager } from "./leader-election"
+import { EventFilter } from "./pipeline"
+import { ProcessedStreamEvent, StreamEvent } from "./session"
+import { SessionRegistry } from "./session-registry"
 
 const API_URL = env.API_URL
 const WORKER_ID = `worker-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -19,8 +21,7 @@ const MAX_CONCURRENT_SESSIONS = Math.max(
 // back to the safe default so we don't crash on import.
 const LOCK_BACKEND: "memory" | "postgres" =
   (env.LOCK_BACKEND as "memory" | "postgres" | undefined) ?? "memory"
-const LOCK_TTL_MS: number =
-  (env.LOCK_TTL_MS as number | undefined) ?? 30_000
+const LOCK_TTL_MS: number = (env.LOCK_TTL_MS as number | undefined) ?? 30_000
 
 // Shared keep-alive agent so axios reuses TCP connections and we can
 // explicitly destroy the pool on graceful shutdown.
@@ -144,7 +145,9 @@ async function start(): Promise<void> {
       // In tests, surface the failure as a rejected module load would
       // do, but `void start()` swallows rejections. Re-throw via a
       // process-warning so test runners see the cause.
-      console.warn(`[${WORKER_ID}] tests will see previously-routed events only`)
+      console.warn(
+        `[${WORKER_ID}] tests will see previously-routed events only`,
+      )
     }
     return
   }
@@ -286,7 +289,10 @@ function logRouteError(streamId: string, message: string): void {
   // smallest — that key's dedup window has spent the most time
   // outside the active suppression period, so it is the most
   // likely candidate for a post-suppression log next.
-  if (!routeErrorDedupe.has(key) && routeErrorDedupe.size >= MAX_TRACKED_ERROR_KEYS) {
+  if (
+    !routeErrorDedupe.has(key) &&
+    routeErrorDedupe.size >= MAX_TRACKED_ERROR_KEYS
+  ) {
     let evictKey: string | undefined
     let evictAt = Number.POSITIVE_INFINITY
     for (const [k, v] of routeErrorDedupe) {

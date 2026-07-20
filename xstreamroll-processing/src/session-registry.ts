@@ -1,5 +1,5 @@
-import { SessionHandlers, StreamEvent, StreamSession } from "./session"
 import { LockManager, LockToken } from "./leader-election"
+import { SessionHandlers, StreamEvent, StreamSession } from "./session"
 
 export type RouteResult = "enqueued" | "capacity" | "rejected" | "locked"
 
@@ -51,7 +51,11 @@ export class SessionRegistry {
   private readonly options: SessionRegistryOptions
   private readonly heartbeatMs: number
 
-  constructor(workerId: string, handlers: SessionHandlers, options: SessionRegistryOptions) {
+  constructor(
+    workerId: string,
+    handlers: SessionHandlers,
+    options: SessionRegistryOptions,
+  ) {
     if (!options.lockManager) {
       throw new Error("SessionRegistry requires a LockManager (issue #216)")
     }
@@ -121,7 +125,9 @@ export class SessionRegistry {
       this.options.logger?.warn?.(
         `[${this.workerId}] stream ${event.streamId} is owned by another worker; skipping`,
       )
-      session.fail(new Error(`stream ${event.streamId} locked by another worker`))
+      session.fail(
+        new Error(`stream ${event.streamId} locked by another worker`),
+      )
       return "locked"
     }
 
@@ -242,7 +248,10 @@ export class SessionRegistry {
       const current = this.lockTokens.get(streamId)
       if (!current || current.token !== token.token) return
       try {
-        const stillOurs = await this.options.lockManager.renew(streamId, current)
+        const stillOurs = await this.options.lockManager.renew(
+          streamId,
+          current,
+        )
         if (!stillOurs) {
           // Lost the lock to another worker — drop our session so
           // they can pick up where we left off. We deliberately do

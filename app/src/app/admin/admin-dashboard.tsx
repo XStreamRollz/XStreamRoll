@@ -1,7 +1,15 @@
 "use client"
 
+import {
+  Activity,
+  AlertCircle,
+  RadioTower,
+  Users,
+  Waypoints,
+} from "lucide-react"
 import { useEffect, useRef, useState } from "react"
-import { Activity, AlertCircle, RadioTower, Users, Waypoints } from "lucide-react"
+
+import { Badge } from "@/components/ui/badge"
 import {
   Card,
   CardContent,
@@ -9,7 +17,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   AdminStats,
@@ -22,7 +29,12 @@ const REFRESH_INTERVAL_MS = 60_000
 type FetchState =
   | { kind: "loading" }
   | { kind: "ready"; data: AdminStats; loadedAt: Date }
-  | { kind: "error"; message: string; lastData?: AdminStats; lastLoadedAt?: Date }
+  | {
+      kind: "error"
+      message: string
+      lastData?: AdminStats
+      lastLoadedAt?: Date
+    }
 
 export function AdminDashboard() {
   const [state, setState] = useState<FetchState>({ kind: "loading" })

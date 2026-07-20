@@ -12,7 +12,10 @@ jest.mock("pg", () => {
   const calls: { sql: string; params: unknown[] }[] = []
   let nextResponse: unknown = null
 
-  const queryFn = (sql: string, params?: unknown[]): Promise<{ rows: unknown[]; rowCount: number }> => {
+  const queryFn = (
+    sql: string,
+    params?: unknown[],
+  ): Promise<{ rows: unknown[]; rowCount: number }> => {
     calls.push({ sql, params: params ?? [] })
     if (nextResponse !== null) {
       const r = nextResponse as { rows: unknown[]; rowCount: number }
@@ -93,7 +96,11 @@ describe("MemoryLockManager", () => {
     const mgr = new MemoryLockManager({ workerId: "wA", ttlMs: 30_000 })
     try {
       type TestHook = {
-        __setEntryForTest(streamId: string, workerId: string, ttlMs: number): void
+        __setEntryForTest(
+          streamId: string,
+          workerId: string,
+          ttlMs: number,
+        ): void
         __clearEntryForTest(streamId: string): void
       }
       const hook = mgr as unknown as TestHook
@@ -103,9 +110,11 @@ describe("MemoryLockManager", () => {
       // acquire from a different workerId that gets refused.
       expect(mgr.ownerOf("s1")).toBe("wB")
     } finally {
-      ;(mgr as unknown as {
-        __clearEntryForTest(streamId: string): void
-      }).__clearEntryForTest("s1")
+      ;(
+        mgr as unknown as {
+          __clearEntryForTest(streamId: string): void
+        }
+      ).__clearEntryForTest("s1")
     }
   })
 
@@ -215,7 +224,9 @@ describe("PostgresLockManager (SQL contract)", () => {
       calls.some((c) => /CREATE TABLE IF NOT EXISTS stream_locks/.test(c.sql)),
     ).toBe(true)
     expect(
-      calls.some((c) => /CREATE INDEX IF NOT EXISTS stream_locks_owner_idx/.test(c.sql)),
+      calls.some((c) =>
+        /CREATE INDEX IF NOT EXISTS stream_locks_owner_idx/.test(c.sql),
+      ),
     ).toBe(true)
     await mgr.close()
   })
@@ -264,7 +275,7 @@ describe("PostgresLockManager (SQL contract)", () => {
     pgMock.__test.setNextResponse({ rows: [], rowCount: 1 })
     expect(await mgr.renew("s1", token!)).toBe(true)
     const sql = pgMock.__test.calls[0]?.sql
-    expect(sql).toMatch(/UPDATE stream_locks/)  // anchor on the first line; SET clause spans lines below
+    expect(sql).toMatch(/UPDATE stream_locks/) // anchor on the first line; SET clause spans lines below
     expect(sql).toMatch(/SET expires_at = \$1/)
     expect(sql).toMatch(/owner_token = \$4/)
     expect(sql).toMatch(/expires_at\s*>\s*NOW\(\)/)
@@ -297,7 +308,9 @@ describe("PostgresLockManager (SQL contract)", () => {
     await mgr.install()
     pgMock.__test.calls.length = 0
     await mgr.releaseAll()
-    expect(pgMock.__test.calls[0]?.sql).toMatch(/DELETE FROM stream_locks WHERE owner_id = \$1/)
+    expect(pgMock.__test.calls[0]?.sql).toMatch(
+      /DELETE FROM stream_locks WHERE owner_id = \$1/,
+    )
     await mgr.close()
   })
 

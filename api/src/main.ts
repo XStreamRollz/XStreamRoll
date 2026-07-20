@@ -3,10 +3,11 @@ import { HttpAdapterHost, NestFactory } from "@nestjs/core"
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger"
 import compression from "compression"
 import helmet from "helmet"
+
 import { AppModule } from "./app.module"
 import { SanitizeStringsPipe } from "./common/sanitization/sanitize-strings.pipe"
-import { ThrottlerExceptionFilter } from "./throttler-exception.filter"
 import { QueryTimeoutExceptionFilter } from "./database/query-timeout-exception.filter"
+import { ThrottlerExceptionFilter } from "./throttler-exception.filter"
 
 // Bypass compression when the response is smaller than this. Anything
 // under ~1 KB doesn't benefit from gzip and the per-request CPU cost

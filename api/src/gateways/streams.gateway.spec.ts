@@ -1,7 +1,8 @@
-import { Test } from "@nestjs/testing"
 import { JwtService } from "@nestjs/jwt"
-import { StreamsGateway, resolveCorsOrigins } from "./streams.gateway"
+import { Test } from "@nestjs/testing"
+
 import { NOTIFICATION_EVENTS, STREAM_EVENTS } from "./stream-events"
+import { StreamsGateway, resolveCorsOrigins } from "./streams.gateway"
 
 type FakeHandshake = {
   auth?: Record<string, unknown>

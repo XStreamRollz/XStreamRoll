@@ -1,4 +1,5 @@
 import nock from "nock"
+
 import type { ProcessedStreamEvent } from "../../src/session"
 
 jest.setTimeout(20000)

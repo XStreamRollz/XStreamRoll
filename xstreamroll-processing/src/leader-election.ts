@@ -27,9 +27,9 @@
  * Tokens are random UUIDv4s so a stale token from a previous
  * generation can never accidentally match a re-acquisition.
  */
+import { randomUUID } from "crypto"
 
 import { Client as PgClient } from "pg"
-import { randomUUID } from "crypto"
 
 /**
  * Opaque handle returned by {@link LockManager.acquire}. Callers must
@@ -156,7 +156,10 @@ export class MemoryLockManager extends LockManager {
       acquiredAt: now,
       expiresAt: now + this.ttlMs,
     }
-    const timer = setTimeout(() => this.evictIfCurrent(streamId, token.token), this.ttlMs)
+    const timer = setTimeout(
+      () => this.evictIfCurrent(streamId, token.token),
+      this.ttlMs,
+    )
     if (typeof timer.unref === "function") timer.unref()
     this.locks.set(streamId, { token, timer })
     return token
@@ -168,7 +171,10 @@ export class MemoryLockManager extends LockManager {
     clearTimeout(entry.timer)
     const now = Date.now()
     const renewed: LockToken = { ...token, expiresAt: now + this.ttlMs }
-    const timer = setTimeout(() => this.evictIfCurrent(streamId, renewed.token), this.ttlMs)
+    const timer = setTimeout(
+      () => this.evictIfCurrent(streamId, renewed.token),
+      this.ttlMs,
+    )
     if (typeof timer.unref === "function") timer.unref()
     this.locks.set(streamId, { token: renewed, timer })
     return true
@@ -216,7 +222,11 @@ export class MemoryLockManager extends LockManager {
    *
    * @internal
    */
-  __setEntryForTest(streamId: string, workerId: string, ttlMs: number): LockToken {
+  __setEntryForTest(
+    streamId: string,
+    workerId: string,
+    ttlMs: number,
+  ): LockToken {
     const now = Date.now()
     const tok: LockToken = {
       streamId,
@@ -225,7 +235,10 @@ export class MemoryLockManager extends LockManager {
       acquiredAt: now,
       expiresAt: now + ttlMs,
     }
-    const timer = setTimeout(() => this.evictIfCurrent(streamId, tok.token), ttlMs)
+    const timer = setTimeout(
+      () => this.evictIfCurrent(streamId, tok.token),
+      ttlMs,
+    )
     if (typeof timer.unref === "function") timer.unref()
     this.locks.set(streamId, { token: tok, timer })
     return tok
@@ -457,9 +470,7 @@ export async function createLockManager(
 ): Promise<LockManager> {
   if (options.backend === "postgres") {
     if (!options.databaseUrl) {
-      throw new Error(
-        "LOCK_BACKEND=postgres requires DATABASE_URL to be set",
-      )
+      throw new Error("LOCK_BACKEND=postgres requires DATABASE_URL to be set")
     }
     const pg = new PostgresLockManager({
       workerId: options.workerId,

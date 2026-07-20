@@ -1,5 +1,5 @@
-import { withRetry, defaultShouldRetry } from "../src/retry"
 import { HttpClient, HttpRequestError } from "../src/http"
+import { defaultShouldRetry, withRetry } from "../src/retry"
 
 describe("withRetry", () => {
   it("returns the resolved value on first success", async () => {
@@ -25,7 +25,7 @@ describe("withRetry", () => {
         sleep: async (ms) => {
           sleeps.push(ms)
         },
-      })
+      }),
     ).resolves.toBe("ok")
     expect(fn).toHaveBeenCalledTimes(3)
     expect(sleeps).toHaveLength(2)
@@ -36,7 +36,12 @@ describe("withRetry", () => {
     err.status = 500
     const fn = jest.fn().mockRejectedValue(err)
     await expect(
-      withRetry(fn, { maxAttempts: 3, baseDelayMs: 1, jitterMs: 0, sleep: async () => {} })
+      withRetry(fn, {
+        maxAttempts: 3,
+        baseDelayMs: 1,
+        jitterMs: 0,
+        sleep: async () => {},
+      }),
     ).rejects.toBe(err)
     expect(fn).toHaveBeenCalledTimes(3)
   })
@@ -48,7 +53,7 @@ describe("withRetry", () => {
         maxAttempts: 5,
         shouldRetry: () => false,
         sleep: async () => {},
-      })
+      }),
     ).rejects.toThrow("permanent")
     expect(fn).toHaveBeenCalledTimes(1)
   })
@@ -80,7 +85,10 @@ describe("HttpClient retry integration", () => {
       if (calls < 3) {
         return new Response("{} ", { status: 503 })
       }
-      return new Response('{"ok":true}', { status: 200, headers: { "Content-Type": "application/json" } })
+      return new Response('{"ok":true}', {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
     })
 
     const http = new HttpClient("http://localhost:3001", {
@@ -95,7 +103,9 @@ describe("HttpClient retry integration", () => {
   })
 
   it("throws HttpRequestError after retry budget is exhausted", async () => {
-    global.fetch = jest.fn().mockResolvedValue(new Response("err", { status: 500 }))
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(new Response("err", { status: 500 }))
     const http = new HttpClient("http://localhost:3001", {
       maxAttempts: 2,
       baseDelayMs: 1,
@@ -106,7 +116,9 @@ describe("HttpClient retry integration", () => {
   })
 
   it("respects enabled=false (no retries)", async () => {
-    const fetchMock = jest.fn().mockResolvedValue(new Response("err", { status: 503 }))
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValue(new Response("err", { status: 503 }))
     global.fetch = fetchMock
     const http = new HttpClient("http://localhost:3001", { enabled: false })
     await expect(http.request("/test")).rejects.toBeInstanceOf(HttpRequestError)

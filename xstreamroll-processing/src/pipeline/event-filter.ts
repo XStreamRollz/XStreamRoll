@@ -16,7 +16,9 @@ export class EventFilter {
 
   /** Update (or set) the filter config for a stream. */
   setConfig(streamId: string, config: FilterConfig): void {
-    this.configs.set(streamId, { blockedEventTypes: [...config.blockedEventTypes] })
+    this.configs.set(streamId, {
+      blockedEventTypes: [...config.blockedEventTypes],
+    })
   }
 
   /** Remove the filter config for a stream (all events pass through). */

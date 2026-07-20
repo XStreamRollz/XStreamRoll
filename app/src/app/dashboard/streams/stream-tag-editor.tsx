@@ -2,6 +2,9 @@
 
 import { useState } from "react"
 import { toast } from "sonner"
+
+import { StreamTagChips } from "@/components/streams/stream-tag-chips"
+import { TagCombobox } from "@/components/streams/tag-combobox"
 import {
   Card,
   CardContent,
@@ -9,13 +12,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { StreamTagChips } from "@/components/streams/stream-tag-chips"
-import { TagCombobox } from "@/components/streams/tag-combobox"
 import {
-  attachTagToStream,
-  detachTagFromStream,
   Tag,
   TagsApiError,
+  attachTagToStream,
+  detachTagFromStream,
 } from "@/lib/api/tags"
 
 export interface StreamTagEditorProps {

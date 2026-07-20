@@ -1,7 +1,9 @@
-import { render, screen, waitFor, act } from "@testing-library/react"
+import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+
+import { PagedTags, Tag, listTags } from "@/lib/api/tags"
+
 import { TagCombobox } from "./tag-combobox"
-import { listTags, Tag, PagedTags } from "@/lib/api/tags"
 
 jest.mock("@/lib/api/tags")
 
@@ -99,7 +101,10 @@ describe("TagCombobox", () => {
     })
 
     await user.click(screen.getByText("Music"))
-    expect(handleChange).toHaveBeenCalledWith([...selectedTags, availableTags[1]])
+    expect(handleChange).toHaveBeenCalledWith([
+      ...selectedTags,
+      availableTags[1],
+    ])
   })
 
   it("handles loading error gracefully (error state test)", async () => {
@@ -134,7 +139,9 @@ describe("TagCombobox", () => {
 
     await user.click(screen.getByRole("combobox"))
     await waitFor(() => {
-      expect(screen.getByPlaceholderText("Search or create…")).toBeInTheDocument()
+      expect(
+        screen.getByPlaceholderText("Search or create…"),
+      ).toBeInTheDocument()
     })
 
     const input = screen.getByPlaceholderText("Search or create…")

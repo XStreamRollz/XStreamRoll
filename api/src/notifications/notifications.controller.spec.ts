@@ -1,3 +1,8 @@
+import type { Request } from "express"
+
+import { NotificationsController } from "./notifications.controller"
+import { NotificationsService } from "./notifications.service"
+
 // Prevent loading the guard implementation, which triggers env validation
 // at import time (see streams.controller.spec.ts for the same pattern).
 jest.mock("../common/guards/auth.guard", () => ({
@@ -7,10 +12,6 @@ jest.mock("../common/guards/auth.guard", () => ({
     }
   },
 }))
-
-import type { Request } from "express"
-import { NotificationsController } from "./notifications.controller"
-import { NotificationsService } from "./notifications.service"
 
 const makeReq = (userId: number): Request & { auth: { userId: number } } =>
   ({ auth: { userId } }) as Request & { auth: { userId: number } }

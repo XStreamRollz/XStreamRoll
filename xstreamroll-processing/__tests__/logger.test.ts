@@ -1,4 +1,4 @@
-import { Logger, withCorrelation, newCorrelationId } from "../src/logger"
+import { Logger, newCorrelationId, withCorrelation } from "../src/logger"
 
 function makeLogger(level: "debug" | "info" | "warn" | "error" = "debug") {
   const entries: Record<string, unknown>[] = []
@@ -63,7 +63,9 @@ describe("Logger", () => {
   it("never throws when the sink throws", () => {
     const logger = new Logger({
       workerId: "w",
-      sink: () => { throw new Error("sink boom") },
+      sink: () => {
+        throw new Error("sink boom")
+      },
     })
     expect(() => logger.info("hi")).not.toThrow()
   })

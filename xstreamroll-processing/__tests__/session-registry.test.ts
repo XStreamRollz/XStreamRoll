@@ -1,12 +1,23 @@
+import {
+  LockManager,
+  LockToken,
+  MemoryLockManager,
+} from "../src/leader-election"
+import type { ProcessedStreamEvent, StreamEvent } from "../src/session"
 import { SessionRegistry } from "../src/session-registry"
-import type { StreamEvent, ProcessedStreamEvent } from "../src/session"
-import { LockManager, LockToken, MemoryLockManager } from "../src/leader-election"
 
 function evt(streamId: string): StreamEvent {
-  return { streamId, data: { type: "data" }, timestamp: new Date().toISOString() }
+  return {
+    streamId,
+    data: { type: "data" },
+    timestamp: new Date().toISOString(),
+  }
 }
 
-function makeRegistry(max = 4, opts: { lockManager?: LockManager; ttlMs?: number } = {}) {
+function makeRegistry(
+  max = 4,
+  opts: { lockManager?: LockManager; ttlMs?: number } = {},
+) {
   const lockManager =
     opts.lockManager ??
     new MemoryLockManager({ workerId: "w1", ttlMs: opts.ttlMs ?? 30_000 })

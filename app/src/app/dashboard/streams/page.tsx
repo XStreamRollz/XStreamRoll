@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+
 import { StreamTagEditor } from "./stream-tag-editor"
 
 export const metadata: Metadata = {

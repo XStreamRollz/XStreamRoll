@@ -1,14 +1,15 @@
 import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { StreamTagEditor } from "@/src/app/dashboard/streams/stream-tag-editor"
+import { toast } from "sonner"
+
 import {
+  Tag,
+  TagsApiError,
   attachTagToStream,
   detachTagFromStream,
   listTags,
-  Tag,
-  TagsApiError,
 } from "@/lib/api/tags"
-import { toast } from "sonner"
+import { StreamTagEditor } from "@/src/app/dashboard/streams/stream-tag-editor"
 
 jest.mock("@/lib/api/tags", () => {
   const actual = jest.requireActual("@/lib/api/tags")
@@ -16,7 +17,13 @@ jest.mock("@/lib/api/tags", () => {
     ...actual,
     attachTagToStream: jest.fn(),
     detachTagFromStream: jest.fn(),
-    listTags: jest.fn().mockResolvedValue({ items: [], page: 1, limit: 100, total: 0, hasMore: false }),
+    listTags: jest.fn().mockResolvedValue({
+      items: [],
+      page: 1,
+      limit: 100,
+      total: 0,
+      hasMore: false,
+    }),
   }
 })
 jest.mock("sonner", () => ({
@@ -33,7 +40,6 @@ const mockDetach = detachTagFromStream as jest.MockedFunction<
 >
 const mockListTags = listTags as jest.MockedFunction<typeof listTags>
 const mockToastError = toast.error as jest.MockedFunction<typeof toast.error>
-
 
 describe("StreamTagEditor", () => {
   const initialTags: Tag[] = [

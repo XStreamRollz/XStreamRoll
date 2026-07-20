@@ -12,7 +12,8 @@ export type ResetPasswordDto = components["schemas"]["ResetPasswordDto"]
 export type CreateStreamDto = components["schemas"]["CreateStreamDto"]
 export type UpdateStreamDto = components["schemas"]["UpdateStreamDto"]
 export type CreateTagDto = components["schemas"]["CreateTagDto"]
-export type HealthCheckResponseDto = components["schemas"]["HealthCheckResponseDto"]
+export type HealthCheckResponseDto =
+  components["schemas"]["HealthCheckResponseDto"]
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -149,7 +150,7 @@ export class ApiError extends Error {
   constructor(
     public readonly statusCode: number,
     message: string,
-    public readonly response?: ApiErrorResponse
+    public readonly response?: ApiErrorResponse,
   ) {
     super(message)
     this.name = "ApiError"
