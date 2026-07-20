@@ -77,10 +77,10 @@ spec:
       # Allow rolling restarts to finish in-flight requests.
       terminationGracePeriodSeconds: 30
       securityContext:
-        # The published API image does not drop privileges; allow root
-        # here so it can read /app. Production hardening should add a
-        # non-root user to api/Dockerfile.
-        runAsNonRoot: false
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
       containers:
