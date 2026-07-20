@@ -15,6 +15,7 @@ import {
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger"
 import { Cache } from "cache-manager"
+import { AuthGuard } from "../common/guards/auth.guard"
 import { Roles, RolesGuard } from "../common/auth/roles.guard"
 import { AdminStats, AdminStatsService } from "./admin-stats.service"
 
@@ -22,7 +23,7 @@ const STATS_CACHE_TTL_MS = 60_000
 
 @ApiTags("admin")
 @Controller("admin")
-@UseGuards(RolesGuard)
+@UseGuards(AuthGuard, RolesGuard)
 @Roles("admin")
 export class AdminController {
   constructor(
