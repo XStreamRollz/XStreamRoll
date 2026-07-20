@@ -1,6 +1,36 @@
 import { Injectable } from "@nestjs/common"
 import { StreamAnalyticsDto } from "../dto/stream-analytics.dto"
+import type { StreamVisibility } from "../dto/visibility"
 import { Stream } from "../stream.entity"
+
+export interface StreamCreateParams {
+  userId: number
+  name: string
+  description?: string
+  visibility?: StreamVisibility
+}
+
+export interface StreamUpdateChanges {
+  name?: string
+  description?: string
+  status?: string
+  visibility?: StreamVisibility
+}
+
+/**
+ * Filter passed to listing endpoints. The repository applies visibility
+ * semantics so the service layer is a pass-through; it never has to
+ * reason about who can see what.
+ */
+export interface StreamListFilter {
+  status?: string
+  visibility?: StreamVisibility
+  /**
+   * If true, restrict results to streams owned by the viewer
+   * regardless of the stream's own visibility. Defaults to false.
+   */
+  ownerOnly?: boolean
+}
 
 /**
  * In-memory streams repository.
@@ -23,13 +53,31 @@ export class StreamsRepository {
   }
 
   /**
-   * Returns all streams, optionally filtered by status,
-   * sorted newest-first (createdAt DESC).
+   * Returns all streams visible to `viewerUserId`, optionally further
+   * narrowed by status, visibility, and an owner-only flag. Sorted
+   * newest-first (createdAt DESC).
    */
-  private listFiltered(filter?: { status?: string }): Stream[] {
+  private listFiltered(
+    viewerUserId: number,
+    filter?: StreamListFilter,
+  ): Stream[] {
     let results = Array.from(this.streamsById.values())
     if (filter?.status) {
       results = results.filter((s) => s.status === filter.status)
+    }
+    // Apply visibility ACL (issue #393):
+    //   - ownerOnly → only the caller's streams
+    //   - otherwise → public streams + the caller's own streams
+    if (filter?.ownerOnly) {
+      results = results.filter((s) => s.userId === viewerUserId)
+    } else {
+      results = results.filter(
+        (s) => s.visibility === "public" || s.userId === viewerUserId,
+      )
+    }
+    // Optional visibility narrowing on top of the ACL.
+    if (filter?.visibility) {
+      results = results.filter((s) => s.visibility === filter.visibility)
     }
     return results.sort(
       (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
@@ -42,9 +90,10 @@ export class StreamsRepository {
   async listPaginated(
     page: number,
     limit: number,
-    filter?: { status?: string },
+    viewerUserId: number,
+    filter?: StreamListFilter,
   ): Promise<{ items: Stream[]; total: number }> {
-    const filtered = this.listFiltered(filter)
+    const filtered = this.listFiltered(viewerUserId, filter)
     const offset = (page - 1) * limit
     return {
       items: filtered.slice(offset, offset + limit),
@@ -52,17 +101,14 @@ export class StreamsRepository {
     }
   }
 
-  async create(params: {
-    userId: number
-    name: string
-    description?: string
-  }): Promise<Stream> {
+  async create(params: StreamCreateParams): Promise<Stream> {
     const stream: Stream = {
       id: this.nextId++,
       userId: params.userId,
       name: params.name,
       description: params.description ?? null,
       status: "inactive",
+      visibility: params.visibility ?? "private",
       createdAt: new Date(),
       updatedAt: new Date(),
     }
@@ -70,16 +116,16 @@ export class StreamsRepository {
     return stream
   }
 
-  async update(
-    id: number,
-    changes: { name?: string; description?: string; status?: string },
-  ): Promise<Stream> {
+  async update(id: number, changes: StreamUpdateChanges): Promise<Stream> {
     const stream = this.streamsById.get(id)!
     if (changes.name !== undefined) stream.name = changes.name
     if (changes.description !== undefined)
       stream.description = changes.description
     if (changes.status !== undefined) {
       stream.status = changes.status as Stream["status"]
+    }
+    if (changes.visibility !== undefined) {
+      stream.visibility = changes.visibility
     }
     stream.updatedAt = new Date()
     return stream

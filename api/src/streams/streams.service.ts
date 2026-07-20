@@ -4,9 +4,15 @@ import {
   NotFoundException,
 } from "@nestjs/common"
 import { PaginatedResult } from "../common/dto/pagination.dto"
-import { StreamAnalyticsDto } from "./dto/stream-analytics.dto"
+import type {
+  StreamListFilter,
+  StreamUpdateChanges,
+  StreamCreateParams,
+} from "./repository/streams.repository"
 import { StreamsRepository } from "./repository/streams.repository"
+import { StreamAnalyticsDto } from "./dto/stream-analytics.dto"
 import { Stream } from "./stream.entity"
+import type { StreamVisibility } from "./dto/visibility"
 
 export interface PagedStreams extends PaginatedResult<Stream> {
   hasMore: boolean
@@ -16,26 +22,38 @@ export interface PagedStreams extends PaginatedResult<Stream> {
 export class StreamsService {
   constructor(private readonly repo: StreamsRepository) {}
 
-  async create(dto: {
-    userId: number
-    name: string
-    description?: string
-  }): Promise<Stream> {
+  async create(params: StreamCreateParams): Promise<Stream> {
     return this.repo.create({
-      userId: dto.userId,
-      name: dto.name.trim(),
-      description: dto.description?.trim(),
+      userId: params.userId,
+      name: params.name.trim(),
+      description: params.description?.trim(),
+      visibility: params.visibility,
     })
   }
 
+  /**
+   * Paginated listing filtered for the caller's visibility rules:
+   *   - public streams are visible to every authenticated user;
+   *   - private streams are visible only to their owner.
+   *
+   * Pass {@link StreamListFilter.ownerOnly} to restrict the result to
+   * the caller's own streams regardless of visibility (useful for a
+   * "my streams" tab). Pass {@link StreamListFilter.visibility} to
+   * narrow the visible-to-caller set further.
+   */
   async list(
     page: number,
     limit: number,
-    filter?: { status?: string },
+    viewerUserId: number,
+    filter?: StreamListFilter,
   ): Promise<PagedStreams> {
+    if (!Number.isInteger(viewerUserId) || viewerUserId <= 0) {
+      throw new NotFoundException("invalid viewer")
+    }
     const { items, total } = await this.repo.listPaginated(
       page,
       limit,
+      viewerUserId,
       filter,
     )
     return {
@@ -55,10 +73,7 @@ export class StreamsService {
     return stream
   }
 
-  async update(
-    id: number,
-    changes: { name?: string; description?: string; status?: string },
-  ): Promise<Stream> {
+  async update(id: number, changes: StreamUpdateChanges): Promise<Stream> {
     const stream = await this.findById(id)
 
     // Validate status transitions before hitting the DB.
@@ -70,6 +85,7 @@ export class StreamsService {
       name: changes.name?.trim(),
       description: changes.description?.trim(),
       status: changes.status,
+      visibility: changes.visibility,
     })
   }
 
@@ -107,3 +123,7 @@ export class StreamsService {
     }
   }
 }
+
+// Re-export the visibility type so callers don't have to import from
+// two places when they want a fully-typed service contract.
+export type { StreamVisibility }

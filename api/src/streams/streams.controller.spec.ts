@@ -60,21 +60,45 @@ describe("StreamsController", () => {
   })
 
   it("create delegates to service with auth userId", async () => {
-    const dto = { name: "s", description: "d" }
+    const dto = { name: "s", description: "d", visibility: "public" as const }
     const req = { auth: { userId: 7 } } as Request & { auth: { userId: number } }
     const expected = { id: 1 }
     mockService.create.mockResolvedValue(expected)
 
     const res = await controller.create(dto as CreateStreamDto, req)
     expect(res).toBe(expected)
-    expect(mockService.create).toHaveBeenCalledWith({ userId: 7, name: dto.name, description: dto.description })
+    expect(mockService.create).toHaveBeenCalledWith({
+      userId: 7,
+      name: dto.name,
+      description: dto.description,
+      visibility: "public",
+    })
   })
 
-  it("list delegates to service with defaults", async () => {
+  it("list delegates to service with viewerUserId, status, visibility, and ownerOnly defaults", async () => {
     mockService.list.mockResolvedValue({ data: [], page: 1, limit: 20, total: 0, hasMore: false })
-    const res = await controller.list({})
-    expect(mockService.list).toHaveBeenCalledWith(1, 20, { status: undefined })
+    const req = { auth: { userId: 9 } } as Request & { auth: { userId: number } }
+    const res = await controller.list({}, req)
+    expect(mockService.list).toHaveBeenCalledWith(1, 20, 9, {
+      status: undefined,
+      visibility: undefined,
+      ownerOnly: undefined,
+    })
     expect(res.data).toBeDefined()
+  })
+
+  it("list forwards visibility and ownerOnly flags", async () => {
+    mockService.list.mockResolvedValue({ data: [], page: 1, limit: 20, total: 0, hasMore: false })
+    const req = { auth: { userId: 9 } } as Request & { auth: { userId: number } }
+    await controller.list(
+      { visibility: "private", ownerOnly: true, status: "active", page: 2, limit: 50 },
+      req,
+    )
+    expect(mockService.list).toHaveBeenCalledWith(2, 50, 9, {
+      status: "active",
+      visibility: "private",
+      ownerOnly: true,
+    })
   })
 
   it("findById delegates to service", async () => {
@@ -85,7 +109,7 @@ describe("StreamsController", () => {
   })
 
   it("getAnalytics returns cached analytics when available", async () => {
-    const cached = { streamId: 5, totalEventsProcessed: { last24h: 1, last7d: 2, last30d: 3 } }
+    const cached = { streamId: 5, totalEventsProcessed: { last24h: 1, last7d: 2, last30d: 3 } } as unknown as Awaited<ReturnType<typeof controller.getAnalytics>>
     mockCache.get.mockResolvedValue(cached)
 
     const res = await controller.getAnalytics(5)

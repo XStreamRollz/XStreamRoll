@@ -43,7 +43,7 @@ const STREAM_ANALYTICS_CACHE_TTL_MS = 60_000
  * Full CRUD for streams.
  *
  *   POST   /streams          Create a new stream (auth required)
- *   GET    /streams          List streams (auth required, paginated)
+ *   GET    /streams          List streams visible to the caller (auth-required, paginated)
  *   GET    /streams/:id      Get a single stream (ownership required)
  *   PATCH  /streams/:id      Update stream details (ownership required)
  *   DELETE /streams/:id      Delete a stream (ownership required)
@@ -58,6 +58,7 @@ export class StreamsController {
 
   /**
    * Create a new stream. The authenticated user becomes the owner.
+   * Visibility defaults to "private" unless the body sets it.
    */
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -65,7 +66,8 @@ export class StreamsController {
   @ApiBearerAuth("bearer")
   @ApiOperation({
     summary: "Create a new stream",
-    description: "Creates a new stream with the authenticated user as owner.",
+    description:
+      "Creates a new stream with the authenticated user as owner. `visibility` defaults to \"private\" when omitted.",
   })
   @ApiCreatedResponse({ description: "Stream created successfully." })
   @ApiUnauthorizedResponse({ description: "Authentication required." })
@@ -77,11 +79,19 @@ export class StreamsController {
       userId: req.auth!.userId,
       name: body.name,
       description: body.description,
+      visibility: body.visibility,
     })
   }
 
   /**
-   * List all streams with optional status filter and pagination.
+   * List streams visible to the caller, sorted newest-first.
+   *
+   * Visibility rules:
+   *   - public streams are returned to every authenticated user;
+   *   - private streams are returned only to their owner;
+   *   - `visibility` narrows the visible-to-caller set further;
+   *   - `ownerOnly=true` restricts the result to streams the caller
+   *     owns, regardless of visibility.
    */
   @Get()
   @UseGuards(AuthGuard)
@@ -89,15 +99,20 @@ export class StreamsController {
   @ApiOperation({
     summary: "List streams",
     description:
-      "Returns a paginated list of streams with optional status filter.",
+      "Returns a paginated list of streams visible to the caller. Public streams are returned to every authenticated user; private streams are returned only to their owner. Use `visibility` and `ownerOnly` to narrow further.",
   })
   @ApiOkResponse({ description: "Paginated list of streams." })
   @ApiUnauthorizedResponse({ description: "Authentication required." })
-  list(@Query() query: ListStreamsQueryDto) {
+  list(
+    @Query() query: ListStreamsQueryDto,
+    @Req() req: Request & { auth?: { userId: number } },
+  ) {
     const page = query.page ?? 1
     const limit = query.limit ?? 20
-    return this.streamsService.list(page, limit, {
+    return this.streamsService.list(page, limit, req.auth!.userId, {
       status: query.status,
+      visibility: query.visibility,
+      ownerOnly: query.ownerOnly,
     })
   }
 
@@ -150,7 +165,7 @@ export class StreamsController {
   }
 
   /**
-   * Update stream details (name, description, status).
+   * Update stream details (name, description, status, visibility).
    * Requires stream ownership.
    */
   @Patch(":id")
@@ -158,7 +173,8 @@ export class StreamsController {
   @ApiBearerAuth("bearer")
   @ApiOperation({
     summary: "Update a stream",
-    description: "Partially updates a stream. Requires ownership.",
+    description:
+      "Partially updates a stream. Supports flipping visibility between 'public' and 'private'. Requires ownership.",
   })
   @ApiOkResponse({ description: "Stream updated." })
   @ApiNotFoundResponse({ description: "Stream not found." })
