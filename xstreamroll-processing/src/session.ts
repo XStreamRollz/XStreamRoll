@@ -1,11 +1,7 @@
 import { EventEmitter } from "events"
 
 export type SessionState =
-  | "idle"
-  | "running"
-  | "draining"
-  | "stopped"
-  | "errored"
+  "idle" | "running" | "draining" | "stopped" | "errored"
 
 export interface StreamEvent {
   streamId: string

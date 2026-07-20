@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common"
 import { Test, TestingModule } from "@nestjs/testing"
+
 import { TagsRepository } from "./repository/tags.repository"
 import { Tag } from "./tag.entity"
 import { TagsService } from "./tags.service"
@@ -28,10 +29,7 @@ describe("TagsService", () => {
     } as unknown as jest.Mocked<TagsRepository>
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        TagsService,
-        { provide: TagsRepository, useValue: mockRepo },
-      ],
+      providers: [TagsService, { provide: TagsRepository, useValue: mockRepo }],
     }).compile()
 
     service = module.get(TagsService)
@@ -81,7 +79,10 @@ describe("TagsService", () => {
 
       const result = await service.attachToStream(1, "Live Streaming")
 
-      expect(repo.upsertBySlug).toHaveBeenCalledWith("Live Streaming", "live-streaming")
+      expect(repo.upsertBySlug).toHaveBeenCalledWith(
+        "Live Streaming",
+        "live-streaming",
+      )
       expect(repo.attachToStream).toHaveBeenCalledWith(1, tag.id)
       expect(result).toEqual(tag)
     })
@@ -112,11 +113,16 @@ describe("TagsService", () => {
 
       await service.attachToStream(1, "  Live Streaming  ")
 
-      expect(repo.upsertBySlug).toHaveBeenCalledWith("Live Streaming", "live-streaming")
+      expect(repo.upsertBySlug).toHaveBeenCalledWith(
+        "Live Streaming",
+        "live-streaming",
+      )
     })
 
     it("throws BadRequestException for empty name", async () => {
-      await expect(service.attachToStream(1, "")).rejects.toThrow(BadRequestException)
+      await expect(service.attachToStream(1, "")).rejects.toThrow(
+        BadRequestException,
+      )
     })
 
     it("throws BadRequestException for non-alphanumeric name", async () => {
@@ -147,8 +153,12 @@ describe("TagsService", () => {
     it("throws NotFoundException when the tag does not exist", async () => {
       repo.findById.mockResolvedValue(undefined)
 
-      await expect(service.detachFromStream(1, 99)).rejects.toThrow(NotFoundException)
-      await expect(service.detachFromStream(1, 99)).rejects.toThrow("tag 99 not found")
+      await expect(service.detachFromStream(1, 99)).rejects.toThrow(
+        NotFoundException,
+      )
+      await expect(service.detachFromStream(1, 99)).rejects.toThrow(
+        "tag 99 not found",
+      )
     })
 
     it("throws NotFoundException when tag is not attached to the stream", async () => {
@@ -156,7 +166,9 @@ describe("TagsService", () => {
       repo.findById.mockResolvedValue(tag)
       repo.detachFromStream.mockResolvedValue(false)
 
-      await expect(service.detachFromStream(1, 7)).rejects.toThrow(NotFoundException)
+      await expect(service.detachFromStream(1, 7)).rejects.toThrow(
+        NotFoundException,
+      )
       await expect(service.detachFromStream(1, 7)).rejects.toThrow(
         "tag 7 is not attached to stream 1",
       )

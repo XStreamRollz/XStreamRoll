@@ -46,7 +46,10 @@ function safeParse(raw: string): CurrentUser | null {
     const obj = JSON.parse(decoded) as Partial<CurrentUser>
     if (typeof obj?.id !== "string") return null
     if (!Array.isArray(obj.roles)) return null
-    return { id: obj.id, roles: obj.roles.filter((r): r is string => typeof r === "string") }
+    return {
+      id: obj.id,
+      roles: obj.roles.filter((r): r is string => typeof r === "string"),
+    }
   } catch {
     return null
   }

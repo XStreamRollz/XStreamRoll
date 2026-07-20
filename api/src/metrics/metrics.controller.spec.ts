@@ -1,12 +1,22 @@
 import { Test, TestingModule } from "@nestjs/testing"
-import { MetricsController } from "./metrics.controller"
-import { MetricsService } from "./metrics.service"
 import { Response } from "express"
 
-function makeRes(): { res: Response & { _headers: Record<string, string>; _body: string }; setHeader: jest.Mock; end: jest.Mock } {
+import { MetricsController } from "./metrics.controller"
+import { MetricsService } from "./metrics.service"
+
+function makeRes(): {
+  res: Response & { _headers: Record<string, string>; _body: string }
+  setHeader: jest.Mock
+  end: jest.Mock
+} {
   const setHeader = jest.fn()
   const end = jest.fn()
-  const res = { setHeader, end, _headers: {}, _body: "" } as unknown as Response & { _headers: Record<string, string>; _body: string }
+  const res = {
+    setHeader,
+    end,
+    _headers: {},
+    _body: "",
+  } as unknown as Response & { _headers: Record<string, string>; _body: string }
   return { res, setHeader, end }
 }
 
@@ -16,7 +26,11 @@ describe("MetricsController", () => {
 
   beforeEach(async () => {
     metricsService = {
-      getMetrics: jest.fn().mockResolvedValue("# HELP http_requests_total\nhttp_requests_total 0\n"),
+      getMetrics: jest
+        .fn()
+        .mockResolvedValue(
+          "# HELP http_requests_total\nhttp_requests_total 0\n",
+        ),
       contentType: "text/plain; version=0.0.4; charset=utf-8",
     }
 

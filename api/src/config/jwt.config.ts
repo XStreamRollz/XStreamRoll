@@ -1,10 +1,14 @@
-import { JwtModuleOptions } from "@nestjs/jwt"
 import { randomBytes } from "crypto"
+
+import { JwtModuleOptions } from "@nestjs/jwt"
+
 import { env } from "./env"
 
 export const JWT_ACCESS_TOKEN_EXPIRES_IN = "15m"
 
-export function createJwtConfig(expiresIn = JWT_ACCESS_TOKEN_EXPIRES_IN): JwtModuleOptions {
+export function createJwtConfig(
+  expiresIn = JWT_ACCESS_TOKEN_EXPIRES_IN,
+): JwtModuleOptions {
   const secret = process.env.JWT_SECRET ?? env.JWT_SECRET
 
   if (!secret) {

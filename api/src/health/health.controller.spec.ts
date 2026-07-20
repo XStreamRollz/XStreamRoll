@@ -1,13 +1,17 @@
 import { ServiceUnavailableException } from "@nestjs/common"
-import { Test, TestingModule } from "@nestjs/testing"
 import { HealthCheckService } from "@nestjs/terminus"
+import { Test, TestingModule } from "@nestjs/testing"
+
 import { DatabaseHealthIndicator } from "./database.health-indicator"
 import { HealthController } from "./health.controller"
 import { MemoryHealthIndicator } from "./memory.health-indicator"
 
 const mockHealthCheckService = { check: jest.fn() }
 const mockDatabaseHealthIndicator = { isHealthy: jest.fn() }
-const mockMemoryHealthIndicator = { checkHeap: jest.fn(), checkEventLoopLag: jest.fn() }
+const mockMemoryHealthIndicator = {
+  checkHeap: jest.fn(),
+  checkEventLoopLag: jest.fn(),
+}
 
 describe("HealthController", () => {
   let controller: HealthController
@@ -19,7 +23,10 @@ describe("HealthController", () => {
       controllers: [HealthController],
       providers: [
         { provide: HealthCheckService, useValue: mockHealthCheckService },
-        { provide: DatabaseHealthIndicator, useValue: mockDatabaseHealthIndicator },
+        {
+          provide: DatabaseHealthIndicator,
+          useValue: mockDatabaseHealthIndicator,
+        },
         { provide: MemoryHealthIndicator, useValue: mockMemoryHealthIndicator },
       ],
     }).compile()
@@ -39,7 +46,9 @@ describe("HealthController", () => {
 
     it("returns ok even when the database is unreachable", () => {
       // Simulate a broken DB indicator — liveness must not call it at all.
-      mockDatabaseHealthIndicator.isHealthy.mockRejectedValue(new Error("DB down"))
+      mockDatabaseHealthIndicator.isHealthy.mockRejectedValue(
+        new Error("DB down"),
+      )
 
       const result = controller.checkLiveness()
       expect(result.status).toBe("ok")
@@ -69,19 +78,29 @@ describe("HealthController", () => {
     it("throws ServiceUnavailableException when the DB check fails", async () => {
       mockHealthCheckService.check.mockRejectedValue(new Error("DB down"))
 
-      await expect(controller.check()).rejects.toBeInstanceOf(ServiceUnavailableException)
+      await expect(controller.check()).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      )
     })
 
     it("throws ServiceUnavailableException when the memory check fails", async () => {
-      mockHealthCheckService.check.mockRejectedValue(new Error("Heap threshold exceeded"))
+      mockHealthCheckService.check.mockRejectedValue(
+        new Error("Heap threshold exceeded"),
+      )
 
-      await expect(controller.check()).rejects.toBeInstanceOf(ServiceUnavailableException)
+      await expect(controller.check()).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      )
     })
 
     it("throws ServiceUnavailableException when the event loop lag check fails", async () => {
-      mockHealthCheckService.check.mockRejectedValue(new Error("Event loop lag too high"))
+      mockHealthCheckService.check.mockRejectedValue(
+        new Error("Event loop lag too high"),
+      )
 
-      await expect(controller.check()).rejects.toBeInstanceOf(ServiceUnavailableException)
+      await expect(controller.check()).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      )
     })
   })
 })

@@ -72,7 +72,7 @@ spec:
               containerPort: 3002
           envFrom:
             - configMapRef:
-                  name: processing-config
+                name: processing-config
           # Readiness: returns 503 as soon as the worker begins
           # shutting down, so the in-cluster Service removes this pod
           # before the loop dies.

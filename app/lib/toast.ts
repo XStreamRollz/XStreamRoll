@@ -13,7 +13,6 @@
  * Centralising the import also means we can swap implementations
  * later (e.g. to `react-hot-toast`) without touching call sites.
  */
-
 import { toast as sonnerToast } from "sonner"
 
 type ToastVariant = "default" | "destructive" | "success" | "info" | "warning"
@@ -35,27 +34,45 @@ function show(options: ToastOptions | string): string | number {
 
   switch (variant) {
     case "destructive":
-      return sonnerToast.error(message, { description: fullDescription, duration })
+      return sonnerToast.error(message, {
+        description: fullDescription,
+        duration,
+      })
     case "success":
-      return sonnerToast.success(message, { description: fullDescription, duration })
+      return sonnerToast.success(message, {
+        description: fullDescription,
+        duration,
+      })
     case "info":
-      return sonnerToast.info(message, { description: fullDescription, duration })
+      return sonnerToast.info(message, {
+        description: fullDescription,
+        duration,
+      })
     case "warning":
-      return sonnerToast.warning(message, { description: fullDescription, duration })
+      return sonnerToast.warning(message, {
+        description: fullDescription,
+        duration,
+      })
     default:
       return sonnerToast(message, { description: fullDescription, duration })
   }
 }
 
 export const toast = Object.assign(show, {
-  success: (message: string, opts: Omit<ToastOptions, "variant" | "title"> = {}) =>
-    sonnerToast.success(message, opts),
-  error: (message: string, opts: Omit<ToastOptions, "variant" | "title"> = {}) =>
-    sonnerToast.error(message, opts),
+  success: (
+    message: string,
+    opts: Omit<ToastOptions, "variant" | "title"> = {},
+  ) => sonnerToast.success(message, opts),
+  error: (
+    message: string,
+    opts: Omit<ToastOptions, "variant" | "title"> = {},
+  ) => sonnerToast.error(message, opts),
   info: (message: string, opts: Omit<ToastOptions, "variant" | "title"> = {}) =>
     sonnerToast.info(message, opts),
-  warning: (message: string, opts: Omit<ToastOptions, "variant" | "title"> = {}) =>
-    sonnerToast.warning(message, opts),
+  warning: (
+    message: string,
+    opts: Omit<ToastOptions, "variant" | "title"> = {},
+  ) => sonnerToast.warning(message, opts),
   dismiss: (id?: string | number) => sonnerToast.dismiss(id),
 })
 

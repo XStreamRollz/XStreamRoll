@@ -1,16 +1,261 @@
-import * as React from 'react'
-import { render } from '@testing-library/react'
-import { buildThemeTest } from '@/lib/test-utils'
-import { useIsMobile } from '@/hooks/use-mobile'
+import { render } from "@testing-library/react"
+import * as React from "react"
+// ---------------------------------------------------------------------------
+// Form Components (require react-hook-form context)
+// ---------------------------------------------------------------------------
+
+import { useForm } from "react-hook-form"
+// ---------------------------------------------------------------------------
+// Chart Component (requires recharts)
+// ---------------------------------------------------------------------------
+
+import * as RechartsPrimitive from "recharts"
+
+import { useIsMobile } from "@/hooks/use-mobile"
+import { buildThemeTest } from "@/lib/test-utils"
+
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "./accordion"
+import { Alert, AlertDescription, AlertTitle } from "./alert"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "./alert-dialog"
+import { AspectRatio } from "./aspect-ratio"
+import { Avatar, AvatarFallback } from "./avatar"
+// ChartTooltipContent and ChartLegendContent are internal components that
+// must be used within a ChartContainer + recharts chart context.
+// They are implicitly tested by the main Chart test above.
+
+// ---------------------------------------------------------------------------
+// Imports (kept at bottom to avoid hoisting issues)
+// ---------------------------------------------------------------------------
+
+import { Badge } from "./badge"
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "./breadcrumb"
+import { Button } from "./button"
+import { ButtonGroup } from "./button-group"
+import { Calendar } from "./calendar"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "./card"
+import { Carousel, CarouselContent, CarouselItem } from "./carousel"
+import { ChartContainer } from "./chart"
+import { Checkbox } from "./checkbox"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "./collapsible"
+import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "./command"
+import { ConfirmDialog } from "./confirm-dialog"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "./context-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./dialog"
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from "./drawer"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "./dropdown-menu"
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "./empty"
+import { Field, FieldContent, FieldDescription, FieldLabel } from "./field"
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "./form"
+import { HoverCard, HoverCardContent } from "./hover-card"
+import { Input } from "./input"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+  InputGroupText,
+} from "./input-group"
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSeparator,
+  InputOTPSlot,
+} from "./input-otp"
+import {
+  Item,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemTitle,
+} from "./item"
+import { Kbd, KbdGroup } from "./kbd"
+import { Label } from "./label"
+import {
+  Menubar,
+  MenubarContent,
+  MenubarItem,
+  MenubarMenu,
+  MenubarSeparator,
+  MenubarTrigger,
+} from "./menubar"
+import {
+  NavigationMenu,
+  NavigationMenuContent,
+  NavigationMenuItem,
+  NavigationMenuLink,
+  NavigationMenuList,
+  NavigationMenuTrigger,
+} from "./navigation-menu"
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "./pagination"
+import { Popover, PopoverContent } from "./popover"
+import { Progress } from "./progress"
+import { RadioGroup, RadioGroupItem } from "./radio-group"
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "./resizable"
+import { ScrollArea } from "./scroll-area"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectSeparator,
+} from "./select"
+import { Separator } from "./separator"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "./sheet"
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInput,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger,
+} from "./sidebar"
+import { Skeleton } from "./skeleton"
+import { Slider } from "./slider"
+import { Toaster } from "./sonner"
+import { Spinner } from "./spinner"
+import { Switch } from "./switch"
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./tabs"
+import { Textarea } from "./textarea"
+import {
+  Toast,
+  ToastAction,
+  ToastClose,
+  ToastDescription,
+  ToastProvider,
+  ToastTitle,
+  ToastViewport,
+} from "./toast"
+import { Toggle } from "./toggle"
+import { ToggleGroup, ToggleGroupItem } from "./toggle-group"
+import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip"
 
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
 
-const mockTheme = { current: 'light' as string }
+const mockTheme = { current: "light" as string }
 
-jest.mock('next-themes', () => ({
-  ThemeProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+jest.mock("next-themes", () => ({
+  ThemeProvider: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
   useTheme: () => ({ theme: mockTheme.current, setTheme: jest.fn() }),
 }))
 
@@ -23,13 +268,13 @@ const mockEmblaApi = {
   off: jest.fn(),
 }
 
-jest.mock('embla-carousel-react', () => ({
+jest.mock("embla-carousel-react", () => ({
   __esModule: true,
   default: () => [jest.fn(), mockEmblaApi],
 }))
 
 beforeEach(() => {
-  mockTheme.current = 'light'
+  mockTheme.current = "light"
   ;(useIsMobile as jest.Mock).mockReturnValue(false)
 })
 
@@ -37,36 +282,53 @@ beforeEach(() => {
 // Simple / Atomic Components
 // ---------------------------------------------------------------------------
 
-buildThemeTest('Badge', () => <Badge>Default</Badge>)
-buildThemeTest('Badge (secondary)', () => <Badge variant="secondary">Secondary</Badge>)
-buildThemeTest('Badge (destructive)', () => <Badge variant="destructive">Destructive</Badge>)
-buildThemeTest('Badge (outline)', () => <Badge variant="outline">Outline</Badge>)
-buildThemeTest('Button', () => <Button>Click</Button>)
-buildThemeTest('Button (destructive)', () => <Button variant="destructive">Delete</Button>)
-buildThemeTest('Button (outline)', () => <Button variant="outline">Outline</Button>)
-buildThemeTest('Button (secondary)', () => <Button variant="secondary">Secondary</Button>)
-buildThemeTest('Button (ghost)', () => <Button variant="ghost">Ghost</Button>)
-buildThemeTest('Button (link)', () => <Button variant="link">Link</Button>)
-buildThemeTest('Input', () => <Input placeholder="Enter text" />)
-buildThemeTest('Textarea', () => <Textarea placeholder="Enter text" />)
-buildThemeTest('Label', () => <Label>Field Label</Label>)
-buildThemeTest('Kbd', () => <Kbd>Ctrl+K</Kbd>)
-buildThemeTest('KbdGroup', () => <KbdGroup><Kbd>⌘</Kbd><Kbd>K</Kbd></KbdGroup>)
-buildThemeTest('Skeleton', () => <Skeleton className="h-4 w-12" />)
-buildThemeTest('Spinner', () => <Spinner />)
-buildThemeTest('Separator', () => <Separator />)
-buildThemeTest('Toggle', () => <Toggle>Toggle</Toggle>)
-buildThemeTest('Checkbox', () => <Checkbox />)
-buildThemeTest('Switch', () => <Switch />)
-buildThemeTest('Slider', () => <Slider defaultValue={[50]} />)
-buildThemeTest('Progress', () => <Progress value={60} />)
-buildThemeTest('Calendar', () => <Calendar mode="single" />)
-buildThemeTest('AspectRatio', () => (
+buildThemeTest("Badge", () => <Badge>Default</Badge>)
+buildThemeTest("Badge (secondary)", () => (
+  <Badge variant="secondary">Secondary</Badge>
+))
+buildThemeTest("Badge (destructive)", () => (
+  <Badge variant="destructive">Destructive</Badge>
+))
+buildThemeTest("Badge (outline)", () => (
+  <Badge variant="outline">Outline</Badge>
+))
+buildThemeTest("Button", () => <Button>Click</Button>)
+buildThemeTest("Button (destructive)", () => (
+  <Button variant="destructive">Delete</Button>
+))
+buildThemeTest("Button (outline)", () => (
+  <Button variant="outline">Outline</Button>
+))
+buildThemeTest("Button (secondary)", () => (
+  <Button variant="secondary">Secondary</Button>
+))
+buildThemeTest("Button (ghost)", () => <Button variant="ghost">Ghost</Button>)
+buildThemeTest("Button (link)", () => <Button variant="link">Link</Button>)
+buildThemeTest("Input", () => <Input placeholder="Enter text" />)
+buildThemeTest("Textarea", () => <Textarea placeholder="Enter text" />)
+buildThemeTest("Label", () => <Label>Field Label</Label>)
+buildThemeTest("Kbd", () => <Kbd>Ctrl+K</Kbd>)
+buildThemeTest("KbdGroup", () => (
+  <KbdGroup>
+    <Kbd>⌘</Kbd>
+    <Kbd>K</Kbd>
+  </KbdGroup>
+))
+buildThemeTest("Skeleton", () => <Skeleton className="h-4 w-12" />)
+buildThemeTest("Spinner", () => <Spinner />)
+buildThemeTest("Separator", () => <Separator />)
+buildThemeTest("Toggle", () => <Toggle>Toggle</Toggle>)
+buildThemeTest("Checkbox", () => <Checkbox />)
+buildThemeTest("Switch", () => <Switch />)
+buildThemeTest("Slider", () => <Slider defaultValue={[50]} />)
+buildThemeTest("Progress", () => <Progress value={60} />)
+buildThemeTest("Calendar", () => <Calendar mode="single" />)
+buildThemeTest("AspectRatio", () => (
   <AspectRatio ratio={16 / 9}>
     <div className="flex h-full items-center justify-center bg-muted">16:9</div>
   </AspectRatio>
 ))
-buildThemeTest('ScrollArea', () => (
+buildThemeTest("ScrollArea", () => (
   <ScrollArea className="h-20 w-40">
     <div className="p-2">Scroll content</div>
   </ScrollArea>
@@ -76,7 +338,7 @@ buildThemeTest('ScrollArea', () => (
 // Layout Components
 // ---------------------------------------------------------------------------
 
-buildThemeTest('Card', () => (
+buildThemeTest("Card", () => (
   <Card>
     <CardHeader>
       <CardTitle>Card Title</CardTitle>
@@ -87,7 +349,7 @@ buildThemeTest('Card', () => (
   </Card>
 ))
 
-buildThemeTest('Table', () => (
+buildThemeTest("Table", () => (
   <Table>
     <TableCaption>List of items</TableCaption>
     <TableHeader>
@@ -111,7 +373,7 @@ buildThemeTest('Table', () => (
   </Table>
 ))
 
-buildThemeTest('Item', () => (
+buildThemeTest("Item", () => (
   <ItemGroup>
     <Item>
       <ItemContent>
@@ -122,7 +384,7 @@ buildThemeTest('Item', () => (
   </ItemGroup>
 ))
 
-buildThemeTest('Empty', () => (
+buildThemeTest("Empty", () => (
   <Empty>
     <EmptyHeader>
       <EmptyMedia variant="icon" />
@@ -133,7 +395,7 @@ buildThemeTest('Empty', () => (
   </Empty>
 ))
 
-buildThemeTest('Field', () => (
+buildThemeTest("Field", () => (
   <Field orientation="vertical">
     <FieldLabel>Username</FieldLabel>
     <FieldContent>
@@ -147,7 +409,7 @@ buildThemeTest('Field', () => (
 // Interactive / Compound Components
 // ---------------------------------------------------------------------------
 
-buildThemeTest('Accordion', () => (
+buildThemeTest("Accordion", () => (
   <Accordion type="single" collapsible>
     <AccordionItem value="item-1">
       <AccordionTrigger>Section One</AccordionTrigger>
@@ -160,21 +422,21 @@ buildThemeTest('Accordion', () => (
   </Accordion>
 ))
 
-buildThemeTest('Alert', () => (
+buildThemeTest("Alert", () => (
   <Alert>
     <AlertTitle>Attention</AlertTitle>
     <AlertDescription>This is an alert message.</AlertDescription>
   </Alert>
 ))
 
-buildThemeTest('Alert (destructive)', () => (
+buildThemeTest("Alert (destructive)", () => (
   <Alert variant="destructive">
     <AlertTitle>Error</AlertTitle>
     <AlertDescription>Something went wrong.</AlertDescription>
   </Alert>
 ))
 
-buildThemeTest('AlertDialog', () => (
+buildThemeTest("AlertDialog", () => (
   <AlertDialog open>
     <AlertDialogContent>
       <AlertDialogHeader>
@@ -189,13 +451,13 @@ buildThemeTest('AlertDialog', () => (
   </AlertDialog>
 ))
 
-buildThemeTest('Avatar', () => (
+buildThemeTest("Avatar", () => (
   <Avatar>
     <AvatarFallback>JD</AvatarFallback>
   </Avatar>
 ))
 
-buildThemeTest('Breadcrumb', () => (
+buildThemeTest("Breadcrumb", () => (
   <Breadcrumb>
     <BreadcrumbList>
       <BreadcrumbItem>
@@ -213,7 +475,7 @@ buildThemeTest('Breadcrumb', () => (
   </Breadcrumb>
 ))
 
-buildThemeTest('ButtonGroup', () => (
+buildThemeTest("ButtonGroup", () => (
   <ButtonGroup>
     <Button>Left</Button>
     <Button>Center</Button>
@@ -221,14 +483,14 @@ buildThemeTest('ButtonGroup', () => (
   </ButtonGroup>
 ))
 
-buildThemeTest('Collapsible', () => (
+buildThemeTest("Collapsible", () => (
   <Collapsible>
     <CollapsibleTrigger>Toggle</CollapsibleTrigger>
     <CollapsibleContent>Collapsible content</CollapsibleContent>
   </Collapsible>
 ))
 
-buildThemeTest('ConfirmDialog', () => (
+buildThemeTest("ConfirmDialog", () => (
   <ConfirmDialog
     title="Delete item"
     description="This action cannot be undone."
@@ -237,7 +499,7 @@ buildThemeTest('ConfirmDialog', () => (
   />
 ))
 
-buildThemeTest('Dialog', () => (
+buildThemeTest("Dialog", () => (
   <Dialog open>
     <DialogContent>
       <DialogHeader>
@@ -249,7 +511,7 @@ buildThemeTest('Dialog', () => (
   </Dialog>
 ))
 
-buildThemeTest('Drawer', () => (
+buildThemeTest("Drawer", () => (
   <Drawer open>
     <DrawerContent>
       <DrawerHeader>
@@ -261,7 +523,7 @@ buildThemeTest('Drawer', () => (
   </Drawer>
 ))
 
-buildThemeTest('DropdownMenu', () => (
+buildThemeTest("DropdownMenu", () => (
   <DropdownMenu open>
     <DropdownMenuContent>
       <DropdownMenuItem>Profile</DropdownMenuItem>
@@ -272,13 +534,13 @@ buildThemeTest('DropdownMenu', () => (
   </DropdownMenu>
 ))
 
-buildThemeTest('HoverCard', () => (
+buildThemeTest("HoverCard", () => (
   <HoverCard open>
     <HoverCardContent>Hover card content</HoverCardContent>
   </HoverCard>
 ))
 
-buildThemeTest('Menubar', () => (
+buildThemeTest("Menubar", () => (
   <Menubar>
     <MenubarMenu>
       <MenubarTrigger>File</MenubarTrigger>
@@ -292,7 +554,7 @@ buildThemeTest('Menubar', () => (
   </Menubar>
 ))
 
-buildThemeTest('NavigationMenu', () => (
+buildThemeTest("NavigationMenu", () => (
   <NavigationMenu>
     <NavigationMenuList>
       <NavigationMenuItem>
@@ -305,7 +567,7 @@ buildThemeTest('NavigationMenu', () => (
   </NavigationMenu>
 ))
 
-buildThemeTest('Pagination', () => (
+buildThemeTest("Pagination", () => (
   <Pagination>
     <PaginationContent>
       <PaginationItem>
@@ -315,7 +577,9 @@ buildThemeTest('Pagination', () => (
         <PaginationLink href="#">1</PaginationLink>
       </PaginationItem>
       <PaginationItem>
-        <PaginationLink href="#" isActive>2</PaginationLink>
+        <PaginationLink href="#" isActive>
+          2
+        </PaginationLink>
       </PaginationItem>
       <PaginationItem>
         <PaginationNext href="#" />
@@ -324,20 +588,20 @@ buildThemeTest('Pagination', () => (
   </Pagination>
 ))
 
-buildThemeTest('Popover', () => (
+buildThemeTest("Popover", () => (
   <Popover open>
     <PopoverContent>Popover content</PopoverContent>
   </Popover>
 ))
 
-buildThemeTest('RadioGroup', () => (
+buildThemeTest("RadioGroup", () => (
   <RadioGroup defaultValue="option-1">
     <RadioGroupItem value="option-1" />
     <RadioGroupItem value="option-2" />
   </RadioGroup>
 ))
 
-buildThemeTest('Select', () => (
+buildThemeTest("Select", () => (
   <Select open>
     <SelectContent>
       <SelectGroup>
@@ -350,7 +614,7 @@ buildThemeTest('Select', () => (
   </Select>
 ))
 
-buildThemeTest('Sheet', () => (
+buildThemeTest("Sheet", () => (
   <Sheet open>
     <SheetContent>
       <SheetHeader>
@@ -362,7 +626,7 @@ buildThemeTest('Sheet', () => (
   </Sheet>
 ))
 
-buildThemeTest('Tabs', () => (
+buildThemeTest("Tabs", () => (
   <Tabs defaultValue="tab-1">
     <TabsList>
       <TabsTrigger value="tab-1">Tab One</TabsTrigger>
@@ -373,21 +637,21 @@ buildThemeTest('Tabs', () => (
   </Tabs>
 ))
 
-buildThemeTest('ToggleGroup', () => (
+buildThemeTest("ToggleGroup", () => (
   <ToggleGroup type="single" defaultValue="a">
     <ToggleGroupItem value="a">A</ToggleGroupItem>
     <ToggleGroupItem value="b">B</ToggleGroupItem>
   </ToggleGroup>
 ))
 
-buildThemeTest('Tooltip', () => (
+buildThemeTest("Tooltip", () => (
   <Tooltip open>
     <TooltipTrigger>Hover me</TooltipTrigger>
     <TooltipContent>Tooltip text</TooltipContent>
   </Tooltip>
 ))
 
-buildThemeTest('Resizable', () => (
+buildThemeTest("Resizable", () => (
   <ResizablePanelGroup direction="horizontal">
     <ResizablePanel defaultSize={50}>Left panel</ResizablePanel>
     <ResizableHandle />
@@ -395,7 +659,7 @@ buildThemeTest('Resizable', () => (
   </ResizablePanelGroup>
 ))
 
-buildThemeTest('InputOTP', () => (
+buildThemeTest("InputOTP", () => (
   <InputOTP maxLength={6}>
     <InputOTPGroup>
       <InputOTPSlot index={0} />
@@ -411,7 +675,7 @@ buildThemeTest('InputOTP', () => (
   </InputOTP>
 ))
 
-buildThemeTest('InputGroup', () => (
+buildThemeTest("InputGroup", () => (
   <InputGroup>
     <InputGroupAddon align="inline-start">
       <InputGroupText>$</InputGroupText>
@@ -423,7 +687,7 @@ buildThemeTest('InputGroup', () => (
   </InputGroup>
 ))
 
-buildThemeTest('ContextMenu', () => (
+buildThemeTest("ContextMenu", () => (
   <ContextMenu>
     <ContextMenuTrigger>
       <div className="border p-8">Right-click area</div>
@@ -436,7 +700,7 @@ buildThemeTest('ContextMenu', () => (
   </ContextMenu>
 ))
 
-buildThemeTest('Carousel', () => (
+buildThemeTest("Carousel", () => (
   <Carousel>
     <CarouselContent>
       <CarouselItem>Slide 1</CarouselItem>
@@ -450,7 +714,7 @@ buildThemeTest('Carousel', () => (
 // Complex Custom Components
 // ---------------------------------------------------------------------------
 
-buildThemeTest('Command (with Dialog)', () => (
+buildThemeTest("Command (with Dialog)", () => (
   <CommandDialog open>
     <CommandInput placeholder="Search..." />
     <CommandList>
@@ -463,7 +727,7 @@ buildThemeTest('Command (with Dialog)', () => (
   </CommandDialog>
 ))
 
-buildThemeTest('Sidebar', () => (
+buildThemeTest("Sidebar", () => (
   <SidebarProvider defaultOpen>
     <Sidebar collapsible="none">
       <SidebarHeader>
@@ -494,7 +758,7 @@ buildThemeTest('Sidebar', () => (
   </SidebarProvider>
 ))
 
-buildThemeTest('Sidebar (collapsible icon)', () => (
+buildThemeTest("Sidebar (collapsible icon)", () => (
   <SidebarProvider defaultOpen>
     <Sidebar collapsible="icon">
       <SidebarHeader />
@@ -514,11 +778,9 @@ buildThemeTest('Sidebar (collapsible icon)', () => (
   </SidebarProvider>
 ))
 
-buildThemeTest('Toaster (sonner)', () => (
-  <Toaster />
-))
+buildThemeTest("Toaster (sonner)", () => <Toaster />)
 
-buildThemeTest('ToastProvider', () => (
+buildThemeTest("ToastProvider", () => (
   <ToastProvider>
     <ToastViewport />
     <Toast>
@@ -530,15 +792,7 @@ buildThemeTest('ToastProvider', () => (
   </ToastProvider>
 ))
 
-buildThemeTest('Toaster (custom)', () => (
-  <Toaster />
-))
-
-// ---------------------------------------------------------------------------
-// Form Components (require react-hook-form context)
-// ---------------------------------------------------------------------------
-
-import { useForm } from 'react-hook-form'
+buildThemeTest("Toaster (custom)", () => <Toaster />)
 
 function FormTestWrapper() {
   const form = useForm()
@@ -561,230 +815,16 @@ function FormTestWrapper() {
   )
 }
 
-buildThemeTest('Form', () => <FormTestWrapper />)
+buildThemeTest("Form", () => <FormTestWrapper />)
 
-// ---------------------------------------------------------------------------
-// Chart Component (requires recharts)
-// ---------------------------------------------------------------------------
-
-import * as RechartsPrimitive from 'recharts'
-
-buildThemeTest('Chart', () => (
+buildThemeTest("Chart", () => (
   <ChartContainer
     config={{
-      views: { label: 'Views', color: 'hsl(var(--chart-1))' },
+      views: { label: "Views", color: "hsl(var(--chart-1))" },
     }}
   >
-    <RechartsPrimitive.BarChart data={[{ name: 'A', views: 100 }]}>
+    <RechartsPrimitive.BarChart data={[{ name: "A", views: 100 }]}>
       <RechartsPrimitive.Bar dataKey="views" fill="var(--color-views)" />
     </RechartsPrimitive.BarChart>
   </ChartContainer>
 ))
-
-// ChartTooltipContent and ChartLegendContent are internal components that
-// must be used within a ChartContainer + recharts chart context.
-// They are implicitly tested by the main Chart test above.
-
-// ---------------------------------------------------------------------------
-// Imports (kept at bottom to avoid hoisting issues)
-// ---------------------------------------------------------------------------
-
-import { Badge } from './badge'
-import { Button } from './button'
-import { Input } from './input'
-import { Textarea } from './textarea'
-import { Label } from './label'
-import { Kbd, KbdGroup } from './kbd'
-import { Skeleton } from './skeleton'
-import { Spinner } from './spinner'
-import { Separator } from './separator'
-import { Toggle } from './toggle'
-import { Checkbox } from './checkbox'
-import { Switch } from './switch'
-import { Slider } from './slider'
-import { Progress } from './progress'
-import { Calendar } from './calendar'
-import { AspectRatio } from './aspect-ratio'
-import { ScrollArea } from './scroll-area'
-import {
-  Card,
-  CardHeader,
-  CardFooter,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from './card'
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableFooter,
-  TableHead,
-  TableRow,
-  TableCell,
-  TableCaption,
-} from './table'
-import {
-  ItemGroup,
-  Item,
-  ItemContent,
-  ItemTitle,
-  ItemDescription,
-} from './item'
-import {
-  Empty,
-  EmptyHeader,
-  EmptyTitle,
-  EmptyDescription,
-  EmptyContent,
-  EmptyMedia,
-} from './empty'
-import { Field, FieldLabel, FieldContent, FieldDescription } from './field'
-import {
-  Accordion,
-  AccordionItem,
-  AccordionTrigger,
-  AccordionContent,
-} from './accordion'
-import { Alert, AlertTitle, AlertDescription } from './alert'
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogFooter,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogAction,
-  AlertDialogCancel,
-} from './alert-dialog'
-import { Avatar, AvatarFallback } from './avatar'
-import {
-  Breadcrumb,
-  BreadcrumbList,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from './breadcrumb'
-import { ButtonGroup } from './button-group'
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from './collapsible'
-import { ConfirmDialog } from './confirm-dialog'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogFooter,
-  DialogTitle,
-  DialogDescription,
-} from './dialog'
-import {
-  Drawer,
-  DrawerContent,
-  DrawerHeader,
-  DrawerFooter,
-  DrawerTitle,
-  DrawerDescription,
-} from './drawer'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from './dropdown-menu'
-import { HoverCard, HoverCardContent } from './hover-card'
-import {
-  Menubar,
-  MenubarMenu,
-  MenubarTrigger,
-  MenubarContent,
-  MenubarItem,
-  MenubarSeparator,
-} from './menubar'
-import {
-  NavigationMenu,
-  NavigationMenuList,
-  NavigationMenuItem,
-  NavigationMenuTrigger,
-  NavigationMenuContent,
-  NavigationMenuLink,
-} from './navigation-menu'
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationPrevious,
-  PaginationNext,
-} from './pagination'
-import { Popover, PopoverContent } from './popover'
-import { RadioGroup, RadioGroupItem } from './radio-group'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectSeparator,
-} from './select'
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetFooter,
-  SheetTitle,
-  SheetDescription,
-} from './sheet'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from './tabs'
-import { ToggleGroup, ToggleGroupItem } from './toggle-group'
-import { Tooltip, TooltipTrigger, TooltipContent } from './tooltip'
-import {
-  ResizablePanelGroup,
-  ResizablePanel,
-  ResizableHandle,
-} from './resizable'
-import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from './input-otp'
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupText,
-  InputGroupInput,
-  InputGroupButton,
-} from './input-group'
-import {
-  ContextMenu,
-  ContextMenuTrigger,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-} from './context-menu'
-import { Carousel, CarouselContent, CarouselItem } from './carousel'
-import { CommandDialog, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from './command'
-import {
-  SidebarProvider,
-  Sidebar,
-  SidebarContent,
-  SidebarHeader,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupLabel,
-  SidebarGroupContent,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarInput,
-  SidebarInset,
-  SidebarTrigger,
-  SidebarRail,
-} from './sidebar'
-import { Toaster } from './sonner'
-import {
-  ToastProvider,
-  ToastViewport,
-  Toast,
-  ToastTitle,
-  ToastDescription,
-  ToastClose,
-  ToastAction,
-} from './toast'
-import { Form, FormField, FormItem, FormLabel, FormControl, FormDescription, FormMessage } from './form'
-import { ChartContainer } from './chart'

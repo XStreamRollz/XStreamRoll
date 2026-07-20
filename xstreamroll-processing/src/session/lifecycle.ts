@@ -1,6 +1,7 @@
 import axios from "axios"
 
-export type LifecycleState = "idle" | "starting" | "active" | "stopping" | "ended" | "error"
+export type LifecycleState =
+  "idle" | "starting" | "active" | "stopping" | "ended" | "error"
 
 export interface LifecycleManagerOptions {
   apiUrl: string
@@ -52,12 +53,15 @@ export class SessionLifecycleManager {
   private assertState(expected: LifecycleState): void {
     if (this.state !== expected) {
       throw new Error(
-        `Invalid transition: expected state "${expected}", current state is "${this.state}"`
+        `Invalid transition: expected state "${expected}", current state is "${this.state}"`,
       )
     }
   }
 
-  private async transition(next: LifecycleState, reason?: string): Promise<void> {
+  private async transition(
+    next: LifecycleState,
+    reason?: string,
+  ): Promise<void> {
     this.state = next
     try {
       await axios.patch(`${this.apiUrl}/streams/${this.streamId}`, {
@@ -69,7 +73,7 @@ export class SessionLifecycleManager {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       console.error(
-        `[lifecycle] PATCH /streams/${this.streamId} failed (state=${next}): ${message}`
+        `[lifecycle] PATCH /streams/${this.streamId} failed (state=${next}): ${message}`,
       )
     }
   }

@@ -1,7 +1,9 @@
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { StreamTagChips } from "./stream-tag-chips"
+
 import { Tag } from "@/lib/api/tags"
+
+import { StreamTagChips } from "./stream-tag-chips"
 
 describe("StreamTagChips", () => {
   const mockTags: Tag[] = [

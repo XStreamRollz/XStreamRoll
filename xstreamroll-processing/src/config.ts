@@ -2,7 +2,9 @@ import { z } from "zod"
 
 const envSchema = z.object({
   API_URL: z.string().url().default("http://localhost:3001"),
-  NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  NODE_ENV: z
+    .enum(["development", "production", "test"])
+    .default("development"),
   POLL_INTERVAL_MS: z.string().default("5000"),
   /**
    * Backend for the distributed stream-lock manager (issue #216).

@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+
 import { EmbedSnippet } from "@/components/streams/embed-snippet"
 
 export const metadata: Metadata = {

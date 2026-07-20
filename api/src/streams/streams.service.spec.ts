@@ -1,7 +1,8 @@
 import { ConflictException, NotFoundException } from "@nestjs/common"
-import { StreamsService } from "./streams.service"
-import { Stream } from "./stream.entity"
+
 import { StreamsRepository } from "./repository/streams.repository"
+import { Stream } from "./stream.entity"
+import { StreamsService } from "./streams.service"
 
 describe("StreamsService", () => {
   let service: StreamsService
@@ -38,15 +39,39 @@ describe("StreamsService", () => {
     }
     mockRepo.create.mockResolvedValue(expected)
 
-    const result = await service.create({ userId: 5, name: "My Stream", description: "desc" })
+    const result = await service.create({
+      userId: 5,
+      name: "My Stream",
+      description: "desc",
+    })
     expect(result).toEqual(expected)
-    expect(mockRepo.create).toHaveBeenCalledWith({ userId: 5, name: "My Stream", description: "desc" })
+    expect(mockRepo.create).toHaveBeenCalledWith({
+      userId: 5,
+      name: "My Stream",
+      description: "desc",
+    })
   })
 
   it("list streams with pagination returns correct shape and hasMore", async () => {
     const items: Stream[] = [
-      { id: 1, userId: 1, name: "a", description: null, status: "inactive", createdAt: new Date(), updatedAt: new Date() },
-      { id: 2, userId: 2, name: "b", description: null, status: "inactive", createdAt: new Date(), updatedAt: new Date() },
+      {
+        id: 1,
+        userId: 1,
+        name: "a",
+        description: null,
+        status: "inactive",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: 2,
+        userId: 2,
+        name: "b",
+        description: null,
+        status: "inactive",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
     ]
     mockRepo.listPaginated.mockResolvedValue({ items, total: 3 })
 
@@ -65,7 +90,9 @@ describe("StreamsService", () => {
     mockRepo.listPaginated.mockResolvedValue({ items, total: 0 })
 
     await service.list(1, 10, { status: "active" })
-    expect(mockRepo.listPaginated).toHaveBeenCalledWith(1, 10, { status: "active" })
+    expect(mockRepo.listPaginated).toHaveBeenCalledWith(1, 10, {
+      status: "active",
+    })
   })
 
   it("findById missing stream throws NotFoundException", async () => {
@@ -74,27 +101,59 @@ describe("StreamsService", () => {
   })
 
   it("update status inactive -> active succeeds", async () => {
-    const existing: Stream = { id: 1, userId: 1, name: "s", description: null, status: "inactive", createdAt: new Date(), updatedAt: new Date() }
+    const existing: Stream = {
+      id: 1,
+      userId: 1,
+      name: "s",
+      description: null,
+      status: "inactive",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
     const updated: Stream = { ...existing, status: "active" }
     mockRepo.findById.mockResolvedValue(existing)
     mockRepo.update.mockResolvedValue(updated)
 
     const res = await service.update(1, { status: "active" })
     expect(res).toEqual(updated)
-    expect(mockRepo.update).toHaveBeenCalledWith(1, { name: undefined, description: undefined, status: "active" })
+    expect(mockRepo.update).toHaveBeenCalledWith(1, {
+      name: undefined,
+      description: undefined,
+      status: "active",
+    })
   })
 
   it("update status active -> active throws ConflictException", async () => {
-    const existing: Stream = { id: 2, userId: 1, name: "s", description: null, status: "active", createdAt: new Date(), updatedAt: new Date() }
+    const existing: Stream = {
+      id: 2,
+      userId: 1,
+      name: "s",
+      description: null,
+      status: "active",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
     mockRepo.findById.mockResolvedValue(existing)
-    await expect(service.update(2, { status: "active" })).rejects.toThrow(ConflictException)
+    await expect(service.update(2, { status: "active" })).rejects.toThrow(
+      ConflictException,
+    )
     expect(mockRepo.update).not.toHaveBeenCalled()
   })
 
   it("update status error -> active throws ConflictException", async () => {
-    const existing: Stream = { id: 3, userId: 1, name: "s", description: null, status: "error", createdAt: new Date(), updatedAt: new Date() }
+    const existing: Stream = {
+      id: 3,
+      userId: 1,
+      name: "s",
+      description: null,
+      status: "error",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
     mockRepo.findById.mockResolvedValue(existing)
-    await expect(service.update(3, { status: "active" })).rejects.toThrow(ConflictException)
+    await expect(service.update(3, { status: "active" })).rejects.toThrow(
+      ConflictException,
+    )
   })
 
   it("delete existing stream resolves", async () => {
@@ -120,7 +179,12 @@ describe("StreamsService", () => {
     const analytics = {
       streamId: 4,
       totalEventsProcessed: { last24h: 1, last7d: 2, last30d: 3 },
-      errorRate: { window: "30d", totalEvents: 3, errorEvents: 1, percentage: 33.33 },
+      errorRate: {
+        window: "30d",
+        totalEvents: 3,
+        errorEvents: 1,
+        percentage: 33.33,
+      },
       processingLatency: { window: "30d", averageMs: 10, p99Ms: 25 },
       eventsPerMinute: [],
       generatedAt: new Date().toISOString(),

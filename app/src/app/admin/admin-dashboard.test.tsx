@@ -1,6 +1,8 @@
-import { render, screen, act, waitFor } from "@testing-library/react"
+import { act, render, screen, waitFor } from "@testing-library/react"
+
+import { AdminStats, fetchAdminStats } from "@/lib/api/admin-stats"
+
 import { AdminDashboard } from "./admin-dashboard"
-import { fetchAdminStats, AdminStats } from "@/lib/api/admin-stats"
 
 jest.mock("@/lib/api/admin-stats")
 
@@ -100,7 +102,9 @@ describe("AdminDashboard", () => {
     // Still displays the previous counts (cached/stale snapshot)
     expect(screen.getByText("150")).toBeInTheDocument()
     expect(screen.getByText("45")).toBeInTheDocument()
-    expect(screen.getByText(/Showing last successful snapshot/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Showing last successful snapshot/),
+    ).toBeInTheDocument()
   })
 
   it("auto-refreshes data every 60 seconds", async () => {

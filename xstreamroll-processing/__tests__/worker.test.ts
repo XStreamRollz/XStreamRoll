@@ -3,7 +3,6 @@
  * agent (issue #225: the old code created a brand-new Agent and called
  * destroy() on it — a no-op for the actual connection pool).
  */
-
 import http from "http"
 
 jest.mock("../src/config", () => ({
@@ -33,7 +32,9 @@ jest.mock("axios", () => {
 })
 
 // Prevent process.exit from terminating the test runner.
-const exitSpy = jest.spyOn(process, "exit").mockImplementation((() => {}) as never)
+const exitSpy = jest
+  .spyOn(process, "exit")
+  .mockImplementation((() => {}) as never)
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { httpAgent, shutdown } = require("../src/worker")

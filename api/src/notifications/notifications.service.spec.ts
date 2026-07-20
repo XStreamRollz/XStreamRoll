@@ -1,4 +1,5 @@
 import { NotFoundException } from "@nestjs/common"
+
 import { NotificationsService } from "./notifications.service"
 import { NotificationsRepository } from "./repository/notifications.repository"
 
@@ -69,15 +70,11 @@ describe("NotificationsService", () => {
     it("throws NotFoundException for a notification owned by another user", async () => {
       const n = await service.create(1, "a")
 
-      await expect(service.markRead(2, n.id)).rejects.toThrow(
-        NotFoundException,
-      )
+      await expect(service.markRead(2, n.id)).rejects.toThrow(NotFoundException)
     })
 
     it("throws NotFoundException for a missing notification", async () => {
-      await expect(service.markRead(1, 999)).rejects.toThrow(
-        NotFoundException,
-      )
+      await expect(service.markRead(1, 999)).rejects.toThrow(NotFoundException)
     })
   })
 
@@ -101,17 +98,13 @@ describe("NotificationsService", () => {
 
       await service.delete(1, n.id)
 
-      await expect(service.markRead(1, n.id)).rejects.toThrow(
-        NotFoundException,
-      )
+      await expect(service.markRead(1, n.id)).rejects.toThrow(NotFoundException)
     })
 
     it("throws NotFoundException when deleting another user's notification", async () => {
       const n = await service.create(1, "a")
 
-      await expect(service.delete(2, n.id)).rejects.toThrow(
-        NotFoundException,
-      )
+      await expect(service.delete(2, n.id)).rejects.toThrow(NotFoundException)
     })
   })
 })

@@ -19,9 +19,9 @@ dependencies on Node-only APIs.
 5. [Streams](#streams)
 6. [Real-time events](#real-time-events)
 7. [HTTP transport](#http-transport)
-   * [Interceptors](#interceptors)
-   * [Retries](#retries)
-   * [Error model](#error-model)
+   - [Interceptors](#interceptors)
+   - [Retries](#retries)
+   - [Error model](#error-model)
 8. [Pagination](#pagination)
 9. [Types](#types)
 10. [Browser usage](#browser-usage)
@@ -54,7 +54,7 @@ are the only dev dependencies needed to run the test suite.
 ## Quick start
 
 ```ts
-import { StreamingClient, ApiError } from "@stellar/streaming-sdk"
+import { ApiError, StreamingClient } from "@stellar/streaming-sdk"
 
 const client = new StreamingClient({
   env: "production", // or "staging" | "development", or a custom baseUrl
@@ -63,7 +63,7 @@ const client = new StreamingClient({
 // 1. Log in
 const { accessToken, refreshToken } = await client.login(
   "alice@example.com",
-  "super-secret-password"
+  "super-secret-password",
 )
 
 // 2. Create a stream
@@ -94,22 +94,22 @@ await client.logout()
 
 `StreamingClient` accepts a `StreamConfig`:
 
-| Field      | Type                                            | Notes                                                            |
-| ---------- | ----------------------------------------------- | ---------------------------------------------------------------- |
-| `env`      | `"development" \| "staging" \| "production"`   | Named preset. Resolves to a well-known base URL.                 |
-| `baseUrl`  | `string`                                        | Explicit base URL. Overrides `env` and the legacy `apiUrl`.      |
-| `apiUrl`   | `string` (deprecated)                           | Legacy field. Kept for backwards compatibility.                  |
-| `clientId` | `string`                                        | Identifier attached to published events. Defaults to a timestamp. |
+| Field      | Type                                         | Notes                                                             |
+| ---------- | -------------------------------------------- | ----------------------------------------------------------------- |
+| `env`      | `"development" \| "staging" \| "production"` | Named preset. Resolves to a well-known base URL.                  |
+| `baseUrl`  | `string`                                     | Explicit base URL. Overrides `env` and the legacy `apiUrl`.       |
+| `apiUrl`   | `string` (deprecated)                        | Legacy field. Kept for backwards compatibility.                   |
+| `clientId` | `string`                                     | Identifier attached to published events. Defaults to a timestamp. |
 
 Resolution order: `baseUrl` → `env` → `apiUrl` → `development`.
 
 The full URL presets are:
 
-| Env           | Base URL                          |
-| ------------- | --------------------------------- |
-| `development` | `http://localhost:3001`            |
+| Env           | Base URL                             |
+| ------------- | ------------------------------------ |
+| `development` | `http://localhost:3001`              |
 | `staging`     | `https://staging-api.xstreamroll.io` |
-| `production`  | `https://api.xstreamroll.io`      |
+| `production`  | `https://api.xstreamroll.io`         |
 
 ---
 
@@ -126,9 +126,9 @@ const tokens = await client.register({
 
 `StreamingClient` keeps the active tokens on the instance and:
 
-* attaches `Authorization: Bearer <accessToken>` to every outbound
+- attaches `Authorization: Bearer <accessToken>` to every outbound
   request, and
-* transparently refreshes the access token on a `401` response (using
+- transparently refreshes the access token on a `401` response (using
   the stored refresh token), then retries the original request once.
 
 Call `await client.logout()` to invalidate the session server-side and
@@ -182,9 +182,9 @@ await client.publishEvent({
 
 `HttpClient` is a small, `fetch`-based wrapper that:
 
-* merges `baseUrl` + `path`,
-* runs request/response interceptors in registration order,
-* retries transient failures (5xx, 408, 425, 429) with exponential
+- merges `baseUrl` + `path`,
+- runs request/response interceptors in registration order,
+- retries transient failures (5xx, 408, 425, 429) with exponential
   backoff + jitter.
 
 ```ts
@@ -247,9 +247,9 @@ to opt out per client.
 When the retry budget is exhausted the client throws
 `HttpRequestError`, which carries:
 
-* the last error message,
-* the last `Response` (cloned, so it can be read after the throw),
-* the number of attempts made.
+- the last error message,
+- the last `Response` (cloned, so it can be read after the throw),
+- the number of attempts made.
 
 The high-level `StreamingClient` translates non-2xx responses into
 `ApiError` (also exported from the SDK), exposing `statusCode`,
@@ -279,11 +279,11 @@ max page size of 100.
 
 The SDK ships full type definitions. The most useful are:
 
-* `Stream`, `CreateStreamDto`, `UpdateStreamDto` — stream CRUD shapes.
-* `StreamEvent`, `StreamEventRecord`, `StreamEventType` — event shapes.
-* `AuthTokens`, `User`, `CreateUserDto`, `UpdateUserDto` — auth shapes.
-* `PaginatedResponse<T>`, `PaginationParams` — list helpers.
-* `ApiError`, `ApiErrorResponse`, `ValidationError` — error shapes.
+- `Stream`, `CreateStreamDto`, `UpdateStreamDto` — stream CRUD shapes.
+- `StreamEvent`, `StreamEventRecord`, `StreamEventType` — event shapes.
+- `AuthTokens`, `User`, `CreateUserDto`, `UpdateUserDto` — auth shapes.
+- `PaginatedResponse<T>`, `PaginationParams` — list helpers.
+- `ApiError`, `ApiErrorResponse`, `ValidationError` — error shapes.
 
 All types are re-exported from the package root.
 
@@ -324,9 +324,9 @@ new HttpClient("http://x", { sleep: async () => {} })
 
 ## Versioning & compatibility
 
-* Follows [semver](https://semver.org/).
-* Public API is whatever the package `index.ts` re-exports.
-* Breaking changes bump the major version and are announced in the
+- Follows [semver](https://semver.org/).
+- Public API is whatever the package `index.ts` re-exports.
+- Breaking changes bump the major version and are announced in the
   release notes.
 
 The package currently declares `axios` as a dependency for the

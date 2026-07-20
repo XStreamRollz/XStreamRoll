@@ -1,19 +1,20 @@
 "use client"
 
-import * as React from "react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
 import {
+  BarChart2,
   LayoutDashboard,
+  Menu,
   Radio,
   Settings,
   Users,
-  BarChart2,
-  Menu,
   X,
 } from "lucide-react"
-import { cn } from "@/lib/utils"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import * as React from "react"
+
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },

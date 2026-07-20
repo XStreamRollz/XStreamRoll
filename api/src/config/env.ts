@@ -2,7 +2,9 @@ import { z } from "zod"
 
 const envSchema = z.object({
   PORT: z.string().default("3001"),
-  NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  NODE_ENV: z
+    .enum(["development", "production", "test"])
+    .default("development"),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   // JWT_SECRET is required in production and test, but optional in development
   JWT_SECRET: z.string().optional(),
@@ -23,7 +25,9 @@ export function validateEnv(): Env {
   }
   // Enforce JWT secret presence for non-development environments
   if (result.data.NODE_ENV !== "development" && !result.data.JWT_SECRET) {
-    console.error("Environment validation failed:\n  - JWT_SECRET: JWT_SECRET is required in non-development environments")
+    console.error(
+      "Environment validation failed:\n  - JWT_SECRET: JWT_SECRET is required in non-development environments",
+    )
     process.exit(1)
   }
 

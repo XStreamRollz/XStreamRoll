@@ -1,7 +1,8 @@
 "use client"
 
-import * as React from "react"
 import { Check, ChevronsUpDown, Plus, X } from "lucide-react"
+import * as React from "react"
+
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -17,8 +18,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import { Tag, TagsApiError, listTags } from "@/lib/api/tags"
 import { cn } from "@/lib/utils"
-import { listTags, Tag, TagsApiError } from "@/lib/api/tags"
 
 export interface TagComboboxProps {
   /**
@@ -69,7 +70,10 @@ export function TagCombobox({
     return () => controller.abort()
   }, [open, available])
 
-  const selectedIds = React.useMemo(() => new Set(value.map((t) => t.id)), [value])
+  const selectedIds = React.useMemo(
+    () => new Set(value.map((t) => t.id)),
+    [value],
+  )
   const trimmedSearch = search.trim()
   const normalizedSearch = trimmedSearch.toLowerCase()
 
@@ -132,9 +136,7 @@ export function TagCombobox({
         aria-label="selected tags"
       >
         {value.length === 0 && (
-          <span className="text-sm text-muted-foreground">
-            No tags yet.
-          </span>
+          <span className="text-sm text-muted-foreground">No tags yet.</span>
         )}
         {value.map((tag) => (
           <Badge key={tag.id} variant="secondary" className="gap-1">
@@ -167,7 +169,10 @@ export function TagCombobox({
             <ChevronsUpDown className="size-4 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+        <PopoverContent
+          className="w-(--radix-popover-trigger-width) p-0"
+          align="start"
+        >
           <Command shouldFilter>
             <CommandInput
               placeholder="Search or create…"
@@ -176,7 +181,9 @@ export function TagCombobox({
             />
             <CommandList>
               {loadError && (
-                <div className="px-3 py-2 text-xs text-destructive">{loadError}</div>
+                <div className="px-3 py-2 text-xs text-destructive">
+                  {loadError}
+                </div>
               )}
               {!loadError && available === null && (
                 <div className="px-3 py-6 text-center text-sm text-muted-foreground">

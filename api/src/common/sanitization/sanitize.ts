@@ -49,8 +49,10 @@ function decodeBasicEntities(text: string): string {
 export function sanitizeUserText(input: string): string {
   if (typeof input !== "string") return ""
   const stripped = sanitizeHtml(input, SANITIZE_OPTIONS)
-  return decodeBasicEntities(stripped)
-    // collapse the runs of whitespace introduced where tags used to be
-    .replace(/[\s\u00a0]+/g, " ")
-    .trim()
+  return (
+    decodeBasicEntities(stripped)
+      // collapse the runs of whitespace introduced where tags used to be
+      .replace(/[\s\u00a0]+/g, " ")
+      .trim()
+  )
 }

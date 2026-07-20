@@ -1,10 +1,12 @@
 import { Server } from "http"
 import { AddressInfo } from "net"
+
 import axios from "axios"
+
 import {
   getMetrics,
-  incrementProcessed,
   incrementErrors,
+  incrementProcessed,
   markReady,
   markShuttingDown,
   setQueueDepth,
@@ -65,7 +67,9 @@ describe("metrics server", () => {
     expect(res.status).toBe(200)
     expect(res.headers["content-type"]).toBe("text/plain; version=0.0.4")
     expect(res.data).toContain("# HELP xstreamroll_messages_processed_total")
-    expect(res.data).toContain("# TYPE xstreamroll_messages_processed_total counter")
+    expect(res.data).toContain(
+      "# TYPE xstreamroll_messages_processed_total counter",
+    )
     expect(res.data).toContain("xstreamroll_messages_processed_total")
     expect(res.data).toContain("# HELP xstreamroll_uptime_seconds")
   })

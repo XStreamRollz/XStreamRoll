@@ -1,7 +1,7 @@
 "use client"
 
-import * as React from "react"
 import { AlertTriangle } from "lucide-react"
+import * as React from "react"
 
 export default function GlobalError({
   error,
@@ -37,7 +37,13 @@ export default function GlobalError({
           <h1 style={{ fontSize: "1.5rem", fontWeight: 700 }}>
             Application error
           </h1>
-          <p style={{ maxWidth: "24rem", fontSize: "0.875rem", color: "#6b7280" }}>
+          <p
+            style={{
+              maxWidth: "24rem",
+              fontSize: "0.875rem",
+              color: "#6b7280",
+            }}
+          >
             {error.message || "A critical error occurred. Please try again."}
           </p>
           <button

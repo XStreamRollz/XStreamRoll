@@ -17,19 +17,19 @@ data store.
 
 Container images are published by `.github/workflows/release.yml` to:
 
-| Component | Image |
-|-----------|-------|
-| api       | `ghcr.io/xstreamrollz/xstreamroll-api` |
-| app       | `ghcr.io/xstreamrollz/xstreamroll-app` |
+| Component  | Image                                         |
+| ---------- | --------------------------------------------- |
+| api        | `ghcr.io/xstreamrollz/xstreamroll-api`        |
+| app        | `ghcr.io/xstreamrollz/xstreamroll-app`        |
 | processing | `ghcr.io/xstreamrollz/xstreamroll-processing` |
 
 ## Health probes
 
-| Service    | Liveness  | Readiness  | Notes |
-|------------|-----------|------------|-------|
-| api        | `/livez`  | `/health`  | Readiness pings Postgres; liveness is DB-free to avoid restart loops. |
+| Service    | Liveness      | Readiness     | Notes                                                                                      |
+| ---------- | ------------- | ------------- | ------------------------------------------------------------------------------------------ |
+| api        | `/livez`      | `/health`     | Readiness pings Postgres; liveness is DB-free to avoid restart loops.                      |
 | app        | `/api/health` | `/api/health` | Returns static `ok` payload; bypasses project middleware (matcher is `/dashboard/:path*`). |
-| processing | `/livez`  | `/healthz` | Readiness flips to 503 the moment `GracefulShutdown` flips `shuttingDown=true`. |
+| processing | `/livez`      | `/healthz`    | Readiness flips to 503 the moment `GracefulShutdown` flips `shuttingDown=true`.            |
 
 `terminationGracePeriodSeconds` on every Deployment is ≥30s so the
 worker's 15s graceful-shutdown hook has room to drain.
@@ -80,11 +80,11 @@ produced by the release workflow.
 The release workflow (`.github/workflows/release.yml`) pushes two tags per
 release:
 
-| Tag format | Example | Use |
-|---|---|---|
-| Semver | `v1.2.3` | Human-readable, used for rollbacks |
-| Short SHA | `sha-abc1234` | Immutable, used for precise rollback |
-| `latest` | `latest` | Convenience alias — **do not use in manifests** |
+| Tag format | Example       | Use                                             |
+| ---------- | ------------- | ----------------------------------------------- |
+| Semver     | `v1.2.3`      | Human-readable, used for rollbacks              |
+| Short SHA  | `sha-abc1234` | Immutable, used for precise rollback            |
+| `latest`   | `latest`      | Convenience alias — **do not use in manifests** |
 
 ### Deploying by semver tag
 
@@ -211,10 +211,10 @@ is rejected before any build step runs.
 
 ## Acceptance criteria mapping
 
-| Issue #217 criterion | Where it lands |
-|----------------------|----------------|
-| Deployments use published Docker images | `image:` in `20-api.yaml`, `30-app.yaml`, `40-processing.yaml` (all pinned to `ghcr.io/xstreamrollz/xstreamroll-*:latest`). |
-| Implement health-check endpoints | `/livez` on api, `/api/health` on app, `/livez`+`/healthz` on processing worker. Tests in `xstreamroll-processing/__tests__/metrics.test.ts`. |
+| Issue #217 criterion                         | Where it lands                                                                                                                                                  |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deployments use published Docker images      | `image:` in `20-api.yaml`, `30-app.yaml`, `40-processing.yaml` (all pinned to `ghcr.io/xstreamrollz/xstreamroll-*:latest`).                                     |
+| Implement health-check endpoints             | `/livez` on api, `/api/health` on app, `/livez`+`/healthz` on processing worker. Tests in `xstreamroll-processing/__tests__/metrics.test.ts`.                   |
 | Correct separation of ConfigMaps and Secrets | `ConfigMap` resources for `NODE_ENV`, `CORS_ORIGIN`, `PORT`, `API_URL`, etc. `Secret` resources exclusively for `DATABASE_URL`, `JWT_SECRET`, `STREAM_API_KEY`. |
-| Define resource requests/limits | Every container has `resources.requests` + `resources.limits`. |
-| DB credentials not hardcoded | `DATABASE_URL` is sourced from Secret refs (`secretKeyRef` / `secretRef`); only `CHANGEME-*` placeholders committed. |
+| Define resource requests/limits              | Every container has `resources.requests` + `resources.limits`.                                                                                                  |
+| DB credentials not hardcoded                 | `DATABASE_URL` is sourced from Secret refs (`secretKeyRef` / `secretRef`); only `CHANGEME-*` placeholders committed.                                            |

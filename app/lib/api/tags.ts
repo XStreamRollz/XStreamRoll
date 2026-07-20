@@ -31,7 +31,10 @@ function apiBase(): string {
 }
 
 export class TagsApiError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
     super(message)
     this.name = "TagsApiError"
   }
@@ -74,7 +77,9 @@ export async function attachTagToStream(
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json",
-      ...(init.userId !== undefined ? { "X-User-Id": String(init.userId) } : {}),
+      ...(init.userId !== undefined
+        ? { "X-User-Id": String(init.userId) }
+        : {}),
     },
     body: JSON.stringify({ name }),
     signal: init.signal,
@@ -92,7 +97,9 @@ export async function detachTagFromStream(
     method: "DELETE",
     headers: {
       Accept: "application/json",
-      ...(init.userId !== undefined ? { "X-User-Id": String(init.userId) } : {}),
+      ...(init.userId !== undefined
+        ? { "X-User-Id": String(init.userId) }
+        : {}),
     },
     signal: init.signal,
   })

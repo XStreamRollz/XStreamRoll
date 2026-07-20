@@ -1,12 +1,12 @@
 import { HttpClient, HttpRequestError } from "./http"
 import {
   ApiError,
-  type StreamEvent,
-  type StreamConfig,
-  type Stream,
+  type ApiErrorResponse,
   type AuthTokens,
   type CreateUserDto,
-  type ApiErrorResponse,
+  type Stream,
+  type StreamConfig,
+  type StreamEvent,
 } from "./types"
 
 /** Named environment presets for base URL resolution. */
@@ -72,9 +72,11 @@ export class StreamingClient {
 
   async logout(): Promise<void> {
     if (this.tokens) {
-      await this.requestJson<void>("/auth/logout", { method: "POST" }, { skipAuthRefresh: true }).catch(
-        () => {},
-      )
+      await this.requestJson<void>(
+        "/auth/logout",
+        { method: "POST" },
+        { skipAuthRefresh: true },
+      ).catch(() => {})
     }
     this.tokens = null
   }
@@ -109,7 +111,9 @@ export class StreamingClient {
 
   async getStreamStatus(streamId: string): Promise<Stream> {
     try {
-      return await this.requestJson<Stream>(`/streams/${streamId}`, { method: "GET" })
+      return await this.requestJson<Stream>(`/streams/${streamId}`, {
+        method: "GET",
+      })
     } catch (error) {
       console.error("Failed to get stream status:", error)
       throw error
@@ -123,7 +127,11 @@ export class StreamingClient {
    */
   private async requestJson<T>(
     path: string,
-    init: { method?: string; body?: unknown; headers?: Record<string, string> } = {},
+    init: {
+      method?: string
+      body?: unknown
+      headers?: Record<string, string>
+    } = {},
     options: { skipAuthRefresh?: boolean; retried?: boolean } = {},
   ): Promise<T> {
     try {

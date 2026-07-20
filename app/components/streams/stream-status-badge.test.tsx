@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react"
+
 import { StreamStatusBadge } from "./stream-status-badge"
 
 describe("StreamStatusBadge", () => {
@@ -22,7 +23,7 @@ describe("StreamStatusBadge", () => {
 
   it("hides the icon when showIcon is false", () => {
     const { container } = render(
-      <StreamStatusBadge status="active" showIcon={false} />
+      <StreamStatusBadge status="active" showIcon={false} />,
     )
     expect(container.querySelector("svg")).not.toBeInTheDocument()
   })
