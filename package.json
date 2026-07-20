@@ -27,7 +27,7 @@
     "format:check": "prettier --check .",
     "generate:sdk": "npm run build --workspace=api && npm run generate:types --workspace=xstreamroll-sdk",
     "generate:sdk:check": "npm run generate:sdk && git diff --exit-code xstreamroll-sdk/src/generated/schema.d.ts",
-    "prepare": "husky"
+    "prepare": "husky install"
   },
   "devDependencies": {
     "@trivago/prettier-plugin-sort-imports": "^6.0.2",
@@ -40,7 +40,7 @@
     "class-validator": "^0.15.1",
     "concurrently": "^8.2.2",
     "eslint": "^8.57.1",
-    "husky": "^9.1.7",
+    "husky": "^8.0.0",
     "lint-staged": "^17.1.0",
     "prettier": "^3.9.5",
     "supertest": "^7.2.2"
