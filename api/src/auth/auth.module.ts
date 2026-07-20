@@ -27,6 +27,6 @@ import { AuditModule } from "../audit/audit.module"
     PasswordResetService,
     UsersRepository,
   ],
-  exports: [AuthService, JwtModule, TokenDenylistService],
+  exports: [AuthService, JwtModule, TokenDenylistService, UsersRepository],
 })
 export class AuthModule {}

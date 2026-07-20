@@ -7,6 +7,7 @@ const envSchema = z.object({
   // JWT_SECRET is required in production and test, but optional in development
   JWT_SECRET: z.string().optional(),
   STREAM_API_KEY: z.string().min(1, "STREAM_API_KEY is required"),
+  DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
 })
 
 export type Env = z.infer<typeof envSchema>

@@ -4,6 +4,7 @@ import { Cache } from "cache-manager"
 import { Pool } from "pg"
 import * as bcrypt from "bcrypt"
 import * as crypto from "crypto"
+import nodemailer from "nodemailer"
 import { PG_POOL } from "../database/database.module"
 import { UsersRepository } from "./users.repository"
 
@@ -123,14 +124,51 @@ export class PasswordResetService {
     return crypto.createHash("sha256").update(token, "utf8").digest("hex")
   }
 
+  private readonly transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT ?? 587),
+    secure: Number(process.env.SMTP_PORT) === 465,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  })
+
   private async sendResetEmail(email: string, token: string): Promise<void> {
     const resetUrlBase = process.env.RESET_PASSWORD_URL_BASE
-    const resetUrl = resetUrlBase
-      ? `${resetUrlBase.replace(/\/?$/, "")}?token=${encodeURIComponent(token)}`
-      : token
+    const fromEmail = process.env.RESET_PASSWORD_FROM_EMAIL
 
-    this.logger.log(
-      `Password reset token ready for ${email}. Use the token or URL: ${resetUrl}`,
-    )
+    if (!resetUrlBase || !fromEmail) {
+      const missing = []
+      if (!resetUrlBase) missing.push("RESET_PASSWORD_URL_BASE")
+      if (!fromEmail) missing.push("RESET_PASSWORD_FROM_EMAIL")
+      const message = `Missing password reset email configuration: ${missing.join(", ")}`
+      this.logger.error(message)
+      throw new Error(message)
+    }
+
+    const resetUrl = `${resetUrlBase.replace(/\/?$/, "")}?token=${encodeURIComponent(token)}`
+    const html = `
+      <p>Hello,</p>
+      <p>Click the link below to reset your password:</p>
+      <p><a href="${resetUrl}">Reset password</a></p>
+      <p>If you did not request a password reset, please ignore this message.</p>
+    `
+
+    try {
+      await this.transporter.sendMail({
+        from: fromEmail,
+        to: email,
+        subject: "Reset your password",
+        html,
+      })
+      this.logger.log(`Reset email dispatched to ${email}`)
+    } catch (error) {
+      this.logger.error(
+        `Failed to dispatch reset email to ${email}`,
+        (error as Error).stack ?? String(error),
+      )
+      throw new Error("Failed to dispatch reset email")
+    }
   }
 }

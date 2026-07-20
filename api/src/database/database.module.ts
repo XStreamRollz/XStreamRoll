@@ -9,7 +9,12 @@ export const PG_POOL = "PG_POOL"
   providers: [
     {
       provide: PG_POOL,
-      useFactory: (): Pool => new Pool({ connectionString: env.DATABASE_URL }),
+      useFactory: (): Pool =>
+        new Pool({
+          connectionString: env.DATABASE_URL,
+          statement_timeout: env.DB_STATEMENT_TIMEOUT_MS,
+          query_timeout: env.DB_STATEMENT_TIMEOUT_MS,
+        }),
     },
   ],
   exports: [PG_POOL],
