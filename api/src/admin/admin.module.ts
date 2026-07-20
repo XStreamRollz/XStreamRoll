@@ -1,5 +1,7 @@
 import { CacheModule } from "@nestjs/cache-manager"
 import { Module } from "@nestjs/common"
+import { AuthModule } from "../auth/auth.module"
+import { AuthGuard } from "../common/guards/auth.guard"
 import { RolesGuard } from "../common/auth/roles.guard"
 import { AdminStatsService } from "./admin-stats.service"
 import { AdminController } from "./admin.controller"
@@ -12,8 +14,9 @@ import { AdminController } from "./admin.controller"
       ttl: 60_000,
       max: 256,
     }),
+    AuthModule,
   ],
   controllers: [AdminController],
-  providers: [AdminStatsService, RolesGuard],
+  providers: [AdminStatsService, RolesGuard, AuthGuard],
 })
 export class AdminModule {}

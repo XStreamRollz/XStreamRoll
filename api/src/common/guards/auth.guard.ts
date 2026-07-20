@@ -54,7 +54,12 @@ export class AuthGuard implements CanActivate {
       }
     }
 
-    ;(req as Request & { auth?: { userId: number } }).auth = { userId }
+    const authenticatedReq = req as Request & {
+      auth?: { userId: number }
+      user?: { sub: number; roles: string[] }
+    }
+    authenticatedReq.auth = { userId }
+    authenticatedReq.user = { sub: userId, roles: [] }
     return true
   }
 
