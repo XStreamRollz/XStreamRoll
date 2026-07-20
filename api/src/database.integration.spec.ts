@@ -200,6 +200,7 @@ describe("Database Integration Tests", () => {
         [streamId],
       )
 
+      await pool.query("DELETE FROM stream_events WHERE stream_id = $1", [streamId])
       await pool.query("DELETE FROM streams WHERE id = $1", [streamId])
 
       const events = await pool.query(
@@ -319,6 +320,7 @@ describe("Database Integration Tests", () => {
         [userId],
       )
 
+      await pool.query("DELETE FROM streams WHERE user_id = $1", [userId])
       await pool.query("DELETE FROM users WHERE id = $1", [userId])
 
       const streams = await pool.query(
