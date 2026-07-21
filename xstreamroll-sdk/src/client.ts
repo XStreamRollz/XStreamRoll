@@ -7,6 +7,8 @@ import {
   type AuthTokens,
   type CreateUserDto,
   type ApiErrorResponse,
+  type CreateWebhookDto,
+  type WebhookSubscription,
 } from "./types"
 
 /** Named environment presets for base URL resolution. */
@@ -114,6 +116,22 @@ export class StreamingClient {
       console.error("Failed to get stream status:", error)
       throw error
     }
+  }
+
+  // ── Webhooks ──────────────────────────────────────────────────────────────
+
+  /**
+   * Registers a webhook subscription for stream lifecycle events.
+   *
+   * The returned `secret` is only ever present in this response — store it
+   * immediately and use it with {@link verifyWebhookSignature} to validate
+   * future deliveries.
+   */
+  async subscribeWebhook(dto: CreateWebhookDto): Promise<WebhookSubscription> {
+    return this.requestJson<WebhookSubscription>("/webhooks", {
+      method: "POST",
+      body: dto,
+    })
   }
 
   /**

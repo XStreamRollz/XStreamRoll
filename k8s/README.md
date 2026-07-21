@@ -31,8 +31,18 @@ Container images are published by `.github/workflows/release.yml` to:
 | app        | `/api/health` | `/api/health` | Returns static `ok` payload; bypasses project middleware (matcher is `/dashboard/:path*`). |
 | processing | `/livez`  | `/healthz` | Readiness flips to 503 the moment `GracefulShutdown` flips `shuttingDown=true`. |
 
-`terminationGracePeriodSeconds` on every Deployment is ≥30s so the
+`terminationGracePeriodSeconds` on every Deployment is ≥60s so the
 worker's 15s graceful-shutdown hook has room to drain.
+
+### Processing worker shutdown timing
+
+| Phase | Duration | Notes |
+|-------|----------|-------|
+| `preStop` sleep | 5s | Delays SIGTERM delivery via `sleep 5` |
+| GracefulShutdown | 15s | Code drain in `src/lifecycle.ts` |
+| Readiness fail window | 30s | `failureThreshold: 6` × `periodSeconds: 5` |
+| Total drain budget | 20s | 5s + 15s — within the 60s grace period |
+| `terminationGracePeriodSeconds` | 60s | Hard limit before SIGKILL |
 
 ## Non-root security
 
