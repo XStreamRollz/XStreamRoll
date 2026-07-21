@@ -84,7 +84,7 @@ export class StreamingClient {
   async refreshToken(): Promise<AuthTokens> {
     const data = await this.requestJson<AuthTokens>(
       "/auth/refresh",
-      { method: "POST", body: { refreshToken: this.tokens?.refreshToken } },
+      { method: "POST" },
       { skipAuthRefresh: true },
     )
     this.tokens = data
