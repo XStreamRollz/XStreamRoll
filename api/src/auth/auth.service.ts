@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Injectable,
+  Inject,
   UnauthorizedException,
 } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
@@ -39,15 +40,15 @@ export class AuthService {
   private readonly refreshJwt: JwtService
 
   constructor(
-    accessJwt: JwtService,
-    refreshJwt: JwtService,
+    @Inject("JWT_REFRESH") refreshJwt: JwtService,
+    private readonly accessJwt: JwtService,
     private readonly usersRepository: UsersRepository,
     private readonly passwordResetService: PasswordResetService,
     private readonly tokenDenylistService: TokenDenylistService,
     private readonly auditService: AuditService,
   ) {
-    this.accessJwt = accessJwt
     this.refreshJwt = refreshJwt
+    this.accessJwt = accessJwt
   }
 
   /**

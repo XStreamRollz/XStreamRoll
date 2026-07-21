@@ -68,8 +68,8 @@ function makeService(
   tokenDenylist: MockTokenDenylistService,
 ): AuthService {
   return new AuthService(
-    accessJwt as unknown as JwtService,
     refreshJwt as unknown as JwtService,
+    accessJwt as unknown as JwtService,
     users as unknown as UsersRepository,
     passwordReset as unknown as any,
     tokenDenylist as unknown as TokenDenylistService,
