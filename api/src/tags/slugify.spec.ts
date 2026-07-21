@@ -32,9 +32,7 @@ describe("slugify", () => {
   })
 
   it("returns empty string for non-string input", () => {
-    // @ts-expect-error intentional type violation
     expect(slugify(null)).toBe("")
-    // @ts-expect-error intentional type violation
     expect(slugify(undefined)).toBe("")
   })
 

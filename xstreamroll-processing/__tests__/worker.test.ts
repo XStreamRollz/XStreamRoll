@@ -20,13 +20,20 @@ jest.mock("../src/config", () => ({
 // includes the shared httpAgent.
 let axiosCreateConfig: Record<string, unknown> | undefined
 jest.mock("axios", () => {
-  const noop = () => Promise.resolve({ data: [] })
+  const noop = () => Promise.resolve({ data: [], headers: {} })
   return {
     __esModule: true,
     default: {
       create: (config: Record<string, unknown>) => {
         axiosCreateConfig = config
-        return { get: noop, post: noop }
+        return {
+          get: noop,
+          post: noop,
+          interceptors: {
+            request: { use: jest.fn() },
+            response: { use: jest.fn() },
+          },
+        }
       },
     },
   }

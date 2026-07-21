@@ -40,6 +40,7 @@ psql -d "$DATABASE_URL" -f database/migrations/2026051501_add_stream_tags.down.s
 | `2026061001_add_password_hash.up.sql`      | `users.password_hash` (nullable → backfill → `NOT NULL`, no default) |
 | `2026061002_add_user_password_hash.up.sql` | `users.password_hash` — redundant re-add, no-op after `2026061001` via `IF NOT EXISTS` |
 | `2026071701_add_stream_event_latency.up.sql` | `stream_events.processing_latency_ms`, covering analytics index |
+| `2026072001_add_webhook_subscriptions.up.sql` | `webhook_subscriptions`, `webhook_deliveries`, supporting indexes |
 
 > **Note on `2026061001` / `2026061002`:** both migrations add the same
 > `users.password_hash` column. `2026061001_add_password_hash` is the

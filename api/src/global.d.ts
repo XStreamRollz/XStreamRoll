@@ -38,6 +38,16 @@ declare module "class-validator" {
     options?: ValidationOptions,
   ): PropertyDecorator
   export function IsNotEmpty(options?: ValidationOptions): PropertyDecorator
+  export function IsArray(options?: ValidationOptions): PropertyDecorator
+  export function IsUrl(
+    urlOptions?: Record<string, unknown>,
+    options?: ValidationOptions,
+  ): PropertyDecorator
+  export function ArrayMinSize(
+    min: number,
+    options?: ValidationOptions,
+  ): PropertyDecorator
+  export function ArrayUnique(options?: ValidationOptions): PropertyDecorator
 
   export type ValidationArguments = {
     value: unknown

@@ -1,9 +1,11 @@
 import { CacheModule } from "@nestjs/cache-manager"
 import { Module } from "@nestjs/common"
+import { streamsCacheConfig } from "../config/cache.config"
 import { AuthModule } from "../auth/auth.module"
 import { AuthGuard } from "../common/guards/auth.guard"
 import { StreamOwnershipGuard } from "../common/guards/stream-ownership.guard"
 import { StreamOwnershipService } from "../common/guards/stream-ownership.service"
+import { WebhooksModule } from "../webhooks/webhooks.module"
 import { StreamsDbRepository } from "./repository/streams-db.repository"
 import { StreamsRepository } from "./repository/streams.repository"
 import { StreamsController } from "./streams.controller"
@@ -25,10 +27,8 @@ const isTest = process.env.NODE_ENV === "test"
 @Module({
   imports: [
     AuthModule,
-    CacheModule.register({
-      ttl: 60_000,
-      max: 512,
-    }),
+    WebhooksModule,
+    CacheModule.register(streamsCacheConfig()),
   ],
   controllers: [StreamsController],
   providers: [
