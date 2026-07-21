@@ -5,6 +5,7 @@ import {
   HttpStatus,
   Post,
   Req,
+  Res,
 } from "@nestjs/common"
 import { Throttle } from "@nestjs/throttler"
 import {
@@ -14,12 +15,21 @@ import {
   ApiOperation,
   ApiTags,
 } from "@nestjs/swagger"
-import type { Request } from "express"
+import type { Request, Response } from "express"
 import { AuthResponse, AuthService } from "./auth.service"
 import { LoginDto } from "./dto/login.dto"
 import { RegisterDto } from "./dto/register.dto"
 import { ForgotPasswordDto } from "./dto/forgot-password.dto"
 import { ResetPasswordDto } from "./dto/reset-password.dto"
+
+const REFRESH_COOKIE_NAME = "refresh_token"
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "strict" as const,
+  path: "/",
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+}
 
 @ApiTags("auth")
 @Controller("auth")
@@ -33,16 +43,22 @@ export class AuthController {
     summary: "Register a new user",
     description:
       "Creates a new user account. Email and username must be unique. " +
-      "Returns a JWT access token and the user profile.",
+      "Returns a JWT access token, refresh token, and the user profile. " +
+      "The refresh token is also set as an httpOnly cookie.",
   })
   @ApiCreatedResponse({
-    description: "Registration successful. JWT token returned.",
+    description: "Registration successful. JWT tokens returned.",
   })
   register(
     @Body() dto: RegisterDto,
     @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<AuthResponse> {
-    return this.authService.register(dto, req)
+    const response = this.authService.register(dto, req)
+    response.then((result) => {
+      res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, COOKIE_OPTIONS)
+    })
+    return response
   }
 
   @Post("login")
@@ -51,26 +67,59 @@ export class AuthController {
   @ApiOperation({
     summary: "Log in with email and password",
     description:
-      "Authenticates a user by email and password. Returns a signed JWT access token.",
+      "Authenticates a user by email and password. Returns signed JWTs. " +
+      "The refresh token is also set as an httpOnly cookie.",
   })
   @ApiOkResponse({
-    description: "Login successful. JWT token returned.",
+    description: "Login successful. JWT tokens returned.",
   })
-  login(@Body() dto: LoginDto, @Req() req: Request): Promise<AuthResponse> {
-    return this.authService.login(dto, req)
+  login(
+    @Body() dto: LoginDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<AuthResponse> {
+    const response = this.authService.login(dto, req)
+    response.then((result) => {
+      res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, COOKIE_OPTIONS)
+    })
+    return response
+  }
+
+  @Post("refresh")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Refresh the access token",
+    description:
+      "Reads the refresh token from the httpOnly cookie and returns a new access token.",
+  })
+  @ApiOkResponse({
+    description: "Access token refreshed.",
+  })
+  refresh(@Req() req: Request): Promise<{ accessToken: string }> {
+    return this.authService.refresh(req)
   }
 
   @Post("logout")
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
     summary: "Log out the current user",
-    description: "Revokes the current access token so it cannot be used again.",
+    description:
+      "Revokes the current access token and refresh token so they cannot be used again. " +
+      "Clears the refresh token cookie.",
   })
   @ApiNoContentResponse({
     description: "Logout successful.",
   })
-  logout(@Req() req: Request): Promise<void> {
-    return this.authService.logout(req.header("authorization") ?? "")
+  logout(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<void> {
+    const refreshToken = req.cookies?.refresh_token
+    res.clearCookie(REFRESH_COOKIE_NAME, { ...COOKIE_OPTIONS, maxAge: 0 })
+    return this.authService.logout(
+      req.header("authorization") ?? "",
+      refreshToken,
+    )
   }
 
   @Post("forgot-password")
