@@ -207,7 +207,8 @@ describe('StreamsService - Property-Based Tests', () => {
       update: jest.fn(),
       delete: jest.fn(),
     };
-    service = new StreamsService(mockRepo);
+    const mockWebhooksService = { sendStreamEvent: jest.fn() };
+    service = new StreamsService(mockRepo, mockWebhooksService as any);
   });
 
   // Test 1: Verify the exact allowed transitions based on your implementation
