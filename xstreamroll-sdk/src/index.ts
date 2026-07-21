@@ -2,6 +2,7 @@ export { StreamingClient } from "./client"
 export type { ClientEnv } from "./client"
 export { HttpClient } from "./http"
 export type { RequestInterceptor, ResponseInterceptor, InterceptorHandle } from "./http"
+export { verifyWebhookSignature, computeWebhookSignature } from "./webhooks"
 export type {
   // Config
   StreamConfig,
@@ -22,6 +23,10 @@ export type {
   StreamEventType,
   StreamEvent,
   StreamEventRecord,
+  // Webhooks
+  CreateWebhookDto,
+  WebhookSubscription,
+  WebhookDelivery,
   // Pagination
   PaginatedResponse,
   PaginationParams,

@@ -67,12 +67,18 @@ jobs:
       - name: Typecheck — app
         run: cd app && npx tsc --noEmit
 
+      - name: Start test database
+        run: docker compose -f docker-compose.test.yml up -d --wait
+
       - name: Test — api (with coverage)
         run: cd api && npm run test:cov
         env:
-          DATABASE_URL: postgresql://test:test@localhost:5432/test
+          DATABASE_URL: postgresql://xstreamroll:xstreamroll@localhost:5433/xstreamroll_test
           JWT_SECRET: test-secret
           STREAM_API_KEY: test-api-key
+
+      - name: Stop test database
+        run: docker compose -f docker-compose.test.yml down -v
 
       - name: Test — sdk (with coverage)
         run: cd xstreamroll-sdk && npm run test:cov

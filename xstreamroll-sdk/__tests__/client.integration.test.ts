@@ -134,6 +134,55 @@ describe("StreamingClient Integration", () => {
     })
   })
 
+  describe("webhooks", () => {
+    it("subscribeWebhook sends the dto and returns the created subscription", async () => {
+      const dto = {
+        streamId: "stream-1",
+        url: "https://example.com/hook",
+        events: ["stream:started" as const, "stream:stopped" as const],
+      }
+      const created = {
+        id: "wh-1",
+        userId: "user-1",
+        streamId: dto.streamId,
+        url: dto.url,
+        events: dto.events,
+        secret: "generated-secret",
+        active: true,
+        createdAt: new Date().toISOString(),
+      }
+
+      nock(BASE_URL)
+        .post("/webhooks", (body) => {
+          return (
+            body.streamId === dto.streamId &&
+            body.url === dto.url &&
+            Array.isArray(body.events) &&
+            body.events.length === 2
+          )
+        })
+        .reply(201, created)
+
+      const result = await client.subscribeWebhook(dto)
+      expect(result).toEqual(created)
+      expect(nock.isDone()).toBe(true)
+    })
+
+    it("surfaces a 403 as ApiError when the caller does not own the stream", async () => {
+      nock(BASE_URL)
+        .post("/webhooks")
+        .reply(403, { statusCode: 403, message: "Forbidden", error: "Forbidden" })
+
+      await expect(
+        client.subscribeWebhook({
+          streamId: "stream-1",
+          url: "https://example.com/hook",
+          events: ["stream:started"],
+        }),
+      ).rejects.toThrow(ApiError)
+    })
+  })
+
   describe("token refresh", () => {
     it("automatically retries with new token on 401", async () => {
       // 1. Initial login to set tokens
@@ -152,9 +201,9 @@ describe("StreamingClient Integration", () => {
         .get("/streams/stream-1")
         .reply(401)
 
-      // 3. Refresh token call
+      // 3. Refresh token call (no body, relies on cookie/server-side session)
       nock(BASE_URL)
-        .post("/auth/refresh", { refreshToken: "refresh-123" })
+        .post("/auth/refresh")
         .reply(200, {
           accessToken: "new-access",
           refreshToken: "new-refresh",
