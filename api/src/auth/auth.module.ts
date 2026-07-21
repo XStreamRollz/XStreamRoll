@@ -20,7 +20,7 @@ import { AuditModule } from "../audit/audit.module"
     JwtModule.registerAsync({
       name: "JWT_REFRESH",
       useFactory: () => createRefreshJwtConfig(),
-    }),
+    } as any),
   ],
   controllers: [AuthController],
   providers: [

@@ -36,20 +36,14 @@ export interface AuthResponse {
 
 @Injectable()
 export class AuthService {
-  private readonly accessJwt: JwtService
-  private readonly refreshJwt: JwtService
-
   constructor(
-    @Inject("JWT_REFRESH") refreshJwt: JwtService,
+    @Inject("JWT_REFRESH") private readonly refreshJwt: JwtService,
     private readonly accessJwt: JwtService,
     private readonly usersRepository: UsersRepository,
     private readonly passwordResetService: PasswordResetService,
     private readonly tokenDenylistService: TokenDenylistService,
     private readonly auditService: AuditService,
-  ) {
-    this.refreshJwt = refreshJwt
-    this.accessJwt = accessJwt
-  }
+  ) {}
 
   /**
    * Register a new user.
@@ -140,7 +134,7 @@ export class AuthService {
     }
   }
 
-  async refresh(req: Request): Promise<{ accessToken: string }> {
+  async refresh(req: Request): Promise<AuthResponse> {
     const refreshToken = req.cookies?.refresh_token
     if (!refreshToken) {
       throw new UnauthorizedException("missing refresh token")
@@ -159,7 +153,11 @@ export class AuthService {
       throw new UnauthorizedException("invalid refresh token")
     }
 
-    return { accessToken: this.signAccessToken(user) }
+    return {
+      user: toSafeUser(user),
+      accessToken: this.signAccessToken(user),
+      refreshToken: this.signRefreshToken(user),
+    }
   }
 
   async forgotPassword(dto: ForgotPasswordDto): Promise<void> {

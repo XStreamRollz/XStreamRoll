@@ -14,7 +14,15 @@ export async function POST(req: NextRequest) {
   if (!apiRes.ok) return NextResponse.json({}, { status: 401 })
 
   const data = await apiRes.json()
-  return NextResponse.json({
+  const response = NextResponse.json({
+    user: data.user,
     accessToken: data.accessToken,
   })
+
+  const setCookieHeader = apiRes.headers.get('set-cookie')
+  if (setCookieHeader) {
+    response.headers.set('set-cookie', setCookieHeader)
+  }
+
+  return response
 }

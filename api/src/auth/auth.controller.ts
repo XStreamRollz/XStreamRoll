@@ -49,16 +49,14 @@ export class AuthController {
   @ApiCreatedResponse({
     description: "Registration successful. JWT tokens returned.",
   })
-  register(
+  async register(
     @Body() dto: RegisterDto,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthResponse> {
-    const response = this.authService.register(dto, req)
-    response.then((result) => {
-      res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, COOKIE_OPTIONS)
-    })
-    return response
+    const result = await this.authService.register(dto, req)
+    res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, COOKIE_OPTIONS)
+    return result
   }
 
   @Post("login")
@@ -73,16 +71,14 @@ export class AuthController {
   @ApiOkResponse({
     description: "Login successful. JWT tokens returned.",
   })
-  login(
+  async login(
     @Body() dto: LoginDto,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthResponse> {
-    const response = this.authService.login(dto, req)
-    response.then((result) => {
-      res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, COOKIE_OPTIONS)
-    })
-    return response
+    const result = await this.authService.login(dto, req)
+    res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, COOKIE_OPTIONS)
+    return result
   }
 
   @Post("refresh")
@@ -95,8 +91,10 @@ export class AuthController {
   @ApiOkResponse({
     description: "Access token refreshed.",
   })
-  refresh(@Req() req: Request): Promise<{ accessToken: string }> {
-    return this.authService.refresh(req)
+  async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<AuthResponse> {
+    const result = await this.authService.refresh(req)
+    res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, COOKIE_OPTIONS)
+    return result
   }
 
   @Post("logout")
@@ -110,7 +108,7 @@ export class AuthController {
   @ApiNoContentResponse({
     description: "Logout successful.",
   })
-  logout(
+  async logout(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<void> {

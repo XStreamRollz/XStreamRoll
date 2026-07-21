@@ -29,7 +29,7 @@ interface MockUsersRepository {
 
 interface MockPasswordResetService {
   sendResetToken: jest.Mock<Promise<void>>
-  resetToken: jest.Mock<Promise<void>>
+  resetPassword: jest.Mock<Promise<void>>
 }
 
 interface MockTokenDenylistService {
@@ -56,7 +56,7 @@ function mockUsersRepository(): MockUsersRepository {
 function mockPasswordResetService(): MockPasswordResetService {
   return {
     sendResetToken: jest.fn(),
-    resetToken: jest.fn(),
+    resetPassword: jest.fn(),
   }
 }
 
@@ -230,11 +230,11 @@ describe("AuthService", () => {
         token: "reset-token",
         password: "NewP4ssw0rd!",
       }
-      passwordReset.resetToken.mockResolvedValue(undefined)
+      passwordReset.resetPassword.mockResolvedValue(undefined)
 
       await service.resetPassword(dto)
 
-      expect(passwordReset.resetToken).toHaveBeenCalledWith(dto.token, dto.password)
+      expect(passwordReset.resetPassword).toHaveBeenCalledWith(dto.token, dto.password)
     })
   })
 
@@ -354,6 +354,7 @@ describe("AuthService", () => {
     it("revokes the current access token when valid", async () => {
       accessJwt.verifyAsync.mockResolvedValue({ sub: 1 })
       accessJwt.decode.mockReturnValue({ exp: Math.floor(Date.now() / 1000) + 300 })
+      refreshJwt.decode.mockReturnValue({ exp: Math.floor(Date.now() / 1000) + 300 })
 
       await service.logout(`Bearer ${token}`, refreshToken)
 
@@ -418,11 +419,13 @@ describe("AuthService", () => {
       refreshJwt.decode.mockReturnValue({ sub: 1 })
       users.findById.mockResolvedValue(dummyUser())
       accessJwt.sign.mockReturnValue("new.access.token")
+      refreshJwt.sign.mockReturnValue("new.refresh.token")
 
       const req = { cookies: { refresh_token: refreshToken } } as any
       const result = await service.refresh(req)
 
       expect(result.accessToken).toBe("new.access.token")
+      expect(result.refreshToken).toBe("new.refresh.token")
       expect(refreshJwt.verifyAsync).toHaveBeenCalledWith(refreshToken)
       expect(users.findById).toHaveBeenCalledWith(1)
     })
