@@ -38,16 +38,7 @@ declare module "class-validator" {
     options?: ValidationOptions,
   ): PropertyDecorator
   export function IsNotEmpty(options?: ValidationOptions): PropertyDecorator
-  export function IsArray(options?: ValidationOptions): PropertyDecorator
-  export function IsUrl(
-    urlOptions?: Record<string, unknown>,
-    options?: ValidationOptions,
-  ): PropertyDecorator
-  export function ArrayMinSize(
-    min: number,
-    options?: ValidationOptions,
-  ): PropertyDecorator
-  export function ArrayUnique(options?: ValidationOptions): PropertyDecorator
+  export function IsBoolean(options?: ValidationOptions): PropertyDecorator
 
   export type ValidationArguments = {
     value: unknown
@@ -71,5 +62,15 @@ declare module "class-validator" {
 declare module "class-transformer" {
   export function Type(
     returnType: () => new (...args: unknown[]) => unknown,
+  ): PropertyDecorator
+
+  export function Transform(
+    transformFn: (params: {
+      value: unknown
+      key: string
+      obj: Record<string, unknown>
+      type: new (...args: unknown[]) => unknown
+    }) => unknown,
+    options?: Record<string, unknown>,
   ): PropertyDecorator
 }

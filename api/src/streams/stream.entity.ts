@@ -1,3 +1,5 @@
+import type { StreamVisibility } from "./dto/visibility"
+
 /**
  * In-memory representation of a stream. Mirrors the `streams` table
  * defined in `database/schema.sql`. The controller and service layers
@@ -10,6 +12,7 @@ export interface Stream {
   name: string
   description: string | null
   status: "inactive" | "active" | "error"
+  visibility: StreamVisibility
   createdAt: Date
   updatedAt: Date
 }

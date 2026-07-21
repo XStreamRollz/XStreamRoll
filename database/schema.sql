@@ -16,8 +16,10 @@ CREATE TABLE IF NOT EXISTS streams (
     name VARCHAR(255) NOT NULL,
     description TEXT,
     status VARCHAR(50) DEFAULT 'inactive',
+    visibility VARCHAR(20) NOT NULL DEFAULT 'private',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT streams_visibility_check CHECK (visibility IN ('public', 'private'))
 );
 
 -- Stream data table
@@ -40,6 +42,7 @@ CREATE TABLE IF NOT EXISTS stream_events (
 );
 
 CREATE INDEX idx_streams_user_id ON streams(user_id);
+CREATE INDEX idx_streams_visibility ON streams(visibility);
 CREATE INDEX idx_stream_data_stream_id ON stream_data(stream_id);
 CREATE INDEX idx_stream_data_timestamp ON stream_data(timestamp);
 

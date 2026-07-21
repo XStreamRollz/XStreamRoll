@@ -41,6 +41,7 @@ describe("StreamsService", () => {
       name: "My Stream",
       description: "desc",
       status: "inactive",
+      visibility: "private",
       createdAt: new Date(),
       updatedAt: new Date(),
     }
@@ -48,19 +49,41 @@ describe("StreamsService", () => {
 
     const result = await service.create({ userId: 5, name: "My Stream", description: "desc" })
     expect(result).toEqual(expected)
-    expect(mockRepo.create).toHaveBeenCalledWith({ userId: 5, name: "My Stream", description: "desc" })
+    expect(mockRepo.create).toHaveBeenCalledWith({ userId: 5, name: "My Stream", description: "desc", visibility: undefined })
+  })
+
+  it("create forwards explicit visibility to the repository", async () => {
+    const expected: Stream = {
+      id: 1,
+      userId: 5,
+      name: "My Stream",
+      description: null,
+      status: "inactive",
+      visibility: "public",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
+    mockRepo.create.mockResolvedValue(expected)
+
+    await service.create({ userId: 5, name: "My Stream", visibility: "public" })
+    expect(mockRepo.create).toHaveBeenCalledWith({
+      userId: 5,
+      name: "My Stream",
+      description: undefined,
+      visibility: "public",
+    })
   })
 
   it("list streams with pagination returns correct shape and hasMore", async () => {
     const items: Stream[] = [
-      { id: 1, userId: 1, name: "a", description: null, status: "inactive", createdAt: new Date(), updatedAt: new Date() },
-      { id: 2, userId: 2, name: "b", description: null, status: "inactive", createdAt: new Date(), updatedAt: new Date() },
+      { id: 1, userId: 1, name: "a", description: null, status: "inactive", visibility: "public", createdAt: new Date(), updatedAt: new Date() },
+      { id: 2, userId: 2, name: "b", description: null, status: "inactive", visibility: "public", createdAt: new Date(), updatedAt: new Date() },
     ]
     mockRepo.listPaginated.mockResolvedValue({ items, total: 3 })
 
     const page = 1
     const limit = 2
-    const res = await service.list(page, limit)
+    const res = await service.list(page, limit, 1)
     expect(res.data).toBe(items)
     expect(res.page).toBe(page)
     expect(res.limit).toBe(limit)
@@ -68,12 +91,30 @@ describe("StreamsService", () => {
     expect(res.hasMore).toBe(true)
   })
 
-  it("list streams with status filter forwards filter", async () => {
+  it("list streams forwards viewer userId and status filter to repository", async () => {
     const items: Stream[] = []
     mockRepo.listPaginated.mockResolvedValue({ items, total: 0 })
 
-    await service.list(1, 10, { status: "active" })
-    expect(mockRepo.listPaginated).toHaveBeenCalledWith(1, 10, { status: "active" })
+    await service.list(1, 10, 42, { status: "active" })
+    expect(mockRepo.listPaginated).toHaveBeenCalledWith(1, 10, 42, { status: "active" })
+  })
+
+  it("list streams forwards visibility filter and ownerOnly flag", async () => {
+    const items: Stream[] = []
+    mockRepo.listPaginated.mockResolvedValue({ items, total: 0 })
+
+    await service.list(1, 10, 7, { visibility: "private", ownerOnly: true })
+    expect(mockRepo.listPaginated).toHaveBeenCalledWith(1, 10, 7, {
+      visibility: "private",
+      ownerOnly: true,
+    })
+  })
+
+  it("list with invalid viewerUserId rejects", async () => {
+    await expect(service.list(1, 10, 0)).rejects.toThrow(NotFoundException)
+    await expect(service.list(1, 10, -1)).rejects.toThrow(NotFoundException)
+    await expect(service.list(1, 10, 1.5)).rejects.toThrow(NotFoundException)
+    expect(mockRepo.listPaginated).not.toHaveBeenCalled()
   })
 
   it("findById missing stream throws NotFoundException", async () => {
@@ -82,14 +123,30 @@ describe("StreamsService", () => {
   })
 
   it("update status inactive -> active succeeds", async () => {
-    const existing: Stream = { id: 1, userId: 1, name: "s", description: null, status: "inactive", createdAt: new Date(), updatedAt: new Date() }
+    const existing: Stream = { id: 1, userId: 1, name: "s", description: null, status: "inactive", visibility: "private", createdAt: new Date(), updatedAt: new Date() }
     const updated: Stream = { ...existing, status: "active" }
     mockRepo.findById.mockResolvedValue(existing)
     mockRepo.update.mockResolvedValue(updated)
 
     const res = await service.update(1, { status: "active" })
     expect(res).toEqual(updated)
-    expect(mockRepo.update).toHaveBeenCalledWith(1, { name: undefined, description: undefined, status: "active" })
+    expect(mockRepo.update).toHaveBeenCalledWith(1, { name: undefined, description: undefined, status: "active", visibility: undefined })
+  })
+
+  it("update visibility flips public <-> private", async () => {
+    const existing: Stream = { id: 4, userId: 1, name: "s", description: null, status: "inactive", visibility: "private", createdAt: new Date(), updatedAt: new Date() }
+    const updated: Stream = { ...existing, visibility: "public" }
+    mockRepo.findById.mockResolvedValue(existing)
+    mockRepo.update.mockResolvedValue(updated)
+
+    const res = await service.update(4, { visibility: "public" })
+    expect(res).toEqual(updated)
+    expect(mockRepo.update).toHaveBeenCalledWith(4, {
+      name: undefined,
+      description: undefined,
+      status: undefined,
+      visibility: "public",
+    })
   })
 
   it("update status inactive -> active dispatches a stream:started webhook event", async () => {
@@ -134,14 +191,14 @@ describe("StreamsService", () => {
   })
 
   it("update status active -> active throws ConflictException", async () => {
-    const existing: Stream = { id: 2, userId: 1, name: "s", description: null, status: "active", createdAt: new Date(), updatedAt: new Date() }
+    const existing: Stream = { id: 2, userId: 1, name: "s", description: null, status: "active", visibility: "private", createdAt: new Date(), updatedAt: new Date() }
     mockRepo.findById.mockResolvedValue(existing)
     await expect(service.update(2, { status: "active" })).rejects.toThrow(ConflictException)
     expect(mockRepo.update).not.toHaveBeenCalled()
   })
 
   it("update status error -> active throws ConflictException", async () => {
-    const existing: Stream = { id: 3, userId: 1, name: "s", description: null, status: "error", createdAt: new Date(), updatedAt: new Date() }
+    const existing: Stream = { id: 3, userId: 1, name: "s", description: null, status: "error", visibility: "private", createdAt: new Date(), updatedAt: new Date() }
     mockRepo.findById.mockResolvedValue(existing)
     await expect(service.update(3, { status: "active" })).rejects.toThrow(ConflictException)
   })
@@ -163,6 +220,7 @@ describe("StreamsService", () => {
       name: "s",
       description: null,
       status: "active",
+      visibility: "private",
       createdAt: new Date(),
       updatedAt: new Date(),
     }
