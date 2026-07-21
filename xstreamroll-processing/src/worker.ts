@@ -1,4 +1,5 @@
 import http from "http"
+import { randomBytes } from "crypto"
 import axios from "axios"
 import { env } from "./config"
 import { EventFilter } from "./pipeline"
@@ -39,6 +40,34 @@ export const metricsServer =
 // Axios instance that routes all requests through the shared agent.
 export const axiosInstance = axios.create({ httpAgent })
 
+// Propagate W3C trace context on every outbound request so the API can
+// correlate worker-initiated polls and callbacks to a single trace.
+// generateTraceparent creates a fresh root span for each polling cycle;
+// when the API sends a traceparent response header the worker will echo
+// it on subsequent calls within the same cycle via the activeTraceparent
+// module-level variable below.
+let activeTraceparent: string | null = null
+
+function generateTraceparent(): string {
+  const traceId = randomBytes(16).toString("hex")
+  const spanId = randomBytes(8).toString("hex")
+  return `00-${traceId}-${spanId}-01`
+}
+
+axiosInstance.interceptors.request.use((config) => {
+  const tp = activeTraceparent ?? generateTraceparent()
+  config.headers["traceparent"] = tp
+  return config
+})
+
+axiosInstance.interceptors.response.use((response) => {
+  const incoming = response.headers["traceparent"]
+  if (typeof incoming === "string" && incoming.length > 0) {
+    activeTraceparent = incoming
+  }
+  return response
+})
+
 // Module-scoped state used by the shutdown hooks. Both are assigned
 // by `start()` once the lock manager has been installed and the
 // registry has been constructed. Kept as `let` rather than `const`
@@ -73,6 +102,9 @@ async function initLockManager(): Promise<LockManager> {
 }
 
 async function pollOnce(): Promise<void> {
+  // Start a fresh trace for each polling cycle so all HTTP calls within
+  // the cycle (poll + any callbacks) share the same root traceparent.
+  activeTraceparent = generateTraceparent()
   if (!registry) return
   let events: StreamEvent[] = []
   try {

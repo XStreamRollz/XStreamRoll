@@ -28,6 +28,7 @@ describe("Auth Rate Limiting (Integration)", () => {
   const mockAuthService = {
     register: jest.fn(),
     login: jest.fn(),
+    refresh: jest.fn(),
     logout: jest.fn(),
     forgotPassword: jest.fn(),
     resetPassword: jest.fn(),
@@ -114,6 +115,7 @@ describe("Auth Rate Limiting (Integration)", () => {
           createdAt: new Date(),
         },
         accessToken: "token.here",
+        refreshToken: "refresh.token.here",
       })
 
       const loginDto = { email: "test@example.com", password: "password" }
@@ -141,6 +143,7 @@ describe("Auth Rate Limiting (Integration)", () => {
           createdAt: new Date(),
         },
         accessToken: "token.here",
+        refreshToken: "refresh.token.here",
       })
 
       const loginDto = { email: "test@example.com", password: "password" }
@@ -175,6 +178,7 @@ describe("Auth Rate Limiting (Integration)", () => {
           createdAt: new Date(),
         },
         accessToken: "token.here",
+        refreshToken: "refresh.token.here",
       })
 
       const loginDto = { email: "test@example.com", password: "password" }
@@ -208,6 +212,7 @@ describe("Auth Rate Limiting (Integration)", () => {
           createdAt: new Date(),
         },
         accessToken: "token.here",
+        refreshToken: "refresh.token.here",
       })
 
       const loginDto = { email: "test@example.com", password: "password" }
@@ -248,6 +253,7 @@ describe("Auth Rate Limiting (Integration)", () => {
           createdAt: new Date(),
         },
         accessToken: "token.here",
+        refreshToken: "refresh.token.here",
       })
 
       const registerDto = {

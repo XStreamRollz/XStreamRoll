@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Injectable,
+  Inject,
   UnauthorizedException,
 } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
@@ -14,6 +15,7 @@ import { TokenDenylistService } from "./token-denylist.service"
 import { User, UsersRepository } from "./users.repository"
 import { PasswordResetService } from "./password-reset.service"
 import { AuditService } from "../audit/audit.service"
+import { JWT_REFRESH_TOKEN_EXPIRES_IN } from "../config/jwt.config"
 
 /** Rounds for bcrypt key derivation (auto-salt). */
 const BCRYPT_ROUNDS = 12
@@ -29,12 +31,14 @@ export interface SafeUser {
 export interface AuthResponse {
   user: SafeUser
   accessToken: string
+  refreshToken: string
 }
 
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly jwtService: JwtService,
+    @Inject("JWT_REFRESH") private readonly refreshJwt: JwtService,
+    private readonly accessJwt: JwtService,
     private readonly usersRepository: UsersRepository,
     private readonly passwordResetService: PasswordResetService,
     private readonly tokenDenylistService: TokenDenylistService,
@@ -45,7 +49,7 @@ export class AuthService {
    * Register a new user.
    *
    * Validates email and username uniqueness, hashes the password with bcrypt,
-   * and returns a signed JWT together with a public-safe user object.
+   * and returns signed JWTs together with a public-safe user object.
    * Logs registration failures with IP and user-agent for security monitoring.
    */
   async register(dto: RegisterDto, req: Request): Promise<AuthResponse> {
@@ -86,7 +90,8 @@ export class AuthService {
 
     return {
       user: toSafeUser(user),
-      accessToken: this.signToken(user),
+      accessToken: this.signAccessToken(user),
+      refreshToken: this.signRefreshToken(user),
     }
   }
 
@@ -94,7 +99,7 @@ export class AuthService {
    * Authenticate an existing user.
    *
    * Looks up the user by email, compares the provided password against
-   * the stored bcrypt hash, and returns a JWT on success.
+   * the stored bcrypt hash, and returns JWTs on success.
    * Logs all authentication failures with IP and user-agent for threat monitoring.
    */
   async login(dto: LoginDto, req: Request): Promise<AuthResponse> {
@@ -124,7 +129,34 @@ export class AuthService {
 
     return {
       user: toSafeUser(user),
-      accessToken: this.signToken(user),
+      accessToken: this.signAccessToken(user),
+      refreshToken: this.signRefreshToken(user),
+    }
+  }
+
+  async refresh(req: Request): Promise<AuthResponse> {
+    const refreshToken = req.cookies?.refresh_token
+    if (!refreshToken) {
+      throw new UnauthorizedException("missing refresh token")
+    }
+
+    await this.verifyRefreshToken(refreshToken)
+
+    const payload = this.refreshJwt.decode(refreshToken) as { sub?: number } | null
+    const userId = payload?.sub
+    if (!userId) {
+      throw new UnauthorizedException("invalid refresh token")
+    }
+
+    const user = await this.usersRepository.findById(userId)
+    if (!user) {
+      throw new UnauthorizedException("invalid refresh token")
+    }
+
+    return {
+      user: toSafeUser(user),
+      accessToken: this.signAccessToken(user),
+      refreshToken: this.signRefreshToken(user),
     }
   }
 
@@ -136,11 +168,14 @@ export class AuthService {
     await this.passwordResetService.resetPassword(dto.token, dto.password)
   }
 
-  async logout(authorizationHeader: string): Promise<void> {
+  async logout(
+    authorizationHeader: string,
+    refreshToken?: string,
+  ): Promise<void> {
     const token = this.extractBearerToken(authorizationHeader)
     await this.verifyToken(token)
 
-    const payload = this.jwtService.decode(token) as { exp?: number } | null
+    const payload = this.accessJwt.decode(token) as { exp?: number } | null
     const expiresAt = typeof payload?.exp === "number" ? payload.exp : undefined
     if (!expiresAt) {
       throw new UnauthorizedException("invalid access token")
@@ -152,13 +187,35 @@ export class AuthService {
     }
 
     await this.tokenDenylistService.revoke(token, ttlSeconds)
+
+    if (refreshToken) {
+      const refreshPayload = this.refreshJwt.decode(refreshToken) as
+        | { exp?: number }
+        | null
+      const refreshExpiresAt =
+        typeof refreshPayload?.exp === "number" ? refreshPayload.exp : undefined
+      if (refreshExpiresAt) {
+        const refreshTtl = Math.floor(refreshExpiresAt - Date.now() / 1000)
+        if (refreshTtl > 0) {
+          await this.tokenDenylistService.revoke(refreshToken, refreshTtl)
+        }
+      }
+    }
   }
 
   private async verifyToken(token: string): Promise<void> {
     try {
-      await this.jwtService.verifyAsync(token)
+      await this.accessJwt.verifyAsync(token)
     } catch {
       throw new UnauthorizedException("invalid or expired access token")
+    }
+  }
+
+  private async verifyRefreshToken(token: string): Promise<void> {
+    try {
+      await this.refreshJwt.verifyAsync(token)
+    } catch {
+      throw new UnauthorizedException("invalid or expired refresh token")
     }
   }
 
@@ -196,8 +253,19 @@ export class AuthService {
   }
 
   /** Create a short-lived JWT access token for the given user. */
-  private signToken(user: User): string {
-    return this.jwtService.sign({
+  private signAccessToken(user: User): string {
+    return this.accessJwt.sign({
+      sub: user.id,
+      email: user.email,
+      username: user.username,
+      passwordChangedAt:
+        user.password_changed_at?.getTime() ?? user.created_at.getTime(),
+    })
+  }
+
+  /** Create a long-lived JWT refresh token for the given user. */
+  private signRefreshToken(user: User): string {
+    return this.refreshJwt.sign({
       sub: user.id,
       email: user.email,
       username: user.username,
