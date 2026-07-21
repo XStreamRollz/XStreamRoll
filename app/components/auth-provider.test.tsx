@@ -30,7 +30,7 @@ describe('AuthProvider', () => {
   it('provides user context on success', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ user: { id: 1, username: 'test', email: 'a@b.com' } }),
+      json: () => Promise.resolve({ user: { id: 1, username: 'test', email: 'a@b.com' }, accessToken: 'abc' }),
     })
 
     render(<AuthProvider><div>content</div></AuthProvider>)

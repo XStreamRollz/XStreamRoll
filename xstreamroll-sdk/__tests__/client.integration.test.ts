@@ -201,9 +201,9 @@ describe("StreamingClient Integration", () => {
         .get("/streams/stream-1")
         .reply(401)
 
-      // 3. Refresh token call
+      // 3. Refresh token call (no body, relies on cookie/server-side session)
       nock(BASE_URL)
-        .post("/auth/refresh", { refreshToken: "refresh-123" })
+        .post("/auth/refresh")
         .reply(200, {
           accessToken: "new-access",
           refreshToken: "new-refresh",
