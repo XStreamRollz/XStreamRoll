@@ -2,7 +2,7 @@ import { Module } from "@nestjs/common"
 import { CacheModule } from "@nestjs/cache-manager"
 import { JwtModule } from "@nestjs/jwt"
 import { cacheConfig } from "../config/cache.config"
-import createJwtConfig, { JWT_ACCESS_TOKEN_EXPIRES_IN } from "../config/jwt.config"
+import { createJwtConfig, createRefreshJwtConfig, JWT_ACCESS_TOKEN_EXPIRES_IN } from "../config/jwt.config"
 import { AuthController } from "./auth.controller"
 import { AuthService } from "./auth.service"
 import { TokenDenylistService } from "./token-denylist.service"
@@ -16,6 +16,10 @@ import { AuditModule } from "../audit/audit.module"
     CacheModule.register(cacheConfig()),
     JwtModule.registerAsync({
       useFactory: () => createJwtConfig(JWT_ACCESS_TOKEN_EXPIRES_IN),
+    }),
+    JwtModule.registerAsync({
+      name: "JWT_REFRESH",
+      useFactory: () => createRefreshJwtConfig(),
     }),
   ],
   controllers: [AuthController],
