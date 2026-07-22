@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { useStreamSocket } from '../../hooks/useStreamSocket';
 import { ConnectionStatus } from './ConnectionStatus';
 import { StreamFeed } from './StreamFeed';
@@ -12,8 +13,13 @@ interface Props {
 export const StreamViewer = ({
   socketUrl,
 }: Props) => {
+  // Memoize the URL so parent re-renders that don't actually change the
+  // socket URL don't cause `useStreamSocket` to re-evaluate its effect.
+  // See issue #350.
+  const memoizedSocketUrl = useMemo(() => socketUrl, [socketUrl]);
+
   const { status, events } =
-    useStreamSocket(socketUrl);
+    useStreamSocket(memoizedSocketUrl);
 
   return (
     <div className="space-y-4 rounded-xl border p-5">
