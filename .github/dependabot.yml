@@ -1,0 +1,142 @@
+# Dependabot configuration for the XStreamRoll monorepo (issue #368).
+#
+# The XStreamRoll monorepo consists of one root workspace plus four
+# sibling packages (app, api, xstreamroll-sdk, xstreamroll-processing).
+# Each one has its own package.json and is updated independently, so
+# we register an entry per workspace. GitHub Actions versioning is
+# tracked separately so Renovate-style bumping of `aquasecurity/trivy-action`
+# and friends is captured too.
+#
+# Schedule: every Monday morning. PRs are limited per ecosystem so a
+# dependency with a long release history cannot overwhelm the queue.
+# Production-only and development-only dependencies are grouped so the
+# PR list stays scannable.
+
+version: 2
+
+updates:
+  # ─── Root workspace (lint, format, sdk helpers) ────────────────────
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    groups:
+      npm-prod-minor-patch:
+        dependency-type: "production"
+        update-types: ["minor", "patch"]
+      npm-dev-minor-patch:
+        dependency-type: "development"
+        update-types: ["minor", "patch"]
+    labels:
+      - "dependencies"
+      - "automated"
+    commit-message:
+      prefix: "chore(deps)"
+      include-scope: true
+
+  # ─── Next.js frontend ──────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/app"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    groups:
+      app-prod-minor-patch:
+        dependency-type: "production"
+        update-types: ["minor", "patch"]
+    labels:
+      - "dependencies"
+      - "automated"
+      - "app"
+    commit-message:
+      prefix: "chore(deps-app)"
+
+  # ─── NestJS API ────────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/api"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    groups:
+      api-prod-minor-patch:
+        dependency-type: "production"
+        update-types: ["minor", "patch"]
+      api-dev-minor-patch:
+        dependency-type: "development"
+        update-types: ["minor", "patch"]
+    labels:
+      - "dependencies"
+      - "automated"
+      - "api"
+    commit-message:
+      prefix: "chore(deps-api)"
+
+  # ─── Public TypeScript SDK ─────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/xstreamroll-sdk"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3
+    groups:
+      sdk-prod-minor-patch:
+        dependency-type: "production"
+        update-types: ["minor", "patch"]
+    labels:
+      - "dependencies"
+      - "automated"
+      - "sdk"
+    commit-message:
+      prefix: "chore(deps-sdk)"
+
+  # ─── Stream-processing worker ──────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/xstreamroll-processing"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3
+    groups:
+      processing-prod-minor-patch:
+        dependency-type: "production"
+        update-types: ["minor", "patch"]
+    labels:
+      - "dependencies"
+      - "automated"
+      - "processing"
+    commit-message:
+      prefix: "chore(deps-processing)"
+
+  # ─── GitHub Actions ────────────────────────────────────────────────
+  # Renovate's GitHub Actions updater is the gold standard;
+  # Dependabot's `github-actions` ecosystem gives us equivalent
+  # coverage for actions/checkout, docker/build-push-action, etc.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "automated"
+      - "ci"
+    commit-message:
+      prefix: "chore(ci)"
+      include-scope: true

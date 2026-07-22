@@ -28,13 +28,28 @@ afterEach(async () => {
 test("filtered events are not published (integration)", async () => {
   // We'll mock the pipeline's EventFilter so the worker drops events
   // with type === 'blocked'. Do the mock before importing the worker.
+  // The mock also exposes the no-op `start`/`close`/`setStore`/
+  // `setConfig`/`clearConfig` methods the worker now invokes as part
+  // of the issue #351 distributed store wiring.
   jest.doMock("../../src/pipeline", () => {
     return {
       EventFilter: class {
         allow(event: StreamEvent) {
           return event.data?.type !== "blocked"
         }
+        async start(): Promise<void> {}
+        async close(): Promise<void> {}
+        setStore(): void {}
+        setConfig(): Promise<void> { return Promise.resolve() }
+        clearConfig(): Promise<void> { return Promise.resolve() }
       },
+      createFilterConfigStore: async () => ({
+        install: async () => new Map(),
+        setConfig: async () => {},
+        clearConfig: async () => {},
+        close: async () => {},
+      }),
+      MemoryFilterConfigStore: class {},
     }
   })
 
