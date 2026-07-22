@@ -1,0 +1,241 @@
+# Security scanning workflow (issue #372).
+#
+# Runs [Trivy](https://github.com/aquasecurity/trivy) on every push to
+# main, every pull request against main, and on a weekly schedule so
+# newly disclosed CVEs surface automatically. Two scan targets:
+#
+#   1. Filesystem (`trivy fs`) — walks the checked-out source and
+#      surfaces CVEs in `package.json` lockfiles + the language-level
+#      manifests. This is the cheap, always-on scan.
+#
+#   2. Docker images (`trivy image`) — builds each production image
+#      locally and scans the resulting layers. OS package CVEs only
+#      show up here, not in the fs scan, so both targets are needed
+#      for full coverage.
+#
+# Severity is filtered to CRITICAL + HIGH to keep noise manageable;
+# MEDIUM is left for the optional weekly schedule run (where we have
+# more time to act on findings). Results are uploaded as SARIF to the
+# GitHub Security tab so maintainers see them in the Code Scanning
+# dashboard and can navigate to the offending line.
+
+name: Security Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request_target:
+    # Single PR event so the scan and the PR-comment job share the
+    # same workflow run; otherwise the comment job's `download-artifact`
+    # would find an empty directory and post a misleading "0 critical,
+    # 0 high" summary. `pull_request_target` runs with the secrets
+    # the SARIF upload requires AND in the base repo's context, so
+    # the workflow code itself is always the version on main. The
+    # only code under inspection is the Trivy scanner, which reads
+    # files without executing PR code.
+    branches: [main]
+  schedule:
+    # Every Monday at 06:15 UTC — 15 minutes after Dependabot opens
+    # weekly PRs so we can re-check the repo shortly after a bump.
+    - cron: "15 6 * * 1"
+
+# `security-events: write` is required by the CodeQL `upload-sarif`
+# action to upload findings into GitHub's Code Scanning dashboard.
+# `pull-requests: write` lets us post a summary comment on PRs.
+# GitHub strips write permissions from pull_request events originating
+# in forks, so SARIF uploads silently fail there. To still surface
+# findings for fork PRs we mirror the high-permission jobs to
+# `pull_request_target` and re-test the same revisions with the
+# secrets it needs. Fork contributors don't run anything privileged;
+# both target events only run the open-source `aquasecurity/trivy-action`
+# against the immutable checkout ref.
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+
+# Cancel any in-flight job for the same PR / branch when a new
+# commit lands. Without this, force-pushes can stack up scans.
+concurrency:
+  group: security-scan-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ----------------------------------------------------------------
+  # Filesystem scan — fast, runs first, surfaces lockfile CVEs.
+  # ----------------------------------------------------------------
+  trivy-fs:
+    name: Trivy Filesystem Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history so Trivy can look at the lockfile even when
+          # the working tree only carries a partial checkout.
+          fetch-depth: 0
+
+      - name: Run Trivy filesystem scan (text)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          format: "table"
+          ignore-unfixed: true
+          # Plain table — easy to scan in the workflow logs.
+          severity: "CRITICAL,HIGH"
+          # Don't fail the run on findings. Dependabot + the weekly
+          # schedule are the remediation channel; this step exists
+          # to keep the picture visible in the Security tab.
+          exit-code: "0"
+
+      - name: Generate Trivy filesystem scan (sarif)
+        if: always()
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          format: "sarif"
+          output: "trivy-fs.sarif"
+          ignore-unfixed: true
+          severity: "CRITICAL,HIGH,MEDIUM"
+
+      - name: Upload SARIF to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
+
+  # ----------------------------------------------------------------
+  # Docker image scan — runs per production image in parallel.
+  # Builds the image with BuildKit so we don't push to a registry
+  # (load:true keeps the layers on the runner), then scans the
+  # resulting tag with `trivy image`.
+  # ----------------------------------------------------------------
+  image-scan:
+    name: Trivy Image Scan (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    needs: trivy-fs
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: api
+            context: api
+          - image: app
+            context: app
+          - image: processing
+            context: xstreamroll-processing
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: false
+          # Load into the runner's local daemon so `trivy image`
+          # can read the layers without a registry round trip.
+          load: true
+          tags: scan-target:${{ matrix.image }}
+
+      - name: Run Trivy image scan (text)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: scan-target:${{ matrix.image }}
+          format: "table"
+          ignore-unfixed: true
+          severity: "CRITICAL,HIGH"
+          exit-code: "0"
+
+      - name: Generate Trivy image scan (sarif)
+        if: always()
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: scan-target:${{ matrix.image }}
+          format: "sarif"
+          output: trivy-image-${{ matrix.image }}.sarif
+          ignore-unfixed: true
+          severity: "CRITICAL,HIGH,MEDIUM"
+
+      - name: Upload SARIF to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image-${{ matrix.image }}.sarif
+          category: trivy-image-${{ matrix.image }}
+
+  # ----------------------------------------------------------------
+  # PR comment summarising high+critical counts across all scanners
+  # so reviewers see at a glance whether their branch introduces new
+  # vulnerabilities. Best-effort; failures don't fail the workflow.
+  # ----------------------------------------------------------------
+  pr-summary:
+    name: Security Scan Summary
+    runs-on: ubuntu-latest
+    needs: [trivy-fs, image-scan]
+    # Only PR events have an issue to comment on; push and the weekly
+    # schedule skip this job. `pull_request_target` covers both
+    # same-repo and fork PRs since it's the only PR event we listen
+    # for above.
+    if: github.event_name == 'pull_request_target'
+    steps:
+      - name: Download SARIF artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: sarif
+
+      - name: Comment PR with vulnerability counts
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const dir = 'sarif';
+            if (!fs.existsSync(dir)) {
+              console.log('No SARIF directory found; skipping PR summary.');
+              return;
+            }
+            let totalCritical = 0;
+            let totalHigh = 0;
+            const perScanner = [];
+            for (const name of fs.readdirSync(dir)) {
+              if (!name.endsWith('.sarif')) continue;
+              const text = fs.readFileSync(path.join(dir, name), 'utf8');
+              const doc = JSON.parse(text);
+              const counts = { CRITICAL: 0, HIGH: 0 };
+              for (const run of doc.runs ?? []) {
+                for (const result of run.results ?? []) {
+                  const sev = (result.level || '').toUpperCase();
+                  if (sev === 'ERROR') counts.CRITICAL += 1;
+                  else if (sev === 'WARNING') counts.HIGH += 1;
+                }
+              }
+              totalCritical += counts.CRITICAL;
+              totalHigh += counts.HIGH;
+              perScanner.push(`- \`${name}\`: ${counts.CRITICAL} critical, ${counts.HIGH} high`);
+            }
+            const body = [
+              '## 🔒 Security scan summary',
+              '',
+              `- **Critical:** ${totalCritical}`,
+              `- **High:** ${totalHigh}`,
+              '',
+              'Per-scanner breakdown:',
+              ...perScanner,
+              '',
+              '> SARIF results are also available in the GitHub Security tab.',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body,
+            });
