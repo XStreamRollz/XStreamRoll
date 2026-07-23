@@ -1,6 +1,9 @@
 import { Injectable } from "@nestjs/common"
 import { Notification } from "../notification.entity"
 
+/** Issue #348: notifications are retained for 30 days, then swept. */
+const NOTIFICATION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
+
 /**
  * In-memory notifications repository.
  *
@@ -19,13 +22,15 @@ export class NotificationsRepository {
     type: string,
     payload: Record<string, unknown>,
   ): Promise<Notification> {
+    const now = new Date()
     const notification: Notification = {
       id: this.nextId++,
       userId,
       type,
       payload,
       readAt: null,
-      createdAt: new Date(),
+      createdAt: now,
+      expiresAt: new Date(now.getTime() + NOTIFICATION_RETENTION_MS),
     }
     this.byId.set(notification.id, notification)
     return notification
@@ -83,5 +88,18 @@ export class NotificationsRepository {
     const notification = this.byId.get(id)
     if (!notification || notification.userId !== userId) return false
     return this.byId.delete(id)
+  }
+
+  async deleteExpiredBatch(limit: number): Promise<number> {
+    const now = Date.now()
+    let deleted = 0
+    for (const notification of this.byId.values()) {
+      if (deleted >= limit) break
+      if (notification.expiresAt.getTime() < now) {
+        this.byId.delete(notification.id)
+        deleted++
+      }
+    }
+    return deleted
   }
 }

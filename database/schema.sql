@@ -108,11 +108,17 @@ CREATE TABLE IF NOT EXISTS notifications (
     type       VARCHAR(100) NOT NULL,
     payload    JSONB NOT NULL DEFAULT '{}',
     read_at    TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Issue #348: retention — rows are deleted once past expires_at by the
+    -- NotificationsService cleanup sweep. The application always sets this
+    -- explicitly to NOW() + INTERVAL '30 days' on insert; the column
+    -- default only backstops rows written outside that path.
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT (CURRENT_TIMESTAMP + INTERVAL '30 days')
 );
 
 CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_unread  ON notifications(user_id) WHERE read_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_notifications_expires_at ON notifications(expires_at);
 
 -- ---------------------------------------------------------------------
 -- Issue #392: Webhook delivery for stream lifecycle events

@@ -31,6 +31,7 @@ export class NotificationsDbRepository {
       payload: row.payload as Record<string, unknown>,
       readAt: (row.read_at as Date | null) ?? null,
       createdAt: row.created_at as Date,
+      expiresAt: row.expires_at as Date,
     }
   }
 
@@ -48,9 +49,9 @@ export class NotificationsDbRepository {
   ): Promise<Notification> {
     try {
       const { rows } = await this.pool.query<Record<string, unknown>>(
-        `INSERT INTO notifications (user_id, type, payload)
-         VALUES ($1, $2, $3)
-         RETURNING id, user_id, type, payload, read_at, created_at`,
+        `INSERT INTO notifications (user_id, type, payload, expires_at)
+         VALUES ($1, $2, $3, NOW() + INTERVAL '30 days')
+         RETURNING id, user_id, type, payload, read_at, created_at, expires_at`,
         [userId, type, payload],
       )
       return this.rowToNotification(rows[0])
@@ -62,7 +63,7 @@ export class NotificationsDbRepository {
   async findById(id: number): Promise<Notification | undefined> {
     try {
       const { rows } = await this.pool.query<Record<string, unknown>>(
-        `SELECT id, user_id, type, payload, read_at, created_at
+        `SELECT id, user_id, type, payload, read_at, created_at, expires_at
          FROM notifications WHERE id = $1`,
         [id],
       )
@@ -88,7 +89,7 @@ export class NotificationsDbRepository {
       const total = Number(countRows[0]?.count ?? 0)
 
       const { rows } = await this.pool.query<Record<string, unknown>>(
-        `SELECT id, user_id, type, payload, read_at, created_at
+        `SELECT id, user_id, type, payload, read_at, created_at, expires_at
          FROM notifications
          WHERE user_id = $1 AND read_at IS NULL
          ORDER BY created_at DESC
@@ -111,7 +112,7 @@ export class NotificationsDbRepository {
         `UPDATE notifications
          SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP)
          WHERE id = $1 AND user_id = $2
-         RETURNING id, user_id, type, payload, read_at, created_at`,
+         RETURNING id, user_id, type, payload, read_at, created_at, expires_at`,
         [id, userId],
       )
       return rows[0] ? this.rowToNotification(rows[0]) : undefined
@@ -143,6 +144,29 @@ export class NotificationsDbRepository {
       return (rowCount ?? 0) > 0
     } catch (err) {
       this.handleDbError(err, "deleteById")
+    }
+  }
+
+  /**
+   * Deletes up to `limit` expired notifications (issue #348 retention
+   * sweep). Bounded so a single sweep pass can't hold a long-running
+   * transaction/lock on a table with millions of due rows — the caller
+   * loops until this returns 0.
+   */
+  async deleteExpiredBatch(limit: number): Promise<number> {
+    try {
+      const { rowCount } = await this.pool.query(
+        `DELETE FROM notifications
+         WHERE id IN (
+           SELECT id FROM notifications
+           WHERE expires_at < NOW()
+           LIMIT $1
+         )`,
+        [limit],
+      )
+      return rowCount ?? 0
+    } catch (err) {
+      this.handleDbError(err, "deleteExpiredBatch")
     }
   }
 }
