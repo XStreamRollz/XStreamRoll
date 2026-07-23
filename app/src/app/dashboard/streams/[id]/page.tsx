@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { Suspense } from "react"
 import { StreamDetailSkeleton } from "@/components/dashboard/stream-detail-skeleton"
 import { EmbedSnippet } from "@/components/streams/embed-snippet"
+import { StreamDetailLive } from "../stream-detail-live"
 
 export const metadata: Metadata = {
   title: "Stream | XStreamRoll",
@@ -15,18 +16,10 @@ interface PageProps {
 }
 
 /**
- * Stream detail page.
- *
- * The dashboard renders this page when a user opens one of their
- * streams. It shows the stream metadata and — per issue 95 — a
- * copy-to-clipboard iframe embed snippet.
- *
- * The route param `id` here is the stream's PUBLIC identifier. The
- * private/secret stream key MUST NOT be passed into this page so the
- * embed snippet stays safe to share with third-party sites.
- *
- * The embed snippet is wrapped in `<Suspense>` so the skeleton is
- * streamed while per-stream data resolves (#369).
+ * Stream detail page. Wraps a client component
+ * ({@link StreamDetailLive}) that consumes `useStreamDetail` so the
+ * metadata roundtrips through React Query's 30s stale-while-revalidate
+ * cache (issue #345 phase B).
  */
 export default async function StreamDetailPage({ params }: PageProps) {
   const { id: publicId } = await params
@@ -42,6 +35,7 @@ export default async function StreamDetailPage({ params }: PageProps) {
 
       <Suspense fallback={<StreamDetailSkeleton />}>
         <EmbedSnippet publicId={publicId} />
+        <StreamDetailLive publicId={publicId} />
       </Suspense>
     </main>
   )
