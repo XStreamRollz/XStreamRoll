@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `@xstreamroll/contract-tests` workspace package (`tests/contracts`) with a custom consumer/provider contract test suite covering the `streams` and `auth` endpoints: `api/src/contract-provider.spec.ts` verifies the API satisfies each contract, `xstreamroll-sdk/__tests__/contract.consumer.test.ts` verifies the SDK sends/parses what each contract describes. CI fails if either suite fails (`#399`).
 - `@xstreamroll/types` workspace package (`packages/types`) as the single source of truth for domain types (`User`, `Stream`, `StreamEvent`, pagination, and API error shapes) shared by `api`, `app`, and `xstreamroll-sdk` (`#376`).
 - Kubernetes deployment manifests for API, App, Processing Worker, and PostgreSQL (`#217`).
 - Health check endpoints (`/api/health`, `/livez`, `/healthz`) to support container orchestrator probes.

@@ -56,7 +56,10 @@
     "@types/node": "^20.10.0",
     "@types/pg": "^8.20.0",
     "@types/sanitize-html": "^2.16.1",
+    "@types/supertest": "^7.2.0",
+    "@xstreamroll/contract-tests": "file:../tests/contracts",
     "jest": "^29.7.0",
+    "supertest": "^7.2.2",
     "ts-jest": "^29.4.11",
     "typescript": "^5.3.0"
   },
@@ -71,6 +74,7 @@
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
+    "transformIgnorePatterns": ["/node_modules/", "/dist/"],
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],

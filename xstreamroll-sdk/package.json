@@ -18,6 +18,10 @@
     "testMatch": [
       "**/__tests__/**/*.test.ts"
     ],
+    "transformIgnorePatterns": [
+      "/node_modules/",
+      "/dist/"
+    ],
     "coverageDirectory": "coverage",
     "coverageReporters": [
       "lcov",
@@ -30,6 +34,7 @@
   "devDependencies": {
     "@types/jest": "^29.5.14",
     "@types/node": "^20.10.0",
+    "@xstreamroll/contract-tests": "file:../tests/contracts",
     "jest": "^29.7.0",
     "nock": "^14.0.15",
     "openapi-typescript": "^7.13.0",

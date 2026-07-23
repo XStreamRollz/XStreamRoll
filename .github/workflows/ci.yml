@@ -30,6 +30,9 @@ jobs:
       - name: Install & build types package
         run: cd packages/types && npm install && npm run build
 
+      - name: Install & build contract tests package
+        run: cd tests/contracts && npm install && npm run build
+
       - name: Install app dependencies
         run: cd app && npm install
 
@@ -44,6 +47,9 @@ jobs:
 
       - name: Lint — types
         run: cd packages/types && npm run lint
+
+      - name: Lint — contract tests
+        run: cd tests/contracts && npm run lint
 
       - name: Lint — api
         run: cd api && npm run lint
@@ -64,6 +70,9 @@ jobs:
       - name: Typecheck — types (build must succeed cleanly)
         run: cd packages/types && npm run typecheck
 
+      - name: Typecheck — contract tests
+        run: cd tests/contracts && npm run typecheck
+
       - name: Typecheck — api
         run: cd api && npx tsc --noEmit
 
@@ -79,6 +88,10 @@ jobs:
       - name: Start test database
         run: docker compose -f docker-compose.test.yml up -d --wait
 
+      # Provider verification for tests/contracts/ runs as part of this
+      # step (api/src/contract-provider.spec.ts matches the api Jest
+      # config's `*.spec.ts` pattern) — a contract violation fails the
+      # build the same way any other api test failure would.
       - name: Test — api (with coverage)
         run: cd api && npm run test:cov
         env:
@@ -89,6 +102,8 @@ jobs:
       - name: Stop test database
         run: docker compose -f docker-compose.test.yml down -v
 
+      # Consumer contract verification for tests/contracts/ runs as part
+      # of this step (xstreamroll-sdk/__tests__/contract.consumer.test.ts).
       - name: Test — sdk (with coverage)
         run: cd xstreamroll-sdk && npm run test:cov
 
