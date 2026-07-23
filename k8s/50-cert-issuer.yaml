@@ -1,0 +1,71 @@
+# Cert-manager issuers for the XStreamRoll Ingress — issue #325.
+# ---------------------------------------------------------------------------
+# cert-manager MUST be installed in the cluster before any of these
+# resources can be applied. If cert-manager is not already present,
+# install it first (https://cert-manager.io/docs/installation/):
+#
+#   kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.yaml
+#
+# Three issuers are defined below:
+#
+#   1. selfsigned-issuer  — always available, requires no DNS or ACME
+#                            account. Use for local clusters where the
+#                            hostname does not resolve publicly.
+#   2. letsencrypt-staging — ACME staging endpoint. Safe to use against
+#                            real DNS but rate-limited and returns
+#                            untrusted certs. Use in CI / preview.
+#   3. letsencrypt-prod   — ACME production endpoint. Commented out by
+#                            default — see k8s/README.md "TLS / cert-manager"
+#                            before enabling in production.
+#
+# The Ingress in 60-ingress.yaml picks the issuer via the
+# `cert-manager.io/cluster-issuer` annotation. Switch to
+# `letsencrypt-prod` (and update the email) once DNS is configured.
+
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-issuer
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    # Staging endpoint — never signs a public-trust chain. Use this
+    # for any environment where rate limits matter or Let's Encrypt
+    # would reject your account.
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    # !! Replace before applying in any cluster with public DNS.
+    email: ops@example.com
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+      - http01:
+          ingress:
+            class: nginx
+---
+# Production issuer — intentionally commented out.
+# To enable:
+#   1. Confirm `ops@example.com` below is a real account contact.
+#   2. Confirm DNS for the Ingress `host` resolves to the cluster.
+#   3. Uncomment the block and `kubectl apply -f k8s/50-cert-issuer.yaml`.
+#   4. Update `cert-manager.io/cluster-issuer` on 60-ingress.yaml.
+#
+# apiVersion: cert-manager.io/v1
+# kind: ClusterIssuer
+# metadata:
+#   name: letsencrypt-prod
+# spec:
+#   acme:
+#     server: https://acme-v02.api.letsencrypt.org/directory
+#     email: ops@example.com
+#     privateKeySecretRef:
+#       name: letsencrypt-prod-account-key
+#     solvers:
+#       - http01:
+#           ingress:
+#             class: nginx
