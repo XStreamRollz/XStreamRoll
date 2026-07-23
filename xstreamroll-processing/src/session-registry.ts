@@ -25,6 +25,12 @@ export interface SessionRegistryOptions {
   logger?: Pick<Console, "log" | "warn" | "error">
   /** Structured logger for detailed observability (issue #338). */
   structuredLogger?: Logger
+  /**
+   * Maximum pending events per session queue. When exceeded,
+   * `StreamSession.enqueue()` returns false so the caller can apply
+   * backpressure (issue #339).
+   */
+  maxQueueDepth?: number
 }
 
 /**
@@ -242,6 +248,14 @@ export class SessionRegistry {
     return { used: this.sessions.size, max: this.options.maxConcurrentSessions }
   }
 
+  totalQueueDepth(): number {
+    let total = 0
+    for (const session of this.sessions.values()) {
+      total += session.pendingCount()
+    }
+    return total
+  }
+
   /** Iterator over live (non-stopped, non-errored) sessions. */
   liveSessions(): StreamSession[] {
     return Array.from(this.sessions.values()).filter((s) => {
@@ -294,7 +308,7 @@ export class SessionRegistry {
 
   private spawn(streamId: string): StreamSession {
     this.logger.debug("Spawning new session", { streamId })
-    const session = new StreamSession(streamId, this.workerId, this.handlers)
+    const session = new StreamSession(streamId, this.workerId, this.handlers, this.options.maxQueueDepth)
     this.sessions.set(streamId, session)
     // EventEmitter throws synchronously when an `"error"` event is
     // emitted without a listener. `StreamSession.fail()` always
