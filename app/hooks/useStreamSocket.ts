@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Socket } from 'socket.io-client';
+import type { StreamStatus as StreamStatusValue } from '@xstreamroll/types';
 import {
   ConnectionStatus,
   StreamEvent,
@@ -69,6 +70,16 @@ export const useStreamSocket = (url: string) => {
 
   const [events, setEvents] = useState<StreamEvent[]>([]);
 
+  // Live lifecycle status of the stream this hook auto-subscribed to
+  // (parsed from `url` — see below). `null` until the first
+  // stream:started/stopped/error event for that stream arrives; the
+  // caller is expected to seed its own initial value (e.g. from the
+  // server-rendered stream record) and only defer to this once it's
+  // non-null (#362).
+  const [streamStatus, setStreamStatus] = useState<StreamStatusValue | null>(
+    null,
+  );
+
   useEffect(() => {
     // Safe-equality guard: skip when the URL is value-equal to the last
     // one we set up against. Strings are primitives so this is reliable;
@@ -90,6 +101,25 @@ export const useStreamSocket = (url: string) => {
     socketRef.current = socket;
 
     setStatus('connecting');
+    setStreamStatus(null);
+
+    // Resolve which stream room this hook instance cares about, from
+    // either the URL path (/streams/:id) or a `streamId`/`id` query
+    // param. The underlying socket connection is shared/cached across
+    // hook instances (see lib/websocket.ts), so multiple stream rows on
+    // a list page each mount their own `useStreamSocket` call and all
+    // share one connection — this filter is what keeps one row's status
+    // events from leaking into another's (#362).
+    let targetStreamId: string | null = null
+    try {
+      const parsed = new URL(toHttp(url))
+      const match = parsed.pathname.match(/\/streams\/(?<id>[^\/]+)/)
+      const idFromPath = match?.groups?.id
+      const idFromQuery = parsed.searchParams.get('streamId') ?? parsed.searchParams.get('id')
+      targetStreamId = idFromPath ?? idFromQuery ?? null
+    } catch {
+      // ignore malformed URL
+    }
 
     const handleConnect = () => {
       // Reset backoff so the next unexpected disconnect starts at the
@@ -153,17 +183,27 @@ export const useStreamSocket = (url: string) => {
       }
     }
 
+    // Only update `streamStatus` for events about the stream this hook
+    // instance is scoped to. `events` (the raw log) still records
+    // everything the socket delivers, unfiltered, as before.
+    const matchesTarget = (payload: any) =>
+      targetStreamId === null ||
+      String(payload?.streamId ?? payload?.id ?? '') === targetStreamId
+
     const onStarted = (payload: any) => {
       const ev = mapPayload('stream:started', payload)
       setEvents((prev) => [ev, ...prev].slice(0, MAX_EVENTS))
+      if (matchesTarget(payload)) setStreamStatus('active')
     }
     const onStopped = (payload: any) => {
       const ev = mapPayload('stream:stopped', payload)
       setEvents((prev) => [ev, ...prev].slice(0, MAX_EVENTS))
+      if (matchesTarget(payload)) setStreamStatus('inactive')
     }
     const onError = (payload: any) => {
       const ev = mapPayload('stream:error', payload)
       setEvents((prev) => [ev, ...prev].slice(0, MAX_EVENTS))
+      if (matchesTarget(payload)) setStreamStatus('error')
     }
 
     socket.on('connect', handleConnect)
@@ -174,22 +214,12 @@ export const useStreamSocket = (url: string) => {
     socket.on('stream:stopped', onStopped)
     socket.on('stream:error', onError)
 
-    // Auto-subscribe to a stream room if the URL contains an id
+    // Auto-subscribe to the stream room resolved above, if any.
     let subscribedStreamId: string | null = null
-    try {
-      const parsed = new URL(toHttp(url))
-      // Check path like /streams/:id
-      const match = parsed.pathname.match(/\/streams\/(?<id>[^\/]+)/)
-      const idFromPath = match?.groups?.id
-      const idFromQuery = parsed.searchParams.get('streamId') ?? parsed.searchParams.get('id')
-      const streamId = idFromPath ?? idFromQuery
-      if (streamId) {
-        void subscribeToStream(socket, streamId).then(() => {
-          subscribedStreamId = streamId
-        })
-      }
-    } catch {
-      // ignore malformed URL
+    if (targetStreamId) {
+      void subscribeToStream(socket, targetStreamId).then(() => {
+        subscribedStreamId = targetStreamId
+      })
     }
 
     return () => {
@@ -226,5 +256,8 @@ export const useStreamSocket = (url: string) => {
   // re-renders for unrelated reasons doesn't force every consumer to
   // re-render too. Combined with the URL equality guard above, this lets
   // us confidently report status without thrashing the WebSocket layer.
-  return useMemo(() => ({ status, events }), [status, events])
+  return useMemo(
+    () => ({ status, events, streamStatus }),
+    [status, events, streamStatus],
+  )
 }
