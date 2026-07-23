@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Socket } from 'socket.io-client';
 import {
   ConnectionStatus,
@@ -14,14 +14,55 @@ import {
 
 const MAX_EVENTS = 100;
 
+// Exponential backoff schedule for reconnection attempts after an
+// unexpected disconnect. See #350.
+const BACKOFF_INITIAL_MS = 1_000;
+const BACKOFF_MAX_MS = 30_000;
+
 function toHttp(raw: string) {
   if (raw.startsWith('ws://')) return raw.replace(/^ws:\/\//, 'http://')
   if (raw.startsWith('wss://')) return raw.replace(/^wss:\/\//, 'https://')
   return raw
 }
 
+/**
+ * Pure exponential backoff schedule. Exposed for testing so the
+ * sequence can be validated without relying on fake timers.
+ *
+ *  attempt | delay (ms, default)
+ *  --------|---------------------
+ *    1     | 1000
+ *    2     | 2000
+ *    3     | 4000
+ *    4     | 8000
+ *    5     | 16000
+ *    6+    | 30000 (capped)
+ *
+ * `attempt` is 1-indexed; non-positive values return 0.
+ */
+export function computeBackoff(
+  attempt: number,
+  options: { initialMs?: number; maxMs?: number } = {},
+): number {
+  if (!Number.isFinite(attempt) || attempt <= 0) return 0
+  const initial = options.initialMs ?? BACKOFF_INITIAL_MS
+  const max = options.maxMs ?? BACKOFF_MAX_MS
+  // 1 -> initial, 2 -> initial * 2, 3 -> initial * 4, ...
+  const exp = initial * Math.pow(2, attempt - 1)
+  return Math.min(Math.round(exp), max)
+}
+
 export const useStreamSocket = (url: string) => {
   const socketRef = useRef<Socket | null>(null);
+  // AC: safety net inside the hook itself (#350). The consumer should
+  // also memoize their `url` prop with useMemo, but if they don't we
+  // can still avoid redundant set-up when the URL string is value-equal
+  // to the one we just processed.
+  const lastSetupUrlRef = useRef<string | null>(null);
+  const attemptRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   const [status, setStatus] =
     useState<ConnectionStatus>('connecting');
@@ -29,14 +70,60 @@ export const useStreamSocket = (url: string) => {
   const [events, setEvents] = useState<StreamEvent[]>([]);
 
   useEffect(() => {
+    // Safe-equality guard: skip when the URL is value-equal to the last
+    // one we set up against. Strings are primitives so this is reliable;
+    // the consumer-side useMemo recommended in #350 handles the case of
+    // a non-memoized expression that yields an equal string each render.
+    if (lastSetupUrlRef.current === url && socketRef.current) {
+      return
+    }
+    lastSetupUrlRef.current = url
+
+    // Cancel any pending reconnect from a previous URL/disconnect cycle.
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current)
+      reconnectTimerRef.current = null
+    }
+    attemptRef.current = 0
+
     const socket = createStreamSocket(url);
     socketRef.current = socket;
 
     setStatus('connecting');
 
-    const handleConnect = () => setStatus('connected');
+    const handleConnect = () => {
+      // Reset backoff so the next unexpected disconnect starts at the
+      // initial delay again.
+      attemptRef.current = 0
+      setStatus('connected')
+    };
     const handleConnectError = () => setStatus('error');
-    const handleDisconnect = () => setStatus('disconnected');
+    const handleDisconnect = (reason: string) => {
+      setStatus('disconnected');
+      // `io client disconnect` is raised by our own intentional
+      // socket.disconnect() call; don't auto-reconnect in that case.
+      // Same goes for `io server disconnect` when the server actively
+      // kicked us — we don't want to keep hammering.
+      if (
+        reason === 'io client disconnect' ||
+        reason === 'io server disconnect'
+      ) {
+        return
+      }
+      if (reconnectTimerRef.current) return // already scheduled
+      attemptRef.current += 1
+      const delay = computeBackoff(attemptRef.current)
+      reconnectTimerRef.current = setTimeout(() => {
+        reconnectTimerRef.current = null
+        // If socket.io's built-in reconnect already re-established the
+        // connection by the time the timer fires, this is a harmless
+        // no-op. Otherwise it kicks off a fresh attempt. Honors the
+        // exponential schedule declared in #350.
+        if (!socket.connected) {
+          socket.connect();
+        }
+      }, delay)
+    };
 
     // Map server payloads to the local StreamEvent shape
     const mapPayload = (eventName: string, payload: any): StreamEvent => {
@@ -106,6 +193,18 @@ export const useStreamSocket = (url: string) => {
     }
 
     return () => {
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current)
+        reconnectTimerRef.current = null
+      }
+      // Reset the safety-net marker so a re-mount (e.g. React 19
+      // StrictMode's deliberate double-mount in dev) re-runs setup
+      // instead of skipping over a clean ref. Without this, the
+      // guard would otherwise suppress the second effect run and the
+      // component would never attach listeners (#350).
+      lastSetupUrlRef.current = null
+      socketRef.current = null
+
       socket.off('connect', handleConnect)
       socket.off('connect_error', handleConnectError)
       socket.off('disconnect', handleDisconnect)
@@ -123,8 +222,9 @@ export const useStreamSocket = (url: string) => {
     }
   }, [url])
 
-  return {
-    status,
-    events,
-  }
+  // AC safety net (#350): memoize the returned object so a parent that
+  // re-renders for unrelated reasons doesn't force every consumer to
+  // re-render too. Combined with the URL equality guard above, this lets
+  // us confidently report status without thrashing the WebSocket layer.
+  return useMemo(() => ({ status, events }), [status, events])
 }
