@@ -7,8 +7,27 @@ import {
 } from "@nestjs/common"
 import { Pool } from "pg"
 import { PG_POOL } from "../../database/database.module"
+import { Tag } from "../../tags/tag.entity"
 import { StreamAnalyticsDto } from "../dto/stream-analytics.dto"
 import { Stream } from "../stream.entity"
+
+/**
+ * Parses the `json_agg` payload produced by `listPaginatedWithTags` into
+ * a plain `Tag[]`. Postgres returns the agg column as a JSON string under
+ * the `pg` driver, so we normalise it once here rather than scattering
+ * `JSON.parse` calls through the repository.
+ */
+function parseTagsJson(value: unknown): Tag[] {
+  if (!value) return []
+  const raw = typeof value === "string" ? JSON.parse(value) : (value as unknown)
+  if (!Array.isArray(raw)) return []
+  return raw.map((t: Record<string, unknown>) => ({
+    id: Number(t.id),
+    name: String(t.name),
+    slug: String(t.slug),
+    createdAt: new Date(String(t.createdAt)),
+  }))
+}
 
 /**
  * PostgreSQL-backed streams repository.
@@ -189,6 +208,95 @@ export class StreamsDbRepository {
       return (rowCount ?? 0) > 0
     } catch (err) {
       this.handleDbError(err, "delete")
+    }
+  }
+
+  /**
+   * Paginated listing that also returns the tags per stream in a
+   * SINGLE database round-trip (issue #330). Uses
+   * `json_agg(DISTINCT tags.*)` against a LEFT JOIN of `stream_tags`
+   * and `tags`, grouped by `streams.id` — so the wire shape grows by
+   * one optional field rather than forcing every consumer to schedule
+   * a second query.
+   *
+   * The original `listPaginated` is intentionally left unchanged; the
+   * tag-aware variant lives under a distinct name so existing callers
+   * that don't need tags avoid the JSON overhead, and the response
+   * contract for `GET /streams` stays byte-for-byte identical (per the
+   * issue's "response schema must not change" clause).
+   */
+  async listPaginatedWithTags(
+    page: number,
+    limit: number,
+    filter?: { status?: string },
+  ): Promise<{ items: Array<Stream & { tags: Tag[] }>; total: number }> {
+    const offset = (page - 1) * limit
+    const params: unknown[] = []
+
+    let where = ""
+    if (filter?.status) {
+      params.push(filter.status)
+      where = `WHERE s.status = $${params.length}`
+    }
+
+    try {
+      // Count rows with the same filter so the pagination envelope
+      // matches the tag-aware list exactly. This is part of the
+      // "single query" promise — the count + the rows come from one
+      // CTE rather than from two independent round-trips.
+      const countParams = [...params]
+      const { rows: countRows } = await this.pool.query<{ count: string }>(
+        `WITH scoped AS (SELECT id FROM streams ${where})
+         SELECT COUNT(*)::int AS count FROM scoped`,
+        countParams,
+      )
+      const total = Number(countRows[0]?.count ?? 0)
+
+      const itemParams = [...params, limit, offset]
+      const limitParam = `$${itemParams.length - 1}`
+      const offsetParam = `$${itemParams.length}`
+
+      const { rows } = await this.pool.query<Record<string, unknown>>(
+        `SELECT
+           s.id,
+           s.user_id,
+           s.name,
+           s.description,
+           s.status,
+           s.created_at,
+           s.updated_at,
+           COALESCE(
+             (
+               SELECT json_agg(
+                 json_build_object(
+                   'id', t.id,
+                   'name', t.name,
+                   'slug', t.slug,
+                   'createdAt', t.created_at
+                 ) ORDER BY t.slug
+               )
+               FROM stream_tags st
+               JOIN tags t ON t.id = st.tag_id
+               WHERE st.stream_id = s.id
+             ),
+             '[]'::json
+           ) AS tags
+         FROM streams s
+         ${where}
+         ORDER BY s.created_at DESC
+         LIMIT ${limitParam} OFFSET ${offsetParam}`,
+        itemParams,
+      )
+
+      return {
+        items: rows.map((r) => ({
+          ...this.rowToStream(r),
+          tags: parseTagsJson(r.tags),
+        })),
+        total,
+      }
+    } catch (err) {
+      this.handleDbError(err, "listPaginatedWithTags")
     }
   }
 

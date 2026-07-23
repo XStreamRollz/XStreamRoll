@@ -1,0 +1,48 @@
+# ClusterIssuer — Let's Encrypt production
+# ---------------------------------------------------------------------------
+# Reference ClusterIssuer that cert-manager uses when an Ingress carries
+# the `cert-manager.io/cluster-issuer: letsencrypt-prod` annotation
+# (issue #325). ClusterIssuer is cluster-scoped so a single resource can
+# serve every namespace.
+#
+# Apply this AFTER installing cert-manager itself (see cert-manager
+# installation steps in k8s/README.md). Re-applying is idempotent — the
+# resource will simply be updated if the spec changes.
+#
+# `server: https://acme-v02.api.letsencrypt.org/directory` is the
+# Let's Encrypt **production** ACME directory. Use
+# `https://acme-staging-v02.api.letsencrypt.org/directory` for
+# non-production clusters to avoid hitting the production rate limits
+# while iterating.
+#
+# The HTTP-01 challenge (default here) only requires Ingress reachability
+# on port 80. Switch to DNS-01 if you need a wildcard certificate or are
+# fronted by a CDN that sits in front of port 80. The `dns01` block has
+# slot comments for common providers — uncomment + supply credentials.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    # Let's Encrypt production directory. Replace with the staging
+    # endpoint for non-production clusters to dodge the production
+    # rate limits (5 duplicate certificates per week, etc.).
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: ops@xstreamroll.example.com
+    # ACME account private key. cert-manager will create a Secret
+    # named `letsencrypt-prod` in this namespace on first reconcile.
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+      - http01:
+          ingress:
+            # Match the Ingress class declared in k8s/60-ingress.yaml.
+            class: nginx
+      # Uncomment + configure for wildcard certs or CDN-fronted setups.
+      # - dns01:
+      #     clouddns:
+      #       project: my-gcp-project
+      #       serviceAccountSecretRef:
+      #         name: cloud-dns-sa
+      #         key: service-account.json

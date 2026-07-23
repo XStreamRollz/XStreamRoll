@@ -1,12 +1,30 @@
 # Ingress routing for external traffic.
 # ---------------------------------------------------------------------------
 # Routes:
-#   • http(s)://<host>/api/*    -> api:3001
-#   • http(s)://<host>/         -> app:3000
+#   • http(s)://<host>/api/*          -> api:3001
+#   • http(s)://<host>/               -> app:3000
 #
-# Configure the spec.rules[0].host field to your hostname, and set
-# spec.tls if you have cert-manager (or any other issuer) producing
-# TLS secrets named `<host>-tls` in this namespace.
+# TLS is provisioned by cert-manager from a `letsencrypt-prod`
+# ClusterIssuer (see k8s/50-cert-issuer.yaml). The certificate is
+# published as `<host>-tls` in this namespace and bound here via
+# `spec.tls`. The `cert-manager.io/cluster-issuer` annotation tells
+# cert-manager which `ClusterIssuer` to use when the Ingress is
+# applied; the resulting `Certificate` resource is reconciled into the
+# `<host>-tls` Secret automatically.
+#
+# `nginx.ingress.kubernetes.io/ssl-redirect: "true"` issues a 301
+# redirect for any plain-HTTP request. Plain-HTTP listeners are
+# therefore only used for the ACME http-01 challenge that
+# cert-manager performs during certificate issuance.
+#
+# Use `nginx.ingress.kubernetes.io/force-ssl-redirect: "true"` instead
+# if you want the redirect to take effect even when the TLS Secret is
+# absent (handy for emergency lock-downs on a still-pending cert).
+#
+# Replace `xstreamroll.example.com` with your real hostname in
+# production. The same hostname must appear in BOTH `spec.rules[0].host`
+# AND `spec.tls[0].hosts[]` for cert-manager to issue a certificate
+# and for the redirect to actually match.
 
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -15,13 +33,23 @@ metadata:
   namespace: xstreamroll
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    # Issue #325: cert-manager wiring + HTTP→HTTPS redirect.
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
 spec:
   # Use the modern field instead of the deprecated
   # `kubernetes.io/ingress.class` annotation (removed in 1.22+).
   ingressClassName: nginx
+  # TLS block — cert-manager publishes the issued certificate into a
+  # Secret named `<host>-tls` in this same namespace.
+  tls:
+    - hosts:
+        - xstreamroll.example.com
+      secretName: xstreamroll.example.com-tls
   # Replace with your real hostname in production.
   rules:
-    - http:
+    - host: xstreamroll.example.com
+      http:
         paths:
           - path: /api(/|$)(.*)
             pathType: ImplementationSpecific

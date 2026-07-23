@@ -1,6 +1,18 @@
 import { Injectable } from "@nestjs/common"
+import { Tag } from "../../tags/tag.entity"
 import { StreamAnalyticsDto } from "../dto/stream-analytics.dto"
 import { Stream } from "../stream.entity"
+
+/**
+ * Helper that mirrors the `stream_tags` join in production. Held on the
+ * in-memory repository so the tag-aware variant of
+ * `listPaginatedWithTags` returns the same shape as the SQL
+ * implementation does (issue #330).
+ */
+export interface StreamTagBinding {
+  streamId: number
+  tagId: number
+}
 
 /**
  * In-memory streams repository.
@@ -16,7 +28,16 @@ import { Stream } from "../stream.entity"
 @Injectable()
 export class StreamsRepository {
   private readonly streamsById = new Map<number, Stream>()
+  private readonly tagsBySlug = new Map<string, Tag>()
+  private readonly streamTags = new Map<string, StreamTagBinding>()
   private nextId = 1
+
+  /** Test-only seed so unit tests can pre-populate tags + bindings. */
+  __seedTags(tags: Tag[], bindings: StreamTagBinding[]): void {
+    for (const t of tags) this.tagsBySlug.set(t.slug, t)
+    for (const b of bindings)
+      this.streamTags.set(`${b.streamId}:${b.tagId}`, b)
+  }
 
   async findById(id: number): Promise<Stream | undefined> {
     return this.streamsById.get(id)
@@ -50,6 +71,44 @@ export class StreamsRepository {
       items: filtered.slice(offset, offset + limit),
       total: filtered.length,
     }
+  }
+
+  /**
+   * In-memory counterpart of `StreamsDbRepository.listPaginatedWithTags`.
+   * Resolves tags from a single `stream_tags`-shaped join table so the
+   * unit tests can verify behaviour parity without standing up Postgres.
+   *
+   * AC for issue #330: a single round-trip per call site, no per-stream
+   * fan-out — satisfied here because all reads happen off the local
+   * Map lookups in O(1) and there's no async fetch per stream.
+   */
+  async listPaginatedWithTags(
+    page: number,
+    limit: number,
+    filter?: { status?: string },
+  ): Promise<{ items: Array<Stream & { tags: Tag[] }>; total: number }> {
+    const filtered = this.listFiltered(filter)
+    const offset = (page - 1) * limit
+    const paged = filtered.slice(offset, offset + limit)
+    return {
+      items: paged.map((stream) => ({
+        ...stream,
+        tags: this.tagsForStream(stream.id),
+      })),
+      total: filtered.length,
+    }
+  }
+
+  private tagsForStream(streamId: number): Tag[] {
+    const out: Tag[] = []
+    for (const binding of this.streamTags.values()) {
+      if (binding.streamId !== streamId) continue
+      const tag = Array.from(this.tagsBySlug.values()).find(
+        (t) => t.id === binding.tagId,
+      )
+      if (tag) out.push(tag)
+    }
+    return out.sort((a, b) => a.slug.localeCompare(b.slug))
   }
 
   async create(params: {

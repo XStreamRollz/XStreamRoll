@@ -32,6 +32,10 @@ resources:
   - 30-app.yaml
   - 40-processing.yaml
   - 50-redis.yaml
+  # Issue #325: ClusterIssuer for cert-manager + Let's Encrypt.
+  # Applied as a cluster-scoped resource — Kustomize still works but
+  # the resulting object lives outside the `xstreamroll` namespace.
+  - 50-cert-issuer.yaml
   - 60-ingress.yaml
   # Uncomment to deploy a development-only Jaeger all-in-one trace collector.
   # See k8s/70-jaeger.yaml for configuration and usage notes.

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo } from "react"
 import { toast } from "sonner"
 import {
   Card,
@@ -14,13 +14,18 @@ import { TagCombobox } from "@/components/streams/tag-combobox"
 import {
   attachTagToStream,
   detachTagFromStream,
-  Tag,
+  type Tag,
   TagsApiError,
 } from "@/lib/api/tags"
+import {
+  useAttachStreamTag,
+  useDetachStreamTag,
+  useStreamTags,
+} from "@/hooks/useStreams"
 
 export interface StreamTagEditorProps {
   streamId: number
-  /** Tags currently attached on the server. */
+  /** Tags currently attached on the server — seeds the cache on mount. */
   initialTags: Tag[]
   /** Identity of the actor making the change (placeholder for JWT). */
   actingUserId: string | number
@@ -28,60 +33,79 @@ export interface StreamTagEditorProps {
 
 /**
  * Composes TagCombobox + StreamTagChips and persists changes through
- * the tags API. Used on the stream creation and edit forms, and on
- * the stream detail page as a self-contained widget.
- *
- * Local state strategy: optimistic — we update the visible chips
- * immediately, then roll back if the API rejects the change so the UI
- * never feels laggy.
+ * the tags API. Migrated to React Query in issue #345: the visible
+ * chip set is now derived from the
+ * `["streams","tags","<streamId>"]` query cache, and mutations
+ * optimistically update it before awaiting the server response so
+ * the UI never feels laggy.
  */
 export function StreamTagEditor({
   streamId,
   initialTags,
   actingUserId,
 }: StreamTagEditorProps) {
-  const [tags, setTags] = useState<Tag[]>(initialTags)
-  const [busy, setBusy] = useState(false)
+  const tagsQuery = useStreamTags(streamId, initialTags)
+  const tags = tagsQuery.data ?? []
 
-  async function attach(name: string): Promise<Tag> {
-    setBusy(true)
-    try {
-      const created = await attachTagToStream(streamId, name, {
+  const attachMutation = useAttachStreamTag({
+    onError: (err) => toast.error(tagErrorMessage(err, "Failed to add tag")),
+  })
+  const detachMutation = useDetachStreamTag({
+    onError: (err) => toast.error(tagErrorMessage(err, "Failed to remove tag")),
+  })
+
+  const busy = attachMutation.isPending || detachMutation.isPending
+
+  // Stable memo of all known tag ids so the combobox can compute
+  // duplicate-prevention without re-allocating a Set every render.
+  const selectedIds = useMemo(() => new Set(tags.map((t) => t.id)), [tags])
+
+  function handleSelectionChange(next: Tag[]) {
+    // The `useAttachStreamTag` / `useDetachStreamTag` hooks own their
+    // own `onError` toast handlers — we don't need to re-catch here.
+    // If a mutation rejects, React Query has already rolled the cache
+    // back via `onError` and toasted; the remaining mutations in the
+    // loop will still run because the await only fails the current
+    // iteration. Subsequent iterations keep the optimistic flow going.
+    const added = next.filter((n) => !selectedIds.has(n.id))
+    const removed = tags.filter((t) => !next.some((n) => n.id === t.id))
+
+    // Fire-and-forget `mutate` rather than `mutateAsync`. The
+    // optimistic flow lives entirely inside React Query's queue —
+    // onError rolls the cache back AND fires the consumer toast — so
+    // the rejection never escapes the hooks and we don't need to
+    // re-catch here. Using `mutateAsync` instead surfaced as an
+    // unhandled rejection from each failed mutation in QA.
+    for (const tag of added) {
+      attachMutation.mutate({
+        streamId,
+        name: tag.name,
         userId: actingUserId,
       })
-      return created
-    } finally {
-      setBusy(false)
+    }
+    for (const tag of removed) {
+      detachMutation.mutate({
+        streamId,
+        tagId: tag.id,
+        userId: actingUserId,
+      })
     }
   }
 
-  async function handleSelectionChange(next: Tag[]) {
-    const previous = tags
-    setTags(next)
-
-    const added = next.filter((n) => !previous.some((p) => p.id === n.id))
-    const removed = previous.filter((p) => !next.some((n) => n.id === p.id))
-
-    try {
-      // Persist additions sequentially so the server can de-duplicate
-      // tag creation; the per-call latency is small enough that this is
-      // not a bottleneck for typical tag counts.
-      for (const tag of added) {
-        await attachTagToStream(streamId, tag.name, { userId: actingUserId })
-      }
-      for (const tag of removed) {
-        await detachTagFromStream(streamId, tag.id, { userId: actingUserId })
-      }
-    } catch (err) {
-      const message =
-        err instanceof TagsApiError
-          ? err.message
-          : err instanceof Error
-            ? err.message
-            : "tag update failed"
-      toast.error(`Failed to update tags: ${message}`)
-      setTags(previous)
-    }
+  function attach(name: string): Promise<Tag> {
+    return new Promise((resolve, reject) => {
+      attachMutation.mutate(
+        {
+          streamId,
+          name,
+          userId: actingUserId,
+        },
+        {
+          onSuccess: (tag) => resolve(tag),
+          onError: (err) => reject(err),
+        },
+      )
+    })
   }
 
   return (
@@ -106,7 +130,11 @@ export function StreamTagEditor({
           <StreamTagChips
             tags={tags}
             onRemove={(tag) =>
-              void handleSelectionChange(tags.filter((t) => t.id !== tag.id))
+              detachMutation.mutate({
+                streamId,
+                tagId: tag.id,
+                userId: actingUserId,
+              })
             }
           />
         </div>
@@ -114,3 +142,14 @@ export function StreamTagEditor({
     </Card>
   )
 }
+
+function tagErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof TagsApiError) return err.message
+  if (err instanceof Error) return err.message
+  return fallback
+}
+
+// Re-exported for callers that still want to bypass the React Query cache.
+// The dashboard stream-new page uses this for "create a fresh stream"
+// flows where there's no existing cache to optimise against.
+export { attachTagToStream, detachTagFromStream }

@@ -52,6 +52,114 @@ worker's 15s graceful-shutdown hook has room to drain.
 - The published API image does not yet drop privileges; the manifest
   therefore permits root with a comment to harden it upstream.
 
+## TLS — issue #325
+
+Public traffic terminates TLS at the ingress. `k8s/60-ingress.yaml`
+declares `spec.tls` against a cert-manager-issued Secret and carries
+the `cert-manager.io/cluster-issuer: letsencrypt-prod` annotation so
+the certificate is reconciled automatically on Ingress apply. The
+`nginx.ingress.kubernetes.io/ssl-redirect: "true"` annotation issues
+a 301 redirect for any plain-HTTP request.
+
+### Prerequisites
+
+1. **Install cert-manager first.** cert-manager is the operator that
+   reconciles `Certificate` resources and writes the resulting TLS
+   Secret. Two supported install paths:
+
+   - **kubectl apply (vanilla):**
+
+     ```bash
+     kubectl apply -f \
+       https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.yaml
+     ```
+
+   - **Helm chart (recommended for production):**
+
+     ```bash
+     helm repo add jetstack https://charts.jetstack.io
+     helm repo update
+     kubectl create namespace cert-manager
+     helm install cert-manager jetstack/cert-manager \
+       --namespace cert-manager \
+       --set installCRDs=true \
+       --version v1.16.1
+     ```
+
+   Verify the install before continuing:
+
+   ```bash
+   kubectl -n cert-manager rollout status deploy/cert-manager --timeout=180s
+   kubectl get crds | grep cert-manager.io
+   ```
+
+2. **Apply the ClusterIssuer.** Once cert-manager CRDs are present,
+   `kustomize` includes `k8s/50-cert-issuer.yaml` automatically, so
+   `kubectl apply -k k8s/` registers the `letsencrypt-prod`
+   ClusterIssuer cluster-wide.
+
+   ```bash
+   kubectl apply -k k8s/
+   kubectl get clusterissuer letsencrypt-prod
+   # Expect: READY = True
+   ```
+
+3. **Replace the placeholder hostname.** `xstreamroll.example.com` is
+   a stand-in. Edit `k8s/60-ingress.yaml` and update BOTH
+   `spec.rules[0].host` AND `spec.tls[0].hosts[]` to your real
+   hostname. cert-manager will fail to issue a certificate if the two
+   lists diverge.
+
+### Issuing the certificate
+
+The certificate is reconciled the moment the Ingress lands:
+
+```bash
+kubectl -n xstreamroll get ingress xstreamroll
+kubectl -n xstreamroll describe certificate xstreamroll.example.com-tls
+kubectl -n xstreamroll get secret xstreamroll.example.com-tls
+```
+
+Common reasons a cert fails to issue:
+
+| Symptom | Likely cause |
+|---|---|
+| `Waiting for HTTP-01 challenge propagation` for >5m | Port 80 not reachable from the internet on the hostname. |
+| `Wrong status code 403` | Sidecar / auth middleware intercepting ACME requests. Allowlist `/.well-known/acme-challenge/`. |
+| `urn:ietf:params:acme:error:rateLimited` | Hit Let's Encrypt rate limits — switch the issuer to `https://acme-staging-v02.api.letsencrypt.org/directory`. |
+| `Secret … not found` | Namespace mismatch. The Ingress namespace must match where the Secret is reconciled. |
+
+### Verification
+
+Once `READY = True`:
+
+```bash
+# Confirm a 301 redirect from HTTP → HTTPS.
+curl -I http://xstreamroll.example.com/ | head -n1
+# Expect: HTTP/1.1 301 Moved Permanently
+#         Location: https://xstreamroll.example.com/
+
+# Confirm the certificate matches the hostname.
+openssl s_client -connect xstreamroll.example.com:443 -servername xstreamroll.example.com \
+  < /dev/null 2>/dev/null \
+  | openssl x509 -noout -subject -issuer -dates
+```
+
+### Rollback
+
+Disable TLS by removing the `spec.tls` block and the
+`cert-manager.io/cluster-issuer` annotation:
+
+```bash
+kubectl -n xstreamroll annotate ingress xstreamroll \
+  cert-manager.io/cluster-issuer-
+kubectl -n xstreamroll patch ingress xstreamroll --type json \
+  -p='[{"op":"remove","path":"/spec/tls"}]'
+```
+
+The ClusterIssuer can stay applied — it costs nothing — but to remove
+it entirely: `kubectl delete -k k8s/ && kubectl delete clusterissuer letsencrypt-prod`.
+
 ## Secrets
 
 `k8s/10-postgres.yaml` and `k8s/20-api.yaml` commit Secret **templates**
