@@ -51,9 +51,9 @@ describe("StreamingClient Integration", () => {
 
     it("register with valid data returns tokens", async () => {
       const dto = {
+        username: "newuser",
         email: "new@example.com",
         password: "password",
-        displayName: "New User",
       }
       const tokens = {
         accessToken: "access-456",
@@ -282,9 +282,9 @@ describe("StreamingClient Integration", () => {
 
       try {
         await client.register({
+          username: "x",
           email: "bad",
           password: "x",
-          displayName: "x",
         })
         fail("expected ApiError")
       } catch (err) {

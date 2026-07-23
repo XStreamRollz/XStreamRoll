@@ -1,5 +1,6 @@
 import "server-only"
 import { revalidateTag } from "next/cache"
+import type { PaginatedResponse, Stream } from "@xstreamroll/types"
 import { cached } from "./cached"
 import {
   CACHE_TAGS,
@@ -17,19 +18,7 @@ function apiBase(): string {
   )
 }
 
-export interface StreamSummary {
-  id: number
-  name: string
-  description: string | null
-  status: string
-  createdAt: string
-  updatedAt: string
-}
-
-export interface StreamListResult {
-  items: StreamSummary[]
-  total: number
-}
+export type StreamListResult = PaginatedResponse<Stream>
 
 /**
  * Server-only stream fetchers wrapped in unstable_cache.
@@ -70,7 +59,7 @@ export const getStreamList = cached(
   },
 )
 
-export async function getStreamDetail(id: number | string): Promise<StreamSummary> {
+export async function getStreamDetail(id: number | string): Promise<Stream> {
   const fn = cached(
     async (streamId: string) => {
       const res = await fetch(`${apiBase()}/streams/${streamId}`, {
@@ -80,7 +69,7 @@ export async function getStreamDetail(id: number | string): Promise<StreamSummar
       if (!res.ok) {
         throw new Error(`stream detail responded ${res.status}`)
       }
-      return (await res.json()) as StreamSummary
+      return (await res.json()) as Stream
     },
     ["streams", "detail", String(id)],
     {

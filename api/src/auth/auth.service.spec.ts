@@ -154,10 +154,10 @@ describe("AuthService", () => {
       expect(result.accessToken).toBe("jwt.token.here")
       expect(result.refreshToken).toBe("refresh.token.here")
       expect(result.user).toEqual({
-        id: 1,
+        id: "1",
         username: dto.username,
         email: dto.email,
-        createdAt: expect.any(Date),
+        createdAt: expect.any(String),
       })
     })
 
@@ -272,10 +272,10 @@ describe("AuthService", () => {
       expect(result.accessToken).toBe("jwt.token.here")
       expect(result.refreshToken).toBe("refresh.token.here")
       expect(result.user).toEqual({
-        id: user.id,
+        id: String(user.id),
         username: user.username,
         email: user.email,
-        createdAt: user.created_at,
+        createdAt: user.created_at.toISOString(),
       })
     })
 

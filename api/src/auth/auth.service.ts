@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
+import type { User as SharedUser } from "@xstreamroll/types"
 import * as bcrypt from "bcrypt"
 import type { Request } from "express"
 import { RegisterDto } from "./dto/register.dto"
@@ -20,13 +21,14 @@ import { JWT_REFRESH_TOKEN_EXPIRES_IN } from "../config/jwt.config"
 /** Rounds for bcrypt key derivation (auto-salt). */
 const BCRYPT_ROUNDS = 12
 
-/** Public-safe user representation — never includes the password hash. */
-export interface SafeUser {
-  id: number
-  username: string
-  email: string
-  createdAt: Date
-}
+/**
+ * Public-safe user representation — never includes the password hash.
+ * Matches the `@xstreamroll/types#User` wire contract; `id` is
+ * serialized to a string even though the `users.id` column is a
+ * numeric `SERIAL`, for the same reason as `Stream.id` — see
+ * `streams/dto/stream-response.dto.ts`.
+ */
+export type SafeUser = SharedUser
 
 export interface AuthResponse {
   user: SafeUser
@@ -278,9 +280,9 @@ export class AuthService {
 /** Strip the password hash from a user row before returning to clients. */
 export function toSafeUser(row: User): SafeUser {
   return {
-    id: row.id,
+    id: String(row.id),
     username: row.username,
     email: row.email,
-    createdAt: row.created_at,
+    createdAt: row.created_at.toISOString(),
   }
 }

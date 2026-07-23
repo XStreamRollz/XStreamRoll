@@ -24,6 +24,9 @@
       "text"
     ]
   },
+  "dependencies": {
+    "@xstreamroll/types": "file:../packages/types"
+  },
   "devDependencies": {
     "@types/jest": "^29.5.14",
     "@types/node": "^20.10.0",
