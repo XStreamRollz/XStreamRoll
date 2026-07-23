@@ -28,11 +28,19 @@ export class AuthGuard implements CanActivate {
     const req = context.switchToHttp().getRequest<Request>()
     const token = this.extractBearerToken(req.header("authorization") ?? "")
 
-    if (await this.tokenDenylistService.isRevoked(token)) {
-      throw new UnauthorizedException("access token has been revoked")
+    const payload = await this.verifyToken(token)
+
+    // Denylist lookup is keyed on the verified token's `jti` (a short UUID),
+    // giving an O(1) cache lookup without hashing or storing the full token.
+    // Tokens issued before the `jti` claim existed are skipped here and
+    // expire naturally.
+    const jti = payload.jti
+    if (typeof jti === "string" && jti.length > 0) {
+      if (await this.tokenDenylistService.isRevoked(jti)) {
+        throw new UnauthorizedException("access token has been revoked")
+      }
     }
 
-    const payload = await this.verifyToken(token)
     const userId = Number(payload.sub)
     if (!Number.isInteger(userId) || userId <= 0) {
       throw new UnauthorizedException("invalid access token")
@@ -65,10 +73,15 @@ export class AuthGuard implements CanActivate {
 
   private async verifyToken(
     token: string,
-  ): Promise<{ sub: number | string; passwordChangedAt?: number }> {
+  ): Promise<{
+    sub: number | string
+    jti?: string
+    passwordChangedAt?: number
+  }> {
     try {
       return (await this.jwtService.verifyAsync(token)) as {
         sub: number | string
+        jti?: string
         passwordChangedAt?: number
       }
     } catch {

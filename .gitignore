@@ -34,5 +34,8 @@ coverage
 # build output
 dist
 
+# backup / editor artefacts
+*.bak
+
 CLAUDE.md
 plan.md
