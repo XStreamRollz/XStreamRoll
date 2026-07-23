@@ -1,4 +1,6 @@
 import type { Metadata } from "next"
+import { Suspense } from "react"
+import { StreamListSkeleton } from "@/components/dashboard/stream-list-skeleton"
 import { StreamTagEditor } from "./stream-tag-editor"
 
 export const metadata: Metadata = {
@@ -9,13 +11,12 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic"
 
 /**
- * Streams dashboard page. The real implementation will list every
- * stream owned by the current user; this scaffold focuses on the
- * issue-100 acceptance criteria: a working tag editor that is wired
- * end-to-end against the tags API.
- *
- * Replace `demoStreamId` and `demoUserId` with real values once the
- * data fetching + auth layers are available.
+ * Streams dashboard page. The list body is wrapped in `<Suspense>` so
+ * the `<StreamListSkeleton>` flows as the loading UI whenever the
+ * underlying data load suspends (#369). Today the editor renders
+ * synchronously with demo data; once the real data layer is wired up,
+ * the surrounding Suspense boundary will surface the skeleton
+ * automatically without further changes to this file.
  */
 export default function StreamsDashboardPage() {
   const demoStreamId = 1
@@ -29,11 +30,13 @@ export default function StreamsDashboardPage() {
           Manage the tags attached to your stream. Changes are saved as you go.
         </p>
       </header>
-      <StreamTagEditor
-        streamId={demoStreamId}
-        initialTags={[]}
-        actingUserId={demoUserId}
-      />
+      <Suspense fallback={<StreamListSkeleton />}>
+        <StreamTagEditor
+          streamId={demoStreamId}
+          initialTags={[]}
+          actingUserId={demoUserId}
+        />
+      </Suspense>
     </main>
   )
 }

@@ -2,7 +2,28 @@ import nock from "nock"
 import { StreamingClient } from "../src/client"
 import { ApiError } from "../src/types"
 
-const BASE_URL = "http://api.test"
+// When INTEGRATION_API_URL is set the tests run against a live API server and
+// nock intercepts that same base URL (so mocks still apply). Without it the
+// tests fall back to the inert host "http://api.test", which never resolves,
+// so every test that sets up a nock interceptor passes without any network I/O.
+//
+// To run against a real server:
+//   INTEGRATION_API_URL=http://localhost:3001 npm test
+//
+// In CI, tests run in mock mode by default (no server required). A separate
+// workflow job can set INTEGRATION_API_URL to exercise the live stack.
+const BASE_URL = process.env.INTEGRATION_API_URL ?? "http://api.test"
+
+// Hard block real network traffic in the test process. Any request to a host
+// that does not have a matching nock interceptor — including accidental calls
+// to localhost:3001 — throws immediately rather than timing out.
+beforeAll(() => {
+  nock.disableNetConnect()
+})
+
+afterAll(() => {
+  nock.enableNetConnect()
+})
 
 describe("StreamingClient Integration", () => {
   let client: StreamingClient
@@ -51,9 +72,9 @@ describe("StreamingClient Integration", () => {
 
     it("register with valid data returns tokens", async () => {
       const dto = {
+        username: "newuser",
         email: "new@example.com",
         password: "password",
-        displayName: "New User",
       }
       const tokens = {
         accessToken: "access-456",
@@ -282,9 +303,9 @@ describe("StreamingClient Integration", () => {
 
       try {
         await client.register({
+          username: "x",
           email: "bad",
           password: "x",
-          displayName: "x",
         })
         fail("expected ApiError")
       } catch (err) {

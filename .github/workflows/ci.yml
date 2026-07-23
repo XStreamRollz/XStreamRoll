@@ -42,6 +42,9 @@ jobs:
       - name: Install root dependencies
         run: npm install
 
+      - name: Install & build types package
+        run: cd packages/types && npm install && npm run build
+
       - name: Install app dependencies
         run: cd app && npm install
 
@@ -53,6 +56,9 @@ jobs:
 
       - name: Install processing dependencies
         run: cd xstreamroll-processing && npm install
+
+      - name: Lint — types
+        run: cd packages/types && npm run lint
 
       - name: Lint — api
         run: cd api && npm run lint
@@ -69,6 +75,9 @@ jobs:
 
       - name: Lint — app
         run: cd app && npm run lint
+
+      - name: Typecheck — types (build must succeed cleanly)
+        run: cd packages/types && npm run typecheck
 
       - name: Typecheck — api
         run: cd api && npx tsc --noEmit
@@ -152,6 +161,12 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Install & build types package
+        run: cd packages/types && npm install && npm run build
 
       - name: Install app dependencies
         run: cd app && npm install

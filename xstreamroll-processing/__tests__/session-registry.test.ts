@@ -38,6 +38,47 @@ function makeDenyAllLockManager(): jest.Mocked<LockManager> {
   return mgr
 }
 
+/**
+ * A lock manager whose `acquire()` blocks on an externally-resolved
+ * gate before returning a token. Lets a test hold several concurrent
+ * `route()` calls inside the acquire round trip simultaneously so the
+ * in-flight dedupe path (issue #338) can be observed. `acquireCalls`
+ * counts how many times the backend was actually hit.
+ */
+function makeGatedLockManager(workerId = "w1"): {
+  manager: jest.Mocked<LockManager>
+  release: () => void
+  acquireCalls: () => number
+} {
+  let calls = 0
+  let openGate: () => void = () => {}
+  const gate = new Promise<void>((resolve) => {
+    openGate = resolve
+  })
+  const manager = {
+    ttlMs: 30_000,
+    workerId,
+    logger: console,
+    install: jest.fn().mockResolvedValue(undefined),
+    acquire: jest.fn(async (streamId: string): Promise<LockToken | null> => {
+      calls += 1
+      await gate
+      return {
+        streamId,
+        workerId,
+        token: `tok-${calls}`,
+        acquiredAt: Date.now(),
+        expiresAt: Date.now() + 30_000,
+      }
+    }),
+    renew: jest.fn().mockResolvedValue(true),
+    release: jest.fn().mockResolvedValue(true),
+    releaseAll: jest.fn().mockResolvedValue(undefined),
+    close: jest.fn().mockResolvedValue(undefined),
+  } as unknown as jest.Mocked<LockManager>
+  return { manager, release: () => openGate(), acquireCalls: () => calls }
+}
+
 describe("SessionRegistry", () => {
   it("lazily creates a session for a new stream", async () => {
     const registry = makeRegistry()
@@ -124,10 +165,98 @@ describe("SessionRegistry", () => {
     )
     await expect(registry.route(evt("s1"))).resolves.toBe("locked")
     expect(registry.size()).toBe(0)
-    // The session was created as a placeholder and then torn down
-    // by the lock-deny path; the lock manager was asked to release
-    // a token that never existed (no-op).
+    // Acquisition is now attempted BEFORE spawning (issue #338), so a
+    // denied lock never creates a session and there is no token to
+    // release.
     expect(deniedLockManager.release).not.toHaveBeenCalled()
+  })
+
+  it("acquires the lock before spawning a session (issue #338)", async () => {
+    // A lock manager that records the registry state at the moment
+    // acquire() is invoked. If the session were spawned first, the
+    // registry would already report size()===1 here.
+    let sizeAtAcquire = -1
+    const lockManager = new MemoryLockManager({ workerId: "w1", ttlMs: 30_000 })
+    const realAcquire = lockManager.acquire.bind(lockManager)
+    jest.spyOn(lockManager, "acquire").mockImplementation(async (streamId) => {
+      sizeAtAcquire = registry.size()
+      return realAcquire(streamId)
+    })
+    const registry = new SessionRegistry(
+      "w1",
+      { publish: jest.fn() },
+      { maxConcurrentSessions: 4, lockManager },
+    )
+    await registry.route(evt("s1"))
+    expect(sizeAtAcquire).toBe(0)
+    expect(registry.size()).toBe(1)
+    expect(registry.lockCount()).toBe(1)
+  })
+
+  it("does not spawn or start a session when the lock is denied (issue #338)", async () => {
+    const deniedLockManager = makeDenyAllLockManager()
+    const registry = new SessionRegistry(
+      "w1",
+      { publish: jest.fn() },
+      { maxConcurrentSessions: 4, lockManager: deniedLockManager },
+    )
+    await expect(registry.route(evt("s1"))).resolves.toBe("locked")
+    // No placeholder session is ever created, so nothing needs
+    // failing or evicting.
+    expect(registry.size()).toBe(0)
+    expect(registry.lockCount()).toBe(0)
+    expect(registry.get("s1")).toBeUndefined()
+  })
+
+  it("deduplicates concurrent route() calls for the same stream (issue #338)", async () => {
+    const { manager, release, acquireCalls } = makeGatedLockManager("w1")
+    const registry = new SessionRegistry(
+      "w1",
+      { publish: jest.fn() },
+      { maxConcurrentSessions: 4, lockManager: manager },
+    )
+
+    // Fire three concurrent routes for the same stream while acquire
+    // is gated open. All three are in-flight before any resolves.
+    const routes = Promise.all([
+      registry.route(evt("s1")),
+      registry.route(evt("s1")),
+      registry.route(evt("s1")),
+    ])
+    // Let the microtasks run so every route() reaches acquire().
+    await Promise.resolve()
+    release()
+    const results = await routes
+
+    // Every caller is satisfied...
+    expect(results).toEqual(["enqueued", "enqueued", "enqueued"])
+    // ...by a SINGLE acquire round trip and a SINGLE session/lock.
+    expect(acquireCalls()).toBe(1)
+    expect(registry.size()).toBe(1)
+    expect(registry.lockCount()).toBe(1)
+    // No duplicate token leaked, so no compensating release happened.
+    expect(manager.release).not.toHaveBeenCalled()
+  })
+
+  it("starts a fresh acquisition after the previous session stops (issue #338)", async () => {
+    // Deduplication must not cache a settled acquire forever: once a
+    // session stops and its lock is released, a later route() for the
+    // same stream must hit the backend again.
+    const lockManager = new MemoryLockManager({ workerId: "w1", ttlMs: 30_000 })
+    const acquireSpy = jest.spyOn(lockManager, "acquire")
+    const registry = new SessionRegistry(
+      "w1",
+      { publish: jest.fn() },
+      { maxConcurrentSessions: 4, lockManager },
+    )
+    await registry.route(evt("s1"))
+    const session = registry.get("s1")!
+    await session.stop()
+    await new Promise((r) => setTimeout(r, 5))
+    expect(registry.size()).toBe(0)
+    await registry.route(evt("s1"))
+    expect(acquireSpy).toHaveBeenCalledTimes(2)
+    expect(registry.size()).toBe(1)
   })
 
   it("constructing without a lock manager throws", () => {

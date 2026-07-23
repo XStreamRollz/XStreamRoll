@@ -7,7 +7,6 @@ export type {
   // Config
   StreamConfig,
   // User
-  UserRole,
   User,
   CreateUserDto,
   UpdateUserDto,
@@ -15,7 +14,6 @@ export type {
   AuthTokens,
   // Stream
   StreamStatus,
-  StreamVisibility,
   Stream,
   CreateStreamDto,
   UpdateStreamDto,

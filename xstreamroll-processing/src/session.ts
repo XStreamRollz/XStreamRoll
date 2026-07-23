@@ -57,17 +57,19 @@ export class StreamSession extends EventEmitter {
 
   private state: SessionState = "idle"
   private readonly queue: StreamEvent[] = []
+  private readonly maxQueueDepth: number
   private processing = false
   private readonly handlers: SessionHandlers
   private readonly workerId: string
   private readonly logger: NonNullable<SessionHandlers["logger"]>
 
-  constructor(streamId: string, workerId: string, handlers: SessionHandlers) {
+  constructor(streamId: string, workerId: string, handlers: SessionHandlers, maxQueueDepth = 1000) {
     super()
     this.id = `${streamId}:${createSessionSuffix()}`
     this.streamId = streamId
     this.workerId = workerId
     this.handlers = handlers
+    this.maxQueueDepth = maxQueueDepth
     this.logger = handlers.logger ?? console
   }
 
@@ -92,6 +94,7 @@ export class StreamSession extends EventEmitter {
    */
   enqueue(event: StreamEvent): boolean {
     if (this.state !== "running") return false
+    if (this.queue.length >= this.maxQueueDepth) return false
     this.queue.push(event)
     if (!this.processing) void this.pump()
     return true

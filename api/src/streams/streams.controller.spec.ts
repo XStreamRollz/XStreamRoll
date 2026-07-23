@@ -14,12 +14,13 @@ jest.mock("../common/guards/auth.guard", () => ({
   },
 }))
 
+import type { Cache } from "cache-manager"
+import type { Request } from "express"
 import { StreamsController } from "./streams.controller"
 import { CreateStreamDto } from "./dto/create-stream.dto"
 import { UpdateStreamDto } from "./dto/update-stream.dto"
+import { Stream } from "./stream.entity"
 import { StreamsService } from "./streams.service"
-import type { Request } from "express"
-import type { Cache } from "cache-manager"
 
 type MockStreamsService = {
   create: jest.Mock
@@ -33,6 +34,19 @@ type MockStreamsService = {
 type MockCache = {
   get: jest.Mock
   set: jest.Mock
+}
+
+function makeStream(overrides: Partial<Stream> = {}): Stream {
+  return {
+    id: 1,
+    userId: 7,
+    name: "s",
+    description: "d",
+    status: "inactive",
+    createdAt: new Date("2026-01-01T00:00:00Z"),
+    updatedAt: new Date("2026-01-01T00:00:00Z"),
+    ...overrides,
+  }
 }
 
 describe("StreamsController", () => {
@@ -59,29 +73,36 @@ describe("StreamsController", () => {
     )
   })
 
-  it("create delegates to service with auth userId", async () => {
+  it("create delegates to service with auth userId and returns a serialized stream", async () => {
     const dto = { name: "s", description: "d" }
     const req = { auth: { userId: 7 } } as Request & { auth: { userId: number } }
-    const expected = { id: 1 }
-    mockService.create.mockResolvedValue(expected)
+    mockService.create.mockResolvedValue(makeStream())
 
     const res = await controller.create(dto as CreateStreamDto, req)
-    expect(res).toBe(expected)
+    expect(res).toEqual(
+      expect.objectContaining({ id: "1", userId: "7", name: "s", description: "d" }),
+    )
     expect(mockService.create).toHaveBeenCalledWith({ userId: 7, name: dto.name, description: dto.description })
   })
 
-  it("list delegates to service with defaults", async () => {
-    mockService.list.mockResolvedValue({ data: [], page: 1, limit: 20, total: 0, hasMore: false })
+  it("list delegates to service with defaults and serializes each stream", async () => {
+    mockService.list.mockResolvedValue({
+      data: [makeStream({ id: 2 })],
+      page: 1,
+      limit: 20,
+      total: 1,
+      hasMore: false,
+    })
     const res = await controller.list({})
     expect(mockService.list).toHaveBeenCalledWith(1, 20, { status: undefined })
-    expect(res.data).toBeDefined()
+    expect(res.data).toEqual([expect.objectContaining({ id: "2" })])
   })
 
-  it("findById delegates to service", async () => {
-    mockService.findById.mockResolvedValue({ id: 5 })
+  it("findById delegates to service and returns a serialized stream", async () => {
+    mockService.findById.mockResolvedValue(makeStream({ id: 5 }))
     const res = await controller.findById(5)
     expect(mockService.findById).toHaveBeenCalledWith(5)
-    expect(res).toEqual({ id: 5 })
+    expect(res).toEqual(expect.objectContaining({ id: "5" }))
   })
 
   it("getAnalytics returns cached analytics when available", async () => {
@@ -107,12 +128,12 @@ describe("StreamsController", () => {
     expect(mockCache.set).toHaveBeenCalledWith("streams:5:analytics", analytics, 60000)
   })
 
-  it("update delegates to service", async () => {
+  it("update delegates to service and returns a serialized stream", async () => {
     const dto = { name: "n" }
-    mockService.update.mockResolvedValue({ id: 9 })
+    mockService.update.mockResolvedValue(makeStream({ id: 9, name: "n" }))
     const res = await controller.update(9, dto as UpdateStreamDto)
     expect(mockService.update).toHaveBeenCalledWith(9, dto)
-    expect(res).toEqual({ id: 9 })
+    expect(res).toEqual(expect.objectContaining({ id: "9", name: "n" }))
   })
 
   it("delete delegates to service and returns void", async () => {

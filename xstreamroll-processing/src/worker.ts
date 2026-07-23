@@ -6,7 +6,7 @@ import { EventFilter } from "./pipeline"
 import { SessionRegistry } from "./session-registry"
 import { ProcessedStreamEvent, StreamEvent } from "./session"
 import { GracefulShutdown, ShutdownReason } from "./lifecycle"
-import { markShuttingDown, startMetricsServer } from "./metrics"
+import { markShuttingDown, setQueueDepth, startMetricsServer } from "./metrics"
 import { createLockManager, type LockManager } from "./leader-election"
 
 const API_URL = env.API_URL
@@ -16,6 +16,8 @@ const MAX_CONCURRENT_SESSIONS = Math.max(
   1,
   Number(process.env.MAX_CONCURRENT_SESSIONS ?? 32),
 )
+const MAX_QUEUE_DEPTH = Math.max(1, Number(env.MAX_QUEUE_DEPTH))
+const HIGH_WATERMARK = MAX_CONCURRENT_SESSIONS * MAX_QUEUE_DEPTH
 // `env.LOCK_BACKEND` may be missing in hand-rolled test mocks; fall
 // back to the safe default so we don't crash on import.
 const LOCK_BACKEND: "memory" | "postgres" =
@@ -102,10 +104,16 @@ async function initLockManager(): Promise<LockManager> {
 }
 
 async function pollOnce(): Promise<void> {
-  // Start a fresh trace for each polling cycle so all HTTP calls within
-  // the cycle (poll + any callbacks) share the same root traceparent.
   activeTraceparent = generateTraceparent()
   if (!registry) return
+  const totalDepth = registry.totalQueueDepth()
+  if (totalDepth >= HIGH_WATERMARK) {
+    setQueueDepth(totalDepth)
+    console.warn(
+      `[${WORKER_ID}] total queue depth (${totalDepth}) exceeds high-watermark (${HIGH_WATERMARK}); skipping poll`,
+    )
+    return
+  }
   let events: StreamEvent[] = []
   try {
     const response = await axiosInstance.get<StreamEvent[]>(
@@ -115,6 +123,7 @@ async function pollOnce(): Promise<void> {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error(`[${WORKER_ID}] polling failed: ${message}`)
+    setQueueDepth(registry.totalQueueDepth())
     return
   }
 
@@ -162,6 +171,8 @@ async function pollOnce(): Promise<void> {
       )
     }
   }
+
+  setQueueDepth(registry.totalQueueDepth())
 }
 
 async function start(): Promise<void> {
@@ -190,6 +201,7 @@ async function start(): Promise<void> {
     },
     {
       maxConcurrentSessions: MAX_CONCURRENT_SESSIONS,
+      maxQueueDepth: MAX_QUEUE_DEPTH,
       lockManager,
     },
   )
