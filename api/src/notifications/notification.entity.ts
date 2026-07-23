@@ -8,4 +8,5 @@ export interface Notification {
   payload: Record<string, unknown>
   readAt: Date | null
   createdAt: Date
+  expiresAt: Date
 }
