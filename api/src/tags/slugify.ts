@@ -11,7 +11,7 @@
  * dashes. Empty input (or input that contains only punctuation) returns
  * an empty string so callers can treat that as a validation error.
  */
-export function slugify(input: string): string {
+export function slugify(input: string | null | undefined): string {
   if (typeof input !== "string") return ""
   return input
     .normalize("NFD")

@@ -198,6 +198,7 @@ import * as fc from 'fast-check';
 describe('StreamsService - Property-Based Tests', () => {
   let service: StreamsService;
   let mockRepo: any;
+  let mockWebhooksService: { dispatchStreamEvent: jest.Mock };
 
   beforeEach(() => {
     mockRepo = {
@@ -226,7 +227,7 @@ describe('StreamsService - Property-Based Tests', () => {
       fc.property(
         fc.constantFrom(...statuses),
         fc.constantFrom(...statuses),
-        (currentStatus, nextStatus) => {
+        (currentStatus: string, nextStatus: string) => {
           const shouldBeAllowed = allowedTransitions[currentStatus]?.includes(nextStatus) || false;
           
           let wasAllowed = false;
@@ -260,7 +261,7 @@ describe('StreamsService - Property-Based Tests', () => {
       fc.property(
         fc.constantFrom(...statuses),
         fc.constantFrom(...statuses),
-        (statusA, statusB) => {
+        (statusA: string, statusB: string) => {
           if (statusA === statusB) {
             return true; // Skip self-transitions
           }
@@ -356,7 +357,7 @@ describe('StreamsService - Property-Based Tests', () => {
       fc.property(
         fc.constantFrom(...allStatuses),
         fc.constantFrom(...allStatuses),
-        (current, next) => {
+        (current: string, next: string) => {
           const isExpectedValid = validTransitions.some(
             ([c, n]) => c === current && n === next
           );
