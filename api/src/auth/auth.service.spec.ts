@@ -337,13 +337,13 @@ describe("AuthService", () => {
         email: user.email,
         username: user.username,
         passwordChangedAt: expect.any(Number),
-        jti: expect.any(String),
       })
       expect(refreshJwt.sign).toHaveBeenCalledWith({
         sub: user.id,
         email: user.email,
         username: user.username,
         passwordChangedAt: expect.any(Number),
+        jti: expect.any(String),
       })
     })
   })
