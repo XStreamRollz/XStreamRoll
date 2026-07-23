@@ -31,8 +31,18 @@ Container images are published by `.github/workflows/release.yml` to:
 | app        | `/api/health` | `/api/health` | Returns static `ok` payload; bypasses project middleware (matcher is `/dashboard/:path*`). |
 | processing | `/livez`  | `/healthz` | Readiness flips to 503 the moment `GracefulShutdown` flips `shuttingDown=true`. |
 
-`terminationGracePeriodSeconds` on every Deployment is ≥30s so the
+`terminationGracePeriodSeconds` on every Deployment is ≥60s so the
 worker's 15s graceful-shutdown hook has room to drain.
+
+### Processing worker shutdown timing
+
+| Phase | Duration | Notes |
+|-------|----------|-------|
+| `preStop` sleep | 5s | Delays SIGTERM delivery via `sleep 5` |
+| GracefulShutdown | 15s | Code drain in `src/lifecycle.ts` |
+| Readiness fail window | 30s | `failureThreshold: 6` × `periodSeconds: 5` |
+| Total drain budget | 20s | 5s + 15s — within the 60s grace period |
+| `terminationGracePeriodSeconds` | 60s | Hard limit before SIGKILL |
 
 ## Non-root security
 
@@ -69,6 +79,60 @@ kubectl -n xstreamroll create secret generic api-secrets \
 
 For production, prefer External Secrets Operator or Sealed Secrets so
 plaintext values never leave your secret manager.
+
+## Deploying a specific version
+
+The manifests in this directory use `0.0.0-dev` as a placeholder tag for
+local development. **Never apply this to a real environment.** Every
+production or staging deploy must pin images to a specific, immutable tag
+produced by the release workflow.
+
+The release workflow (`.github/workflows/release.yml`) pushes two tags per
+release:
+
+| Tag format | Example | Use |
+|---|---|---|
+| Semver | `v1.2.3` | Human-readable, used for rollbacks |
+| Short SHA | `sha-abc1234` | Immutable, used for precise rollback |
+| `latest` | `latest` | Convenience alias — **do not use in manifests** |
+
+### Deploying by semver tag
+
+```bash
+VERSION=v1.2.3   # semver tag from the GitHub release
+
+kustomize edit set image \
+  ghcr.io/xstreamrollz/xstreamroll-api:${VERSION} \
+  ghcr.io/xstreamrollz/xstreamroll-app:${VERSION} \
+  ghcr.io/xstreamrollz/xstreamroll-processing:${VERSION}
+
+kubectl apply -k k8s/
+```
+
+### Deploying by commit SHA (recommended for production)
+
+```bash
+SHA=sha-abc1234   # short SHA tag from the release workflow
+
+kustomize edit set image \
+  ghcr.io/xstreamrollz/xstreamroll-api:${SHA} \
+  ghcr.io/xstreamrollz/xstreamroll-app:${SHA} \
+  ghcr.io/xstreamrollz/xstreamroll-processing:${SHA}
+
+kubectl apply -k k8s/
+```
+
+### Rolling back
+
+```bash
+# Roll back the API to the previous semver
+PREVIOUS=v1.2.2
+kustomize edit set image ghcr.io/xstreamrollz/xstreamroll-api:${PREVIOUS}
+kubectl apply -k k8s/
+
+# Or use kubectl rollout undo for a quick in-cluster rollback
+kubectl -n xstreamroll rollout undo deployment/api
+```
 
 ## Applying
 
@@ -117,6 +181,43 @@ kubectl -n xstreamroll exec deploy/api -- wget -q -O - http://localhost:3001/liv
 # Probe the worker readiness endpoint:
 kubectl -n xstreamroll exec deploy/processing -- wget -q -O - http://localhost:3002/healthz
 ```
+
+## Release process
+
+Images are published by `.github/workflows/release.yml` and are restricted
+to commits that live on `main`. Pushing a `v*.*.*` tag from any other branch
+is rejected before any build step runs.
+
+### Cutting a release
+
+1. Merge all changes to `main` and ensure CI is green.
+2. Create and push a semver tag from `main`:
+
+   ```bash
+   git checkout main && git pull
+   git tag v1.2.3
+   git push origin v1.2.3
+   ```
+
+3. The release workflow runs the `verify-branch` job to confirm the tag
+   is on `main`, then builds and pushes three images under the `production`
+   GitHub environment (which requires reviewer approval if configured).
+
+4. Each image receives two immutable tags:
+   - `v1.2.3` — semver
+   - `sha-<short>` — commit SHA for precise identification
+
+   A `latest` convenience alias is also pushed but **must not be used in
+   Kubernetes manifests**.
+
+5. Build provenance attestations are attached to every image via
+   `actions/attest-build-provenance`. Verify an image's attestation with:
+
+   ```bash
+   gh attestation verify \
+     oci://ghcr.io/xstreamrollz/xstreamroll-api:v1.2.3 \
+     --repo OlaGreat/XStreamRoll
+   ```
 
 ## Acceptance criteria mapping
 

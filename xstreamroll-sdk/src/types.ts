@@ -1,3 +1,19 @@
+// ─── Generated types from OpenAPI spec ─────────────────────────────────────
+// Regenerate with `npm run generate:types` (requires API server running).
+import type { components } from "./generated/schema"
+
+export type { components }
+
+// Convenience aliases for generated DTOs
+export type RegisterDto = components["schemas"]["RegisterDto"]
+export type LoginDto = components["schemas"]["LoginDto"]
+export type ForgotPasswordDto = components["schemas"]["ForgotPasswordDto"]
+export type ResetPasswordDto = components["schemas"]["ResetPasswordDto"]
+export type CreateStreamDto = components["schemas"]["CreateStreamDto"]
+export type UpdateStreamDto = components["schemas"]["UpdateStreamDto"]
+export type CreateTagDto = components["schemas"]["CreateTagDto"]
+export type HealthCheckResponseDto = components["schemas"]["HealthCheckResponseDto"]
+
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 /** Configuration for the StreamingClient. */
@@ -68,21 +84,6 @@ export interface Stream {
   updatedAt: string
 }
 
-/** Payload for creating a new stream. */
-export interface CreateStreamDto {
-  name: string
-  description?: string
-  visibility?: StreamVisibility
-}
-
-/** Payload for updating an existing stream. */
-export interface UpdateStreamDto {
-  name?: string
-  description?: string
-  status?: StreamStatus
-  visibility?: StreamVisibility
-}
-
 // ─── Stream Events ────────────────────────────────────────────────────────────
 
 /** Types of events that can occur on a stream. */
@@ -109,6 +110,48 @@ export interface StreamEventRecord {
   eventType: StreamEventType
   payload: Record<string, unknown>
   occurredAt: string
+}
+
+// ─── Webhooks ─────────────────────────────────────────────────────────────────
+
+/** Payload for `subscribeWebhook()` / `POST /webhooks`. */
+export interface CreateWebhookDto {
+  streamId: string | number
+  url: string
+  events: StreamEventType[]
+}
+
+/**
+ * A registered webhook subscription. `secret` is only ever present in the
+ * response returned by `subscribeWebhook()` at creation time — store it
+ * immediately, since it is needed to verify future delivery signatures via
+ * {@link verifyWebhookSignature}.
+ */
+export interface WebhookSubscription {
+  id: string | number
+  userId: string | number
+  streamId: string | number
+  url: string
+  events: StreamEventType[]
+  secret: string
+  active: boolean
+  createdAt: string
+}
+
+/** A single delivery attempt, as returned by `GET /webhooks/:id/deliveries`. */
+export interface WebhookDelivery {
+  id: string | number
+  webhookSubscriptionId: string | number
+  event: StreamEventType
+  payload: Record<string, unknown>
+  status: "pending" | "success" | "failed"
+  attemptCount: number
+  lastStatusCode: number | null
+  lastResponseBody: string | null
+  lastError: string | null
+  nextAttemptAt: string | null
+  deliveredAt: string | null
+  createdAt: string
 }
 
 // ─── Pagination ───────────────────────────────────────────────────────────────

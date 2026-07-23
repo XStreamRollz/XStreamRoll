@@ -5,7 +5,6 @@ export async function POST(req: NextRequest) {
 
   const { email, password } = body;
 
-  // Replace with backend API call
   const apiResponse = await fetch('http://localhost:3001/auth/login', {
     method: 'POST',
     headers: {
@@ -28,16 +27,18 @@ export async function POST(req: NextRequest) {
 
   const response = NextResponse.json({
     success: true,
+    user: data.user,
+    accessToken: data.accessToken,
   });
 
   response.cookies.set({
-    name: 'token',
-    value: data.access_token,
+    name: 'refresh_token',
+    value: data.refreshToken,
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    sameSite: 'strict',
     path: '/',
-    maxAge: 60 * 60 * 24,
+    maxAge: 7 * 24 * 60 * 60,
   });
 
   return response;

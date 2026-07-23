@@ -35,4 +35,10 @@ describe("StreamingClient env presets", () => {
     const client = new StreamingClient({ apiUrl: "http://legacy:9000" })
     expect(getApiUrl(client)).toBe("http://legacy:9000")
   })
+
+  it("uses HttpClient internally (not axios)", () => {
+    const client = new StreamingClient({ baseUrl: "http://api.test" })
+    const http = (client as unknown as { http: { constructor: { name: string } } }).http
+    expect(http.constructor.name).toBe("HttpClient")
+  })
 })
