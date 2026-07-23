@@ -25,6 +25,11 @@ const envSchema = z.object({
     .default("30000")
     .transform((s) => Number(s))
     .pipe(z.number().int().positive()),
+  MAX_QUEUE_DEPTH: z
+    .string()
+    .default("1000")
+    .transform((s) => Number(s))
+    .pipe(z.number().int().positive()),
 })
 
 export type Env = z.infer<typeof envSchema>
