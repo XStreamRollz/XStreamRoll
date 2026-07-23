@@ -32,4 +32,30 @@ describe("StreamStatusBadge", () => {
     const badge = screen.getByLabelText("Stream status: Error")
     expect(badge.className).toMatch(/destructive/)
   })
+
+  describe("live status changes (#362)", () => {
+    it("does not flash on the initial render", () => {
+      render(<StreamStatusBadge status="active" />)
+      const badge = screen.getByLabelText("Stream status: Live")
+      expect(badge.className).not.toMatch(/animate-status-live-flash/)
+    })
+
+    it("flashes when status changes after mount", () => {
+      const { rerender } = render(<StreamStatusBadge status="inactive" />)
+
+      rerender(<StreamStatusBadge status="active" />)
+
+      const badge = screen.getByLabelText("Stream status: Live")
+      expect(badge.className).toMatch(/animate-status-live-flash/)
+    })
+
+    it("does not flash on a re-render with the same status", () => {
+      const { rerender } = render(<StreamStatusBadge status="active" />)
+
+      rerender(<StreamStatusBadge status="active" />)
+
+      const badge = screen.getByLabelText("Stream status: Live")
+      expect(badge.className).not.toMatch(/animate-status-live-flash/)
+    })
+  })
 })
