@@ -1,3 +1,5 @@
+import type { Tag } from "./tag"
+
 /** Possible lifecycle states of a stream. */
 export type StreamStatus = "active" | "inactive" | "error"
 
@@ -15,6 +17,15 @@ export interface Stream {
   status: StreamStatus
   createdAt: string
   updatedAt: string
+  /**
+   * Tags attached to this stream. Populated inline on the list
+   * endpoint so a single `GET /streams` round-trip returns the
+   * caller everything it needs to render tag chips (issue #330).
+   * May be `undefined` on endpoints that fetch a single stream
+   * directly (create / update / findOne) — callers that want the
+   * tags should hit `GET /streams/:id/tags`.
+   */
+  tags?: Tag[]
 }
 
 /** Payload accepted by `POST /streams`. */

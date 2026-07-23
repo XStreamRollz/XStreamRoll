@@ -28,6 +28,18 @@ export class TagsService {
   }
 
   /**
+   * Loads every tag attached to any stream in `streamIds`, grouped by
+   * stream id. Powers the inline `tags` field on `GET /streams`
+   * (issue #330) so the dashboard can render tag chips without a
+   * second round-trip per stream.
+   */
+  async listForStreamIds(
+    streamIds: number[],
+  ): Promise<Map<number, Tag[]>> {
+    return this.tags.listForStreamIds(streamIds)
+  }
+
+  /**
    * Create-or-fetch a tag from a raw name, then attach it to the stream.
    * Returns the canonical Tag row (existing or freshly created).
    */
