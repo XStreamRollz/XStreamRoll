@@ -1,3 +1,4 @@
+import { createHash } from "crypto"
 import { Inject, Injectable } from "@nestjs/common"
 import { CACHE_MANAGER } from "@nestjs/cache-manager"
 import { Cache } from "cache-manager"
@@ -37,7 +38,8 @@ export class TokenDenylistService {
     return (await this.cache.get<boolean>(key)) === REVOKED_MARKER
   }
 
-  private cacheKey(jti: string): string {
-    return `${DENYLIST_PREFIX}${jti}`
+  private cacheKey(token: string): string {
+    const hash = createHash("sha256").update(token).digest("hex")
+    return `${DENYLIST_PREFIX}${hash}`
   }
 }

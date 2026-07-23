@@ -51,6 +51,30 @@ flowchart TD
 
 ### Installation
 
+#### Option A: Docker Compose (recommended)
+
+The fastest way to get a working environment — no manual `.env` setup, no
+local PostgreSQL install, no starting each service by hand.
+
+1. **Fork/Clone the repository**
+   ```bash
+   git clone https://github.com/XStreamRollz/XStreamRoll
+   cd xstreamroll
+   ```
+
+2. **Start everything**
+   ```bash
+   docker compose up
+   ```
+   This builds and starts PostgreSQL, Redis, the API, the App frontend, and
+   the Processing worker, seeding the database from `database/schema.sql`
+   automatically. All environment variables are pre-configured with
+   local-dev-only defaults in `docker-compose.yml`.
+
+The application should now be running at `http://localhost:3000`.
+
+#### Option B: Run services manually
+
 1. **Fork/Clone the repository**
    ```bash
    git clone https://github.com/XStreamRollz/XStreamRoll

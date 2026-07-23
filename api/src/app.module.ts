@@ -13,6 +13,7 @@ import { NotificationsModule } from "./notifications/notifications.module"
 import { StreamsModule } from "./streams/streams.module"
 import { TagsModule } from "./tags/tags.module"
 import { UsersModule } from "./users/users.module"
+import { WebhooksModule } from "./webhooks/webhooks.module"
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { UsersModule } from "./users/users.module"
     StreamsModule,
     TagsModule,
     UsersModule,
+    WebhooksModule,
   ],
   providers: [
     {

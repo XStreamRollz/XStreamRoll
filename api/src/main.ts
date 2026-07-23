@@ -1,8 +1,10 @@
+import "./tracing" // Must be the first import — OTEL patches modules before they load
 import { ValidationPipe } from "@nestjs/common"
 import { HttpAdapterHost, NestFactory } from "@nestjs/core"
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger"
 import compression from "compression"
 import helmet from "helmet"
+import * as cookieParser from "cookie-parser"
 import { AppModule } from "./app.module"
 import { SanitizeStringsPipe } from "./common/sanitization/sanitize-strings.pipe"
 import { ThrottlerExceptionFilter } from "./throttler-exception.filter"
@@ -30,6 +32,8 @@ async function bootstrap() {
       },
     }),
   )
+
+  app.use(cookieParser.default())
 
   // Issue #88: Configure CORS with trusted origin from env, credentials support, and preflight
   app.enableCors({
