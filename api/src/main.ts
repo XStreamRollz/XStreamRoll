@@ -9,6 +9,7 @@ import { AppModule } from "./app.module"
 import { SanitizeStringsPipe } from "./common/sanitization/sanitize-strings.pipe"
 import { ThrottlerExceptionFilter } from "./throttler-exception.filter"
 import { QueryTimeoutExceptionFilter } from "./database/query-timeout-exception.filter"
+import { resolveCorsOrigins } from "./gateways/streams.gateway"
 
 // Bypass compression when the response is smaller than this. Anything
 // under ~1 KB doesn't benefit from gzip and the per-request CPU cost
@@ -37,7 +38,7 @@ async function bootstrap() {
 
   // Issue #88: Configure CORS with trusted origin from env, credentials support, and preflight
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+    origin: resolveCorsOrigins(),
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization"],
