@@ -173,11 +173,10 @@ export function useDetachTag(
       detachTagFromStream(numericStreamId, Number(tagId), { signal: undefined }),
     onMutate: async ({ tagId }) => {
       const previousTags = qc.getQueryData<PagedTags>(tagsKey)
-      qc.setQueryData<PagedTags>(tagsKey, (current) =>
-        current
-          ? { ...current, items: current.items.filter((t) => t.id !== Number(tagId)) }
-          : current,
-      )
+      qc.setQueryData<PagedTags>(tagsKey, (current) => {
+        const base = current ?? { items: [], page: 1, limit: 50, total: 0, hasMore: false }
+        return { ...base, items: base.items.filter((t) => t.id !== Number(tagId)) }
+      })
       return { previousTags }
     },
     onError: (_err, _vars, ctx) => {

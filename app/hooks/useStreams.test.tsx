@@ -30,29 +30,32 @@ describe("useStreamList (issue #345 phase B)", () => {
   })
 
   it("calls GET /streams with mapped page/limit and returns the parsed payload", async () => {
-    const mock = jest.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          data: [
-            {
-              id: "1",
-              userId: "u1",
-              name: "First",
-              description: null,
-              status: "inactive",
-              createdAt: "2026-01-01T00:00:00.000Z",
-              updatedAt: "2026-01-01T00:00:00.000Z",
-              tags: [],
-            },
-          ],
-          page: 1,
-          limit: 20,
-          total: 1,
-          hasMore: false,
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      ),
-    )
+    // `Response` is a browser API not available in Node.js; use a
+    // minimal mock that satisfies fetch's contract.
+    const mockResponse = {
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({
+        data: [
+          {
+            id: "1",
+            userId: "u1",
+            name: "First",
+            description: null,
+            status: "inactive",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+            tags: [],
+          },
+        ],
+        page: 1,
+        limit: 20,
+        total: 1,
+        hasMore: false,
+      }),
+    }
+    const mock = jest.fn().mockResolvedValue(mockResponse)
     global.fetch = mock as unknown as typeof fetch
 
     const { result } = renderHook(() => useStreamList({ page: 1, limit: 20 }), {

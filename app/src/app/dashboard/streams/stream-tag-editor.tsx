@@ -15,10 +15,12 @@ import type { Tag } from "@/lib/api/tags"
 import {
   TagsApiError,
 } from "@/lib/api/tags"
+import { useQueryClient } from "@tanstack/react-query"
 import {
   useAttachTag,
   useDetachTag,
   useStreamTags,
+  streamKeys,
 } from "@/hooks/useStreams"
 
 export interface StreamTagEditorProps {
@@ -47,17 +49,25 @@ export function StreamTagEditor({
   initialTags = [],
   actingUserId: _actingUserId,
 }: StreamTagEditorProps) {
+  const qc = useQueryClient()
   const tagsQuery = useStreamTags(streamId)
   const attach = useAttachTag(streamId)
   const detach = useDetachTag(streamId)
 
-  // Seed the cache with the SSR-provided tag list on first mount so
-  // the editor renders without an empty-state flicker.
+  // Seed the query cache with SSR-provided initialTags so that
+  // components consuming this data (e.g. StreamTagChips) have data
+  // immediately and optimistic mutations can read/update the cache.
   useEffect(() => {
     if (tagsQuery.data || tagsQuery.isFetched) return
     if (initialTags.length === 0) return
-    // No-op seed; consume via setQueryData's getter pattern.
-  }, [tagsQuery.data, tagsQuery.isFetched, initialTags.length])
+    qc.setQueryData(streamKeys.tags(streamId), {
+      items: initialTags,
+      page: 1,
+      limit: initialTags.length,
+      total: initialTags.length,
+      hasMore: false,
+    })
+  }, [qc, tagsQuery.data, tagsQuery.isFetched, initialTags, streamId])
 
   async function handleSelectionChange(next: Tag[]) {
     const previous = tagsQuery.data?.items ?? initialTags
