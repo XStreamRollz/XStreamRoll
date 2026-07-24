@@ -150,7 +150,7 @@ describe("StreamsService", () => {
   })
 
   it("update status inactive -> active dispatches a stream:started webhook event", async () => {
-    const existing: Stream = { id: 1, userId: 7, name: "s", description: null, status: "inactive", createdAt: new Date(), updatedAt: new Date() }
+    const existing: Stream = { id: 1, userId: 7, name: "s", description: null, status: "inactive", visibility: "private", createdAt: new Date(), updatedAt: new Date() }
     const updated: Stream = { ...existing, status: "active" }
     mockRepo.findById.mockResolvedValue(existing)
     mockRepo.update.mockResolvedValue(updated)
@@ -165,7 +165,7 @@ describe("StreamsService", () => {
   })
 
   it("update status active -> inactive dispatches a stream:stopped webhook event", async () => {
-    const existing: Stream = { id: 1, userId: 7, name: "s", description: null, status: "active", createdAt: new Date(), updatedAt: new Date() }
+    const existing: Stream = { id: 1, userId: 7, name: "s", description: null, status: "active", visibility: "private", createdAt: new Date(), updatedAt: new Date() }
     const updated: Stream = { ...existing, status: "inactive" }
     mockRepo.findById.mockResolvedValue(existing)
     mockRepo.update.mockResolvedValue(updated)
@@ -180,7 +180,7 @@ describe("StreamsService", () => {
   })
 
   it("update without a status change does not dispatch a webhook event", async () => {
-    const existing: Stream = { id: 1, userId: 7, name: "s", description: null, status: "active", createdAt: new Date(), updatedAt: new Date() }
+    const existing: Stream = { id: 1, userId: 7, name: "s", description: null, status: "active", visibility: "private", createdAt: new Date(), updatedAt: new Date() }
     const updated: Stream = { ...existing, name: "renamed" }
     mockRepo.findById.mockResolvedValue(existing)
     mockRepo.update.mockResolvedValue(updated)
