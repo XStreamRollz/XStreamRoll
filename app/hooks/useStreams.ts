@@ -7,7 +7,7 @@ import {
   type UseMutationResult,
   type UseQueryResult,
 } from "@tanstack/react-query"
-import type { PaginatedResponse, Stream } from "@xstreamroll/types"
+import type { Stream } from "@xstreamroll/types"
 import {
   attachTagToStream,
   detachTagFromStream,
@@ -26,7 +26,7 @@ import {
  *
  *   useStreamList.all    -> ["streams", "list", page, limit]
  *   useStreamDetail.all  -> ["streams", "detail", id]
- *   useStreamTags.all    -> ["streams", String(id), "tags"]
+ *   useStreamTags.all    -> ["streams", "detail", String(id), "tags"]
  */
 export const streamKeys = {
   all: ["streams"] as const,
@@ -98,6 +98,10 @@ export interface TagMutationContext {
   previousTags: PagedTags | undefined
 }
 
+function emptyPagedTags(): PagedTags {
+  return { data: [], page: 1, limit: 50, total: 0, hasMore: false }
+}
+
 /**
  * Attach a tag to a stream with an optimistic update. The list under
  * `streamKeys.tags(streamId)` is updated pessimistically-then-
@@ -117,9 +121,11 @@ export function useAttachTag(
       attachTagToStream(numericStreamId, name, { signal: undefined }),
     onMutate: async ({ name }) => {
       const previousTags = qc.getQueryData<PagedTags>(tagsKey)
+      // Seed a base shape so the placeholder array reference below
+      // triggers a consumer re-render rather than mutating an undefined.
       qc.setQueryData<PagedTags>(tagsKey, (current) => ({
-        ...(current ?? { items: [], page: 1, limit: 50, total: 0, hasMore: false }),
-        items: current?.items ?? [],
+        ...(current ?? emptyPagedTags()),
+        data: current?.data ?? [],
       }))
       // Optimistic placeholder: a synthetic Tag with a negative id so
       // the UI renders a chip immediately. The real id arrives with
@@ -132,8 +138,8 @@ export function useAttachTag(
         createdAt: new Date().toISOString(),
       }
       qc.setQueryData<PagedTags>(tagsKey, (current) => ({
-        ...(current ?? { items: [], page: 1, limit: 50, total: 0, hasMore: false }),
-        items: [...(current?.items ?? []), placeholder],
+        ...(current ?? emptyPagedTags()),
+        data: [...(current?.data ?? []), placeholder],
       }))
       return { previousTags }
     },
@@ -144,12 +150,12 @@ export function useAttachTag(
     },
     onSuccess: (created) => {
       qc.setQueryData<PagedTags>(tagsKey, (current) => {
-        const items = (current?.items ?? []).map((t) =>
+        const data = (current?.data ?? []).map((t) =>
           t.id < 0 && t.name === created.name ? created : t,
         )
         return {
-          ...(current ?? { items: [], page: 1, limit: 50, total: 0, hasMore: false }),
-          items,
+          ...(current ?? emptyPagedTags()),
+          data,
         }
       })
     },
@@ -174,8 +180,8 @@ export function useDetachTag(
     onMutate: async ({ tagId }) => {
       const previousTags = qc.getQueryData<PagedTags>(tagsKey)
       qc.setQueryData<PagedTags>(tagsKey, (current) => {
-        const base = current ?? { items: [], page: 1, limit: 50, total: 0, hasMore: false }
-        return { ...base, items: base.items.filter((t) => t.id !== Number(tagId)) }
+        const base = current ?? emptyPagedTags()
+        return { ...base, data: base.data.filter((t) => t.id !== Number(tagId)) }
       })
       return { previousTags }
     },

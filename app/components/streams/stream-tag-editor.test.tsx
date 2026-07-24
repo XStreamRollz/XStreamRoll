@@ -17,7 +17,7 @@ jest.mock("@/lib/api/tags", () => {
     ...actual,
     attachTagToStream: jest.fn(),
     detachTagFromStream: jest.fn(),
-    listTags: jest.fn().mockResolvedValue({ items: [], page: 1, limit: 100, total: 0, hasMore: false }),
+    listTags: jest.fn().mockResolvedValue({ data: [], page: 1, limit: 100, total: 0, hasMore: false }),
   }
 })
 jest.mock("sonner", () => ({
@@ -52,14 +52,14 @@ function renderWithClient(ui: React.ReactElement, streamId: string | number | un
   // the query never resolves (no API endpoint mocked) and setQueryData
   // in onMutate/onError won't propagate to the component.
   //
-  // We seed with an empty items array so the component's
-  // `tagsQuery.data?.items ?? initialTags` fallback kicks in for the
+  // We seed with an empty data array so the component's
+  // `tagsQuery.data?.data ?? initialTags` fallback kicks in for the
   // initial render. When a mutation fires, onMutate/onError replaces
   // this empty array with real data, which DOES trigger a re-render
   // because React Query sees the array reference change.
   if (streamId !== undefined) {
     client.setQueryData(["streams", "detail", String(streamId), "tags"], {
-      items: [],
+      data: [],
       page: 1,
       limit: 50,
       total: 0,
@@ -166,7 +166,7 @@ describe("StreamTagEditor", () => {
 
     // TagCombobox needs to be able to resolve listTags when opened
     mockListTags.mockResolvedValueOnce({
-      items: [
+      data: [
         { id: 1, name: "Gaming", slug: "gaming", createdAt: "2026-06-18" },
         { id: 2, name: "Music", slug: "music", createdAt: "2026-06-18" },
         { id: 3, name: "Coding", slug: "coding", createdAt: "2026-06-18" },
@@ -205,7 +205,7 @@ describe("StreamTagEditor", () => {
     mockAttach.mockRejectedValueOnce(new TagsApiError(400, "Tag limit reached"))
 
     mockListTags.mockResolvedValueOnce({
-      items: [
+      data: [
         { id: 1, name: "Gaming", slug: "gaming", createdAt: "2026-06-18" },
         { id: 2, name: "Music", slug: "music", createdAt: "2026-06-18" },
         { id: 3, name: "Coding", slug: "coding", createdAt: "2026-06-18" },

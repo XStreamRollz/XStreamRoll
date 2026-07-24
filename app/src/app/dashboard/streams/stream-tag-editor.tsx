@@ -61,7 +61,7 @@ export function StreamTagEditor({
     if (tagsQuery.data || tagsQuery.isFetched) return
     if (initialTags.length === 0) return
     qc.setQueryData(streamKeys.tags(streamId), {
-      items: initialTags,
+      data: initialTags,
       page: 1,
       limit: initialTags.length,
       total: initialTags.length,
@@ -69,8 +69,8 @@ export function StreamTagEditor({
     })
   }, [qc, tagsQuery.data, tagsQuery.isFetched, initialTags, streamId])
 
-  async function handleSelectionChange(next: Tag[]) {
-    const previous = tagsQuery.data?.items ?? initialTags
+  async  function handleSelectionChange(next: Tag[]) {
+    const previous = tagsQuery.data?.data ?? initialTags
     const added = next.filter((n) => !previous.some((p) => p.id === n.id))
     const removed = previous.filter((p) => !next.some((n) => n.id === p.id))
 
@@ -92,7 +92,7 @@ export function StreamTagEditor({
     }
   }
 
-  const current = tagsQuery.data?.items ?? initialTags
+  const current = tagsQuery.data?.data ?? initialTags
   const busy = attach.isPending || detach.isPending
 
   return (
