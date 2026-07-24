@@ -1,7 +1,9 @@
 import { ConflictException, NotFoundException } from "@nestjs/common"
-import { StreamsService } from "./streams.service"
+import { Tag } from "../tags/tag.entity"
+import { TagsService } from "../tags/tags.service"
 import { Stream } from "./stream.entity"
 import { StreamsRepository } from "./repository/streams.repository"
+import { StreamsService } from "./streams.service"
 import { WebhooksService } from "../webhooks/webhooks.service"
 
 describe("StreamsService", () => {
@@ -15,6 +17,7 @@ describe("StreamsService", () => {
     delete: jest.Mock
   }
   let mockWebhooksService: { dispatchStreamEvent: jest.Mock }
+  let mockTagsService: { listForStreamIds: jest.Mock }
 
   beforeEach(() => {
     mockRepo = {
@@ -28,9 +31,13 @@ describe("StreamsService", () => {
     mockWebhooksService = {
       dispatchStreamEvent: jest.fn().mockResolvedValue(undefined),
     }
+    mockTagsService = {
+      listForStreamIds: jest.fn().mockResolvedValue(new Map()),
+    }
     service = new StreamsService(
       mockRepo as unknown as StreamsRepository,
       mockWebhooksService as unknown as WebhooksService,
+      mockTagsService as unknown as TagsService,
     )
   })
 
@@ -61,11 +68,41 @@ describe("StreamsService", () => {
     const page = 1
     const limit = 2
     const res = await service.list(page, limit)
-    expect(res.data).toBe(items)
+    expect(res.data).not.toBe(items) // service maps into a new array with tags
+    expect(res.data).toHaveLength(2)
+    expect(res.data[0]?.id).toBe(1)
+    expect(res.data[0]?.tags).toEqual([])
     expect(res.page).toBe(page)
     expect(res.limit).toBe(limit)
     expect(res.total).toBe(3)
     expect(res.hasMore).toBe(true)
+  })
+
+  it("list batches tags in a single call so each stream row ships with tags (issue #330)", async () => {
+    const streamA: Stream = { id: 1, userId: 1, name: "a", description: null, status: "inactive", createdAt: new Date(), updatedAt: new Date() }
+    const streamB: Stream = { id: 2, userId: 1, name: "b", description: null, status: "inactive", createdAt: new Date(), updatedAt: new Date() }
+    mockRepo.listPaginated.mockResolvedValue({ items: [streamA, streamB], total: 2 })
+    const tagsByStream = new Map<number, Tag[]>([
+      [1, [{ id: 10, name: "live", slug: "live", createdAt: new Date() }]],
+      [2, []],
+    ])
+    mockTagsService.listForStreamIds.mockResolvedValue(tagsByStream)
+
+    const res = await service.list(1, 20)
+    expect(mockTagsService.listForStreamIds).toHaveBeenCalledTimes(1)
+    expect(mockTagsService.listForStreamIds).toHaveBeenCalledWith([1, 2])
+    expect(res.data[0]?.tags).toHaveLength(1)
+    expect(res.data[0]?.tags?.[0]?.slug).toBe("live")
+    expect(res.data[1]?.tags).toEqual([])
+  })
+
+  it("list defaults tags to [] when the tag service returns no entry for a stream id", async () => {
+    const stream: Stream = { id: 99, userId: 1, name: "x", description: null, status: "inactive", createdAt: new Date(), updatedAt: new Date() }
+    mockRepo.listPaginated.mockResolvedValue({ items: [stream], total: 1 })
+    mockTagsService.listForStreamIds.mockResolvedValue(new Map())
+
+    const res = await service.list(1, 20)
+    expect(res.data[0]?.tags).toEqual([])
   })
 
   it("list streams with status filter forwards filter", async () => {
@@ -208,7 +245,8 @@ describe('StreamsService - Property-Based Tests', () => {
       delete: jest.fn(),
     };
     const mockWebhooksService = { sendStreamEvent: jest.fn() };
-    service = new StreamsService(mockRepo, mockWebhooksService as any);
+    const mockTagsService = { listForStreamIds: jest.fn().mockResolvedValue(new Map()) };
+    service = new StreamsService(mockRepo, mockWebhooksService as any, mockTagsService as any);
   });
 
   // Test 1: Verify the exact allowed transitions based on your implementation
