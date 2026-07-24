@@ -68,7 +68,10 @@ describe("StreamsService", () => {
     const page = 1
     const limit = 2
     const res = await service.list(page, limit)
-    expect(res.data).toBe(items)
+    expect(res.data).not.toBe(items) // service maps into a new array with tags
+    expect(res.data).toHaveLength(2)
+    expect(res.data[0]?.id).toBe(1)
+    expect(res.data[0]?.tags).toEqual([])
     expect(res.page).toBe(page)
     expect(res.limit).toBe(limit)
     expect(res.total).toBe(3)

@@ -1,6 +1,9 @@
 // Stub the database.module so tests do not pull in env validation
 // from the production module graph (#330).
-jest.mock("../../../database/database.module", () => ({
+// Stub the database.module so tests do not pull in env validation
+// from the production module graph (#330).
+// Path: file is at api/src/tags/repository/, target is at api/src/database/
+jest.mock("../../database/database.module", () => ({
   PG_POOL: Symbol("PG_POOL"),
 }))
 
@@ -60,13 +63,16 @@ describe("TagsDbRepository — listForStreamIds (issue #330)", () => {
   })
 
   it("preserves the stream_id ASC, slug ASC ORDER BY for a stable wire order", async () => {
-    // Insert in a deliberately interleaved order; the repo must surface
-    // them grouped by stream_id first, then alphabetically by slug.
+    // The mock simulates the DB returning rows already sorted by
+    // (stream_id ASC, slug ASC). The test data must replicate that
+    // order so the test verifies the grouping logic, not the sort.
+    // SQL ORDER BY asserts are covered by the regex match in the
+    // "single batched SELECT" test above.
     const rows = [
-      { stream_id: 2, id: 9, name: "zeta", slug: "zeta", created_at: new Date() },
       { stream_id: 1, id: 7, name: "alpha", slug: "alpha", created_at: new Date() },
-      { stream_id: 2, id: 4, name: "alpha", slug: "alpha", created_at: new Date() },
       { stream_id: 1, id: 5, name: "mike", slug: "mike", created_at: new Date() },
+      { stream_id: 2, id: 4, name: "alpha", slug: "alpha", created_at: new Date() },
+      { stream_id: 2, id: 9, name: "zeta", slug: "zeta", created_at: new Date() },
     ]
     const { repo } = makeRepo(rows)
 

@@ -36,6 +36,9 @@ export class TagsService {
   async listForStreamIds(
     streamIds: number[],
   ): Promise<Map<number, Tag[]>> {
+    // Short-circuit: empty input avoids a DB roundtrip (both in-memory
+    // and DB-backed repositories short-circuit at their level too).
+    if (streamIds.length === 0) return new Map()
     return this.tags.listForStreamIds(streamIds)
   }
 
