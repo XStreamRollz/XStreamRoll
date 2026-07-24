@@ -24,23 +24,32 @@ jobs:
           node-version: "20"
           cache: "npm"
 
-      - name: Install root dependencies
-        run: npm install
+      # Issue #375: Use npm ci for reproducible builds. npm ci installs
+      # exact versions from package-lock.json and fails if the lockfile
+      # is out of sync with package.json, guaranteeing every CI run
+      # sees the same dependency tree.
+      - name: Install root dependencies (npm ci)
+        run: npm ci
 
-      - name: Install & build types package
-        run: cd packages/types && npm install && npm run build
+      - name: Build types package
+        run: cd packages/types && npm run build
 
-      - name: Install app dependencies
-        run: cd app && npm install
+      - name: Install api dependencies (npm ci)
+        run: cd api && npm ci
 
-      - name: Install api dependencies
-        run: cd api && npm install
+      # xstreamroll-processing uses pnpm (pnpm-lock.yaml) so we install
+      # with pnpm --frozen-lockfile for reproducible installs.
+      - name: Install pnpm
+        run: npm install -g pnpm
 
-      - name: Install sdk dependencies
-        run: cd xstreamroll-sdk && npm install
+      - name: Install processing dependencies (pnpm --frozen-lockfile)
+        run: cd xstreamroll-processing && pnpm install --frozen-lockfile
 
-      - name: Install processing dependencies
-        run: cd xstreamroll-processing && npm install
+      # Verify that no lockfile was modified by the install step.
+      # If a lockfile changed, it means package.json dependencies drifted
+      # from the committed lockfile — the PR author must update the lockfile.
+      - name: Verify lockfiles are up-to-date
+        run: git diff --exit-code -- 'package-lock.json' 'api/package-lock.json' 'xstreamroll-processing/pnpm-lock.yaml'
 
       - name: Lint — types
         run: cd packages/types && npm run lint
@@ -147,14 +156,14 @@ jobs:
           node-version: "20"
           cache: "npm"
 
-      - name: Install root dependencies
-        run: npm install
+      - name: Install root dependencies (npm ci)
+        run: npm ci
 
-      - name: Install & build types package
-        run: cd packages/types && npm install && npm run build
+      - name: Build types package
+        run: cd packages/types && npm run build
 
-      - name: Install app dependencies
-        run: cd app && npm install
+      - name: Verify lockfiles are up-to-date
+        run: git diff --exit-code -- 'package-lock.json' 'api/package-lock.json' 'xstreamroll-processing/pnpm-lock.yaml'
 
       - name: Build app with analysis
         run: cd app && npm run analyze
