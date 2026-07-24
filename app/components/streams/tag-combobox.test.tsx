@@ -20,7 +20,7 @@ describe("TagCombobox", () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockListTags.mockResolvedValue({
-      items: availableTags,
+      data: availableTags,
       page: 1,
       limit: 100,
       total: 3,
@@ -46,7 +46,7 @@ describe("TagCombobox", () => {
     const listTagsPromise = new Promise<PagedTags>((resolve) => {
       resolveListTags = () =>
         resolve({
-          items: availableTags,
+          data: availableTags,
           page: 1,
           limit: 100,
           total: 3,

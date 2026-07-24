@@ -60,7 +60,7 @@ export function TagCombobox({
     if (!open || available !== null) return
     const controller = new AbortController()
     listTags({ limit: TAG_PAGE_LIMIT, signal: controller.signal })
-      .then((page) => setAvailable(page.items))
+      .then((page) => setAvailable(page.data))
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return
         setLoadError(err instanceof Error ? err.message : "failed to load tags")

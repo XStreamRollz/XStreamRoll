@@ -13,8 +13,13 @@ export interface Tag {
   createdAt: string
 }
 
+/**
+ * Paginated tags response. Mirrors the wire shape from the API's
+ * `TagsService.list`, which uses `data` (matching
+ * {@link PaginatedResponse}) — not `items`.
+ */
 export interface PagedTags {
-  items: Tag[]
+  data: Tag[]
   page: number
   limit: number
   total: number
