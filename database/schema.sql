@@ -115,6 +115,7 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_unread  ON notifications(user_id) WHERE read_at IS NULL;
 
 -- ---------------------------------------------------------------------
+
 -- Issue #392: Webhook delivery for stream lifecycle events
 -- Rollback: DROP TABLE webhook_deliveries; DROP TABLE webhook_subscriptions;
 -- ---------------------------------------------------------------------
@@ -163,3 +164,19 @@ CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_subscription_id
 CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_pending_next_attempt
     ON webhook_deliveries(next_attempt_at)
     WHERE status = 'pending';
+
+-- Issue #333: Audit log for sensitive actions
+-- Rollback: DROP TABLE audit_logs;
+-- ---------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id),
+    action VARCHAR(100) NOT NULL,
+    ip VARCHAR(45),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
+
