@@ -1,5 +1,5 @@
 import * as React from "react"
-import { render, screen, act } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { AppProviders } from "./providers"
 
@@ -66,9 +66,11 @@ describe("AppProviders (issue #345 phase A)", () => {
     // Initially shows loading state...
     expect(screen.getByTestId("t")).toHaveTextContent("loading")
     // ...and transitions to the resolved value once the query resolves.
-    await act(async () => {
-      await Promise.resolve()
+    // waitFor retries until the assertion passes, which handles React
+    // Query's multi-tick async resolution (a single Promise.resolve()
+    // is not enough to flush the query lifecycle).
+    await waitFor(() => {
+      expect(screen.getByTestId("t")).toHaveTextContent("hello")
     })
-    expect(screen.getByTestId("t")).toHaveTextContent("hello")
   })
 })
