@@ -77,11 +77,22 @@ export function StreamStatusBadge({
   const presentation = STATUS_PRESENTATION[status] ?? STATUS_PRESENTATION.inactive
   const Icon = presentation.icon
 
+  // Issue #362: briefly flash the badge whenever `status` changes so a
+  // live WebSocket-driven update (as opposed to the initial render) is
+  // visually noticeable. Purely a CSS animation triggered by React
+  // re-mounting the flash span via `key` — no timers to clean up.
+  const previousStatusRef = React.useRef(status)
+  const changed = previousStatusRef.current !== status
+  React.useEffect(() => {
+    previousStatusRef.current = status
+  }, [status])
+
   return (
     <Badge
+      key={changed ? `${status}-live` : status}
       variant={presentation.variant}
       aria-label={`Stream status: ${presentation.label}`}
-      className={cn("gap-1.5", className)}
+      className={cn("gap-1.5", changed && "animate-status-live-flash", className)}
       {...badgeProps}
     >
       {showIcon && (

@@ -18,6 +18,7 @@ describe("StreamViewer", () => {
     mockUseStreamSocket.mockReturnValue({
       status: "connecting",
       events: [],
+      streamStatus: null,
     })
 
     render(<StreamViewer socketUrl="ws://localhost:3001" />)
@@ -40,6 +41,7 @@ describe("StreamViewer", () => {
     mockUseStreamSocket.mockReturnValue({
       status: "connected",
       events: mockEvents,
+      streamStatus: null,
     })
 
     render(<StreamViewer socketUrl="ws://localhost:3001" />)
@@ -53,6 +55,7 @@ describe("StreamViewer", () => {
     mockUseStreamSocket.mockReturnValue({
       status: "error",
       events: [],
+      streamStatus: null,
     })
 
     render(<StreamViewer socketUrl="ws://localhost:3001" />)
