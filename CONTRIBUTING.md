@@ -39,6 +39,7 @@ XStreamRoll is a monorepo managed with npm workspaces:
 | `xstreamroll-sdk/`         | TypeScript                     | Client SDK for publishing events & calling the API    |
 | `xstreamroll-processing/`  | Node.js + TypeScript           | Stream-processing worker                              |
 | `packages/types/`          | TypeScript                     | `@xstreamroll/types` — shared domain types             |
+| `tests/contracts/`         | TypeScript                     | `@xstreamroll/contract-tests` — api/sdk contract tests |
 | `database/`                | PostgreSQL                     | Schema and migrations                                 |
 
 See [`REPOSITORIES.md`](./REPOSITORIES.md) for a deeper breakdown.

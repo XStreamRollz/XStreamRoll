@@ -271,4 +271,59 @@ describe("useStreamSocket", () => {
     // cleared it so we never call connect on the disconnected one.
     expect(firstSocket.connect).not.toHaveBeenCalled()
   })
+
+  describe("streamStatus (#362)", () => {
+    it("is null until a lifecycle event for the subscribed stream arrives", () => {
+      const { result } = renderHook(() =>
+        useStreamSocket("ws://localhost:3001/streams/42"),
+      )
+      expect(result.current.streamStatus).toBeNull()
+    })
+
+    it("derives 'active' from stream:started for the subscribed stream", () => {
+      const { result } = renderHook(() =>
+        useStreamSocket("ws://localhost:3001/streams/42"),
+      )
+      const socket = (mockCreate.mock.results[0].value as unknown) as FakeSocket
+
+      act(() => socket.emit("stream:started", { streamId: "42" }))
+      expect(result.current.streamStatus).toBe("active")
+    })
+
+    it("derives 'inactive' from stream:stopped and 'error' from stream:error", () => {
+      const { result } = renderHook(() =>
+        useStreamSocket("ws://localhost:3001/streams/42"),
+      )
+      const socket = (mockCreate.mock.results[0].value as unknown) as FakeSocket
+
+      act(() => socket.emit("stream:stopped", { streamId: "42" }))
+      expect(result.current.streamStatus).toBe("inactive")
+
+      act(() => socket.emit("stream:error", { streamId: "42" }))
+      expect(result.current.streamStatus).toBe("error")
+    })
+
+    it("ignores lifecycle events for a different stream on the shared socket", () => {
+      const { result } = renderHook(() =>
+        useStreamSocket("ws://localhost:3001/streams/42"),
+      )
+      const socket = (mockCreate.mock.results[0].value as unknown) as FakeSocket
+
+      act(() => socket.emit("stream:started", { streamId: "99" }))
+      expect(result.current.streamStatus).toBeNull()
+    })
+
+    it("resets streamStatus to null when the URL (and thus target stream) changes", () => {
+      const { result, rerender } = renderHook(
+        ({ url }: { url: string }) => useStreamSocket(url),
+        { initialProps: { url: "ws://localhost:3001/streams/42" } },
+      )
+      const firstSocket = (mockCreate.mock.results[0].value as unknown) as FakeSocket
+      act(() => firstSocket.emit("stream:started", { streamId: "42" }))
+      expect(result.current.streamStatus).toBe("active")
+
+      rerender({ url: "ws://localhost:3001/streams/99" })
+      expect(result.current.streamStatus).toBeNull()
+    })
+  })
 })

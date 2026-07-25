@@ -10,6 +10,7 @@
 
 export * from "./user"
 export * from "./stream"
+export * from "./tag"
 export * from "./stream-event"
 export * from "./pagination"
 export * from "./errors"

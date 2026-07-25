@@ -7,6 +7,7 @@ import {
 import { JwtService } from "@nestjs/jwt"
 import type { User as SharedUser } from "@xstreamroll/types"
 import * as bcrypt from "bcrypt"
+import { randomUUID } from "node:crypto"
 import type { Request } from "express"
 import { RegisterDto } from "./dto/register.dto"
 import { LoginDto } from "./dto/login.dto"
@@ -273,6 +274,7 @@ export class AuthService {
       username: user.username,
       passwordChangedAt:
         user.password_changed_at?.getTime() ?? user.created_at.getTime(),
+      jti: randomUUID(),
     })
   }
 }

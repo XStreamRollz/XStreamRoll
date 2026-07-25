@@ -5,6 +5,7 @@ import {
 } from "@nestjs/common"
 import { PaginatedResult } from "../common/dto/pagination.dto"
 import { STREAM_EVENTS } from "../gateways/stream-events"
+import { TagsService } from "../tags/tags.service"
 import { WebhooksService } from "../webhooks/webhooks.service"
 import { StreamAnalyticsDto } from "./dto/stream-analytics.dto"
 import { StreamsRepository } from "./repository/streams.repository"
@@ -26,6 +27,7 @@ export class StreamsService {
   constructor(
     private readonly repo: StreamsRepository,
     private readonly webhooksService: WebhooksService,
+    private readonly tagsService: TagsService,
   ) {}
 
   async create(dto: {
@@ -40,6 +42,22 @@ export class StreamsService {
     })
   }
 
+  /**
+   * Lists streams with tags inline.
+   *
+   * The previous implementation issued one query for the streams page
+   * and then one `GET /streams/:id/tags` roundtrip per row — a
+   * classic N+1. Issue #330 replaced that with a single batch fetch:
+   * `repo.listPaginated()` returns plain streams, then
+   * `tagsService.listForStreamIds()` groups every attached tag by
+   * stream id in one DB roundtrip (in-memory: one pass over the
+   * existing indexes; DB: one `SELECT ... WHERE stream_id = ANY($1)`
+   * using the composite PK on `stream_tags`).
+   *
+   * Every stream in the response carries a `tags: Tag[]` field —
+   * empty arrays for streams with no tags — so the dashboard can
+   * render tag chips without a second HTTP call per row.
+   */
   async list(
     page: number,
     limit: number,
@@ -50,8 +68,15 @@ export class StreamsService {
       limit,
       filter,
     )
+    const tagsByStream = await this.tagsService.listForStreamIds(
+      items.map((s) => s.id),
+    )
+    const data: Stream[] = items.map((s) => ({
+      ...s,
+      tags: tagsByStream.get(s.id) ?? [],
+    }))
     return {
-      data: items,
+      data,
       page,
       limit,
       total,
