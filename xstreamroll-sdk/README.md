@@ -134,9 +134,11 @@ const tokens = await client.register({
 Call `await client.logout()` to invalidate the session server-side and
 drop the local tokens.
 
-> Token storage: tokens are kept in memory only. Persist them with
-> `localStorage` / `sessionStorage` / a secure cookie if you need them
-> to survive a page reload.
+> Token storage: the SDK keeps tokens in memory only. In browser
+> environments, refresh tokens are exchanged via httpOnly cookies set
+> by the server — never store JWTs in `localStorage` or
+> `sessionStorage`, as they are readable by any JavaScript on the page
+> and trivially exfiltrated in an XSS attack (OWASP A07:2021).
 
 ---
 

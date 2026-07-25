@@ -6,8 +6,11 @@ import { z } from 'zod';
 import { useRouter } from 'next/navigation';
 
 const schema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
+  email: z.string().email({ message: 'Please enter a valid email address.' }),
+  password: z
+    .string()
+    .min(8, { message: 'Password must contain at least 8 characters.' })
+    .max(128),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -18,9 +21,11 @@ export default function LoginPage() {
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isValid, isValidating },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
+    mode: 'onChange',
+    reValidateMode: 'onChange',
   });
 
   const onSubmit = async (data: FormData) => {
@@ -49,48 +54,51 @@ export default function LoginPage() {
       >
         <h1 className="text-2xl font-bold">Login</h1>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="login-email" className="text-sm font-medium">
+        <div>
+          <label htmlFor="email" className="sr-only">
             Email
           </label>
           <input
-            id="login-email"
-            type="email"
+            id="email"
             {...register('email')}
-            placeholder="you@example.com"
+            placeholder="Email"
+            aria-invalid={errors.email ? 'true' : 'false'}
+            aria-describedby={errors.email ? 'email-error' : undefined}
             className="w-full border p-2"
             autoComplete="email"
           />
           {errors.email && (
-            <p className="text-red-500" role="alert">
+            <p id="email-error" role="alert" aria-live="assertive" className="text-red-500">
               {errors.email.message}
             </p>
           )}
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="login-password" className="text-sm font-medium">
+        <div>
+          <label htmlFor="password" className="sr-only">
             Password
           </label>
           <input
-            id="login-password"
+            id="password"
             type="password"
             {...register('password')}
-            placeholder="Enter your password"
+            placeholder="Password"
+            aria-invalid={errors.password ? 'true' : 'false'}
+            aria-describedby={errors.password ? 'password-error' : undefined}
             className="w-full border p-2"
             autoComplete="current-password"
           />
           {errors.password && (
-            <p className="text-red-500" role="alert">
+            <p id="password-error" role="alert" aria-live="assertive" className="text-red-500">
               {errors.password.message}
             </p>
           )}
         </div>
 
         <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full bg-black p-2 text-white"
+          disabled={isSubmitting || isValidating || !isValid}
+          className="w-full bg-black p-2 text-white disabled:opacity-50"
+          aria-disabled={isSubmitting || isValidating || !isValid}
         >
           {isSubmitting ? 'Logging in…' : 'Login'}
         </button>

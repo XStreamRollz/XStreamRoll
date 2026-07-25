@@ -13,6 +13,8 @@ const SENSITIVE_ACTIONS: Record<string, string> = {
   "POST /auth/password": "password_change",
   "DELETE /streams": "stream_delete",
   "PATCH /users/role": "role_change",
+  "PATCH /users/me": "profile_update",
+  "POST /users/me/change-password": "password_change",
 }
 
 @Injectable()

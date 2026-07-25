@@ -1,11 +1,15 @@
-import { Controller, Get, Query } from "@nestjs/common"
+import { Controller, Get, Query, UseGuards } from "@nestjs/common"
 import { AuditService } from "./audit.service"
 import { PaginationQueryDto } from "../common/dto/pagination.dto"
+import { Roles, RolesGuard } from "../common/auth/roles.guard"
 
 @Controller("admin/audit-logs")
+@UseGuards(RolesGuard)
+@Roles("admin")
 export class AdminAuditController {
   constructor(private readonly auditService: AuditService) {}
 
+  //get function
   @Get()
   async findAll(@Query() query: PaginationQueryDto) {
     const page = query.page ?? 1

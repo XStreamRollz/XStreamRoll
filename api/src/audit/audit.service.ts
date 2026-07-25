@@ -1,9 +1,10 @@
-import { Injectable } from "@nestjs/common"
+import { Inject, Injectable } from "@nestjs/common"
 import { Pool } from "pg"
+import { PG_POOL } from "../database/database.module"
 
 @Injectable()
 export class AuditService {
-  private pool = new Pool({ connectionString: process.env.DATABASE_URL })
+  constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
 
   async log(userId: number | null, action: string, ip: string) {
     await this.pool.query(

@@ -1,0 +1,19 @@
+{
+  "name": "@xstreamroll/types",
+  "version": "1.0.0",
+  "description": "Shared domain types for the XStreamRoll API, SDK, and web app",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/**/*.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  }
+}

@@ -2,8 +2,8 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
-RUN npm ci
+COPY package.json ./
+RUN npm install
 
 # ── Builder ───────────────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
@@ -13,6 +13,13 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# NEXT_PUBLIC_ vars are inlined into the client bundle at build time, so
+# they must be supplied as build args (not just runtime env) to take effect.
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_VIEWER_URL
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV NEXT_PUBLIC_VIEWER_URL=${NEXT_PUBLIC_VIEWER_URL}
 
 RUN npm run build
 

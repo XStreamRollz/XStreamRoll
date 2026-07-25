@@ -1,11 +1,14 @@
+import "./tracing" // Must be the first import — OTEL patches modules before they load
 import { ValidationPipe } from "@nestjs/common"
-import { NestFactory } from "@nestjs/core"
+import { HttpAdapterHost, NestFactory } from "@nestjs/core"
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger"
 import compression from "compression"
 import helmet from "helmet"
+import * as cookieParser from "cookie-parser"
 import { AppModule } from "./app.module"
 import { SanitizeStringsPipe } from "./common/sanitization/sanitize-strings.pipe"
 import { ThrottlerExceptionFilter } from "./throttler-exception.filter"
+import { QueryTimeoutExceptionFilter } from "./database/query-timeout-exception.filter"
 
 // Bypass compression when the response is smaller than this. Anything
 // under ~1 KB doesn't benefit from gzip and the per-request CPU cost
@@ -29,6 +32,8 @@ async function bootstrap() {
       },
     }),
   )
+
+  app.use(cookieParser.default())
 
   // Issue #88: Configure CORS with trusted origin from env, credentials support, and preflight
   app.enableCors({
@@ -62,7 +67,11 @@ async function bootstrap() {
     }),
   )
 
-  app.useGlobalFilters(new ThrottlerExceptionFilter())
+  const { httpAdapter } = app.get(HttpAdapterHost)
+  app.useGlobalFilters(
+    new ThrottlerExceptionFilter(),
+    new QueryTimeoutExceptionFilter(httpAdapter),
+  )
 
   // Swagger / OpenAPI documentation served at /docs.
   const swaggerConfig = new DocumentBuilder()

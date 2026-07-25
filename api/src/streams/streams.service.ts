@@ -4,16 +4,29 @@ import {
   NotFoundException,
 } from "@nestjs/common"
 import { PaginatedResult } from "../common/dto/pagination.dto"
-import { Stream } from "./stream.entity"
+import { STREAM_EVENTS } from "../gateways/stream-events"
+import { WebhooksService } from "../webhooks/webhooks.service"
+import { StreamAnalyticsDto } from "./dto/stream-analytics.dto"
 import { StreamsRepository } from "./repository/streams.repository"
+import { Stream } from "./stream.entity"
 
 export interface PagedStreams extends PaginatedResult<Stream> {
   hasMore: boolean
 }
 
+/** Maps a stream's new `status` to the webhook event name it fires. */
+const STATUS_TO_WEBHOOK_EVENT: Record<string, string> = {
+  active: STREAM_EVENTS.STARTED,
+  inactive: STREAM_EVENTS.STOPPED,
+  error: STREAM_EVENTS.ERROR,
+}
+
 @Injectable()
 export class StreamsService {
-  constructor(private readonly repo: StreamsRepository) {}
+  constructor(
+    private readonly repo: StreamsRepository,
+    private readonly webhooksService: WebhooksService,
+  ) {}
 
   async create(dto: {
     userId: number
@@ -65,11 +78,42 @@ export class StreamsService {
       this.validateStatusTransition(stream.status, changes.status)
     }
 
-    return this.repo.update(id, {
+    const updated = await this.repo.update(id, {
       name: changes.name?.trim(),
       description: changes.description?.trim(),
       status: changes.status,
     })
+
+    if (changes.status !== undefined && changes.status !== stream.status) {
+      this.dispatchStatusWebhook(updated, changes.status)
+    }
+
+    return updated
+  }
+
+  /**
+   * Fires the webhook event matching a stream's new status. Runs in the
+   * background — a slow or unreachable subscriber must never delay the
+   * status transition response.
+   */
+  private dispatchStatusWebhook(stream: Stream, newStatus: string): void {
+    const event = STATUS_TO_WEBHOOK_EVENT[newStatus]
+    if (!event) return
+
+    const now = new Date().toISOString()
+    const payload =
+      newStatus === "error"
+        ? { streamId: stream.id, userId: stream.userId, occurredAt: now }
+        : newStatus === "active"
+          ? { streamId: stream.id, userId: stream.userId, startedAt: now }
+          : { streamId: stream.id, userId: stream.userId, stoppedAt: now }
+
+    this.webhooksService
+      .dispatchStreamEvent(stream.id, event, payload)
+      .catch(() => {
+        // dispatchStreamEvent already logs; swallow here so a webhook
+        // fan-out failure never surfaces as an update() error.
+      })
   }
 
   async delete(id: number): Promise<void> {
@@ -77,6 +121,11 @@ export class StreamsService {
     if (!exists) {
       throw new NotFoundException(`stream ${id} not found`)
     }
+  }
+
+  async getAnalytics(id: number): Promise<StreamAnalyticsDto> {
+    await this.findById(id)
+    return this.repo.getAnalytics(id)
   }
 
   /**

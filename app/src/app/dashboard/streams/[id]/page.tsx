@@ -1,4 +1,6 @@
 import type { Metadata } from "next"
+import { Suspense } from "react"
+import { StreamDetailSkeleton } from "@/components/dashboard/stream-detail-skeleton"
 import { EmbedSnippet } from "@/components/streams/embed-snippet"
 
 export const metadata: Metadata = {
@@ -22,6 +24,9 @@ interface PageProps {
  * The route param `id` here is the stream's PUBLIC identifier. The
  * private/secret stream key MUST NOT be passed into this page so the
  * embed snippet stays safe to share with third-party sites.
+ *
+ * The embed snippet is wrapped in `<Suspense>` so the skeleton is
+ * streamed while per-stream data resolves (#369).
  */
 export default async function StreamDetailPage({ params }: PageProps) {
   const { id: publicId } = await params
@@ -35,7 +40,9 @@ export default async function StreamDetailPage({ params }: PageProps) {
         </p>
       </header>
 
-      <EmbedSnippet publicId={publicId} />
+      <Suspense fallback={<StreamDetailSkeleton />}>
+        <EmbedSnippet publicId={publicId} />
+      </Suspense>
     </main>
   )
 }

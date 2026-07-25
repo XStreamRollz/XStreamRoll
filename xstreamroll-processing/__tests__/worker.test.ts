@@ -11,6 +11,8 @@ jest.mock("../src/config", () => ({
     API_URL: "http://localhost:3001",
     NODE_ENV: "test",
     POLL_INTERVAL_MS: "5000",
+    LOCK_BACKEND: "memory" as const,
+    LOCK_TTL_MS: 30_000,
   },
 }))
 
@@ -18,13 +20,20 @@ jest.mock("../src/config", () => ({
 // includes the shared httpAgent.
 let axiosCreateConfig: Record<string, unknown> | undefined
 jest.mock("axios", () => {
-  const noop = () => Promise.resolve({ data: [] })
+  const noop = () => Promise.resolve({ data: [], headers: {} })
   return {
     __esModule: true,
     default: {
       create: (config: Record<string, unknown>) => {
         axiosCreateConfig = config
-        return { get: noop, post: noop }
+        return {
+          get: noop,
+          post: noop,
+          interceptors: {
+            request: { use: jest.fn() },
+            response: { use: jest.fn() },
+          },
+        }
       },
     },
   }

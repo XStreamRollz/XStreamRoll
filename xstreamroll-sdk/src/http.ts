@@ -120,6 +120,32 @@ export class HttpClient {
       )
     }
   }
+
+  /** GET convenience wrapper around {@link request}. */
+  get(path: string, init: RequestInit = {}): Promise<Response> {
+    return this.request(path, { ...init, method: "GET" })
+  }
+
+  /**
+   * POST convenience wrapper that JSON-serialises `body` and sets
+   * `Content-Type: application/json` when a body is provided.
+   */
+  post(path: string, body?: unknown, init: RequestInit = {}): Promise<Response> {
+    const headers: Record<string, string> = {
+      ...(init.headers as Record<string, string> | undefined),
+    }
+    let requestBody = init.body
+    if (body !== undefined) {
+      headers["Content-Type"] = headers["Content-Type"] ?? "application/json"
+      requestBody = JSON.stringify(body)
+    }
+    return this.request(path, {
+      ...init,
+      method: "POST",
+      headers,
+      body: requestBody,
+    })
+  }
 }
 
 const RETRY_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504])

@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common"
+import { StreamAnalyticsDto } from "../dto/stream-analytics.dto"
 import { Stream } from "../stream.entity"
 
 /**
@@ -86,5 +87,43 @@ export class StreamsRepository {
 
   async delete(id: number): Promise<boolean> {
     return this.streamsById.delete(id)
+  }
+
+  async getAnalytics(streamId: number): Promise<StreamAnalyticsDto> {
+    const now = new Date()
+    const startMinute = new Date(now)
+    startMinute.setSeconds(0, 0)
+    startMinute.setMinutes(startMinute.getMinutes() - 59)
+
+    const eventsPerMinute = Array.from({ length: 60 }, (_, index) => {
+      const minute = new Date(startMinute)
+      minute.setMinutes(startMinute.getMinutes() + index)
+      return {
+        minute: minute.toISOString(),
+        count: 0,
+      }
+    })
+
+    return {
+      streamId,
+      totalEventsProcessed: {
+        last24h: 0,
+        last7d: 0,
+        last30d: 0,
+      },
+      errorRate: {
+        window: "30d",
+        totalEvents: 0,
+        errorEvents: 0,
+        percentage: 0,
+      },
+      processingLatency: {
+        window: "30d",
+        averageMs: null,
+        p99Ms: null,
+      },
+      eventsPerMinute,
+      generatedAt: now.toISOString(),
+    }
   }
 }

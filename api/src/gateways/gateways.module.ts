@@ -1,5 +1,7 @@
 import { Module } from "@nestjs/common"
 import { JwtModule } from "@nestjs/jwt"
+import createJwtConfig, { JWT_ACCESS_TOKEN_EXPIRES_IN } from "../config/jwt.config"
+import { MetricsModule } from "../metrics/metrics.module"
 import { StreamsGateway } from "./streams.gateway"
 
 /**
@@ -10,19 +12,9 @@ import { StreamsGateway } from "./streams.gateway"
  */
 @Module({
   imports: [
+    MetricsModule,
     JwtModule.registerAsync({
-      useFactory: () => {
-        const secret = process.env.JWT_SECRET
-        if (!secret && process.env.NODE_ENV === "production") {
-          throw new Error(
-            "JWT_SECRET must be set in production for WebSocket auth",
-          )
-        }
-        return {
-          secret: secret ?? "dev-insecure-secret-change-me",
-          signOptions: { expiresIn: "1h" },
-        }
-      },
+      useFactory: () => createJwtConfig(JWT_ACCESS_TOKEN_EXPIRES_IN),
     }),
   ],
   providers: [StreamsGateway],

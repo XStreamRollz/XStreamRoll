@@ -6,14 +6,24 @@ import {
   UseGuards,
   UseInterceptors,
 } from "@nestjs/common"
+import {
+  ApiBearerAuth,
+  ApiForbiddenResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from "@nestjs/swagger"
 import { Cache } from "cache-manager"
+import { AuthGuard } from "../common/guards/auth.guard"
 import { Roles, RolesGuard } from "../common/auth/roles.guard"
 import { AdminStats, AdminStatsService } from "./admin-stats.service"
 
 const STATS_CACHE_TTL_MS = 60_000
 
+@ApiTags("admin")
 @Controller("admin")
-@UseGuards(RolesGuard)
+@UseGuards(AuthGuard, RolesGuard)
 @Roles("admin")
 export class AdminController {
   constructor(
@@ -31,6 +41,14 @@ export class AdminController {
   @Get("stats")
   @UseInterceptors(CacheInterceptor)
   @CacheTTL(STATS_CACHE_TTL_MS)
+  @ApiBearerAuth("bearer")
+  @ApiOperation({
+    summary: "Get platform-wide statistics",
+    description: "Returns cached aggregate platform metrics. Admin role required.",
+  })
+  @ApiOkResponse({ description: "Admin platform statistics." })
+  @ApiUnauthorizedResponse({ description: "Authentication required." })
+  @ApiForbiddenResponse({ description: "Admin role required." })
   async getStats(): Promise<AdminStats> {
     const cacheKey = "admin:stats"
     const cached = await this.cache.get<AdminStats>(cacheKey)

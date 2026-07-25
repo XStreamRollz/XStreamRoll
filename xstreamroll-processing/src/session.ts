@@ -15,6 +15,7 @@ export interface StreamEvent {
 
 export interface ProcessedStreamEvent extends StreamEvent {
   processedAt: string
+  processingLatencyMs: number | null
   workerId: string
   sessionId: string
 }
@@ -56,17 +57,19 @@ export class StreamSession extends EventEmitter {
 
   private state: SessionState = "idle"
   private readonly queue: StreamEvent[] = []
+  private readonly maxQueueDepth: number
   private processing = false
   private readonly handlers: SessionHandlers
   private readonly workerId: string
   private readonly logger: NonNullable<SessionHandlers["logger"]>
 
-  constructor(streamId: string, workerId: string, handlers: SessionHandlers) {
+  constructor(streamId: string, workerId: string, handlers: SessionHandlers, maxQueueDepth = 1000) {
     super()
     this.id = `${streamId}:${createSessionSuffix()}`
     this.streamId = streamId
     this.workerId = workerId
     this.handlers = handlers
+    this.maxQueueDepth = maxQueueDepth
     this.logger = handlers.logger ?? console
   }
 
@@ -91,6 +94,7 @@ export class StreamSession extends EventEmitter {
    */
   enqueue(event: StreamEvent): boolean {
     if (this.state !== "running") return false
+    if (this.queue.length >= this.maxQueueDepth) return false
     this.queue.push(event)
     if (!this.processing) void this.pump()
     return true
@@ -135,9 +139,14 @@ export class StreamSession extends EventEmitter {
         const next = this.queue.shift()
         if (!next) break
         try {
+          const processedAt = new Date()
           const processed: ProcessedStreamEvent = {
             ...next,
-            processedAt: new Date().toISOString(),
+            processedAt: processedAt.toISOString(),
+            processingLatencyMs: calculateProcessingLatencyMs(
+              next.timestamp,
+              processedAt,
+            ),
             workerId: this.workerId,
             sessionId: this.id,
           }
@@ -174,4 +183,13 @@ function createSessionSuffix(): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function calculateProcessingLatencyMs(
+  eventTimestamp: string,
+  processedAt: Date,
+): number | null {
+  const startedAt = Date.parse(eventTimestamp)
+  if (Number.isNaN(startedAt)) return null
+  return Math.max(0, processedAt.getTime() - startedAt)
 }
