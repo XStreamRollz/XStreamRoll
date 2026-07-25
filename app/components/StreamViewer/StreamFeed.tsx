@@ -12,14 +12,14 @@ interface Props {
 export const StreamFeed = ({ events }: Props) => {
   if (events.length === 0) {
     return (
-      <div className="text-sm text-gray-500">
+      <div className="text-sm text-gray-500" role="status">
         No events received yet.
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" role="log" aria-label="Stream events">
       {events.map((event) => (
         <div
           key={event.id}

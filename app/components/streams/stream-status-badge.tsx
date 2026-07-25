@@ -91,6 +91,7 @@ export function StreamStatusBadge({
     <Badge
       key={changed ? `${status}-live` : status}
       variant={presentation.variant}
+      role="status"
       aria-label={`Stream status: ${presentation.label}`}
       className={cn("gap-1.5", changed && "animate-status-live-flash", className)}
       {...badgeProps}
