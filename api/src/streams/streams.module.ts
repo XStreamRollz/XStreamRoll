@@ -5,6 +5,7 @@ import { AuthModule } from "../auth/auth.module"
 import { AuthGuard } from "../common/guards/auth.guard"
 import { StreamOwnershipGuard } from "../common/guards/stream-ownership.guard"
 import { StreamOwnershipService } from "../common/guards/stream-ownership.service"
+import { TagsModule } from "../tags/tags.module"
 import { WebhooksModule } from "../webhooks/webhooks.module"
 import { StreamsDbRepository } from "./repository/streams-db.repository"
 import { StreamsRepository } from "./repository/streams.repository"
@@ -28,6 +29,9 @@ const isTest = process.env.NODE_ENV === "test"
   imports: [
     AuthModule,
     WebhooksModule,
+    // TagsModule provides TagsService so StreamsService.list() can
+    // batch-load tags for the streams on the current page (#330).
+    TagsModule,
     CacheModule.register(streamsCacheConfig()),
   ],
   controllers: [StreamsController],

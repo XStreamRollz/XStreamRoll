@@ -25,6 +25,7 @@ describe("TagsService", () => {
       attachToStream: jest.fn(),
       detachFromStream: jest.fn(),
       isAttached: jest.fn(),
+      listForStreamIds: jest.fn(),
     } as unknown as jest.Mocked<TagsRepository>
 
     const module: TestingModule = await Test.createTestingModule({
@@ -129,6 +130,30 @@ describe("TagsService", () => {
       await expect(service.attachToStream(1, "---")).rejects.toThrow(
         "name must contain at least one alphanumeric character",
       )
+    })
+  })
+
+  // ── listForStreamIds (issue #330) ───────────────────────────────────────
+
+  describe("listForStreamIds", () => {
+    it("delegates straight through to the repository and returns its Map", async () => {
+      const map = new Map<number, Tag[]>([[1, [makeTag()]]])
+      repo.listForStreamIds.mockResolvedValue(map)
+
+      const res = await service.listForStreamIds([1, 2, 3])
+
+      expect(repo.listForStreamIds).toHaveBeenCalledWith([1, 2, 3])
+      expect(res).toBe(map)
+    })
+
+    it("returns an empty Map when no stream ids are requested (short-circuit)", async () => {
+      const res = await service.listForStreamIds([])
+      expect(res.size).toBe(0)
+      // The repository should NOT be called for the empty case so a
+      // DB-backed implementation can short-circuit out of the
+      // `WHERE stream_id = ANY($1)` query. We assert the mock is
+      // untouched to lock this contract in.
+      expect(repo.listForStreamIds).not.toHaveBeenCalled()
     })
   })
 
