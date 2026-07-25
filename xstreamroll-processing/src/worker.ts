@@ -8,6 +8,7 @@ import { ProcessedStreamEvent, StreamEvent } from "./session"
 import { GracefulShutdown, ShutdownReason } from "./lifecycle"
 import { markShuttingDown, setQueueDepth, startMetricsServer } from "./metrics"
 import { createLockManager, type LockManager } from "./leader-election"
+import { currentCorrelationId, newCorrelationId } from "./logger"
 
 const API_URL = env.API_URL
 const WORKER_ID = `worker-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -59,6 +60,10 @@ function generateTraceparent(): string {
 axiosInstance.interceptors.request.use((config) => {
   const tp = activeTraceparent ?? generateTraceparent()
   config.headers["traceparent"] = tp
+  const reqId = currentCorrelationId() ?? newCorrelationId()
+  if (!config.headers["X-Request-Id"] && !config.headers["x-request-id"]) {
+    config.headers["X-Request-Id"] = reqId
+  }
   return config
 })
 
