@@ -1,12 +1,21 @@
-# Ingress routing for external traffic.
+# Ingress routing for external traffic — issue #325.
 # ---------------------------------------------------------------------------
 # Routes:
-#   • http(s)://<host>/api/*    -> api:3001
-#   • http(s)://<host>/         -> app:3000
+#   • https://<host>/api/*    -> api:3001
+#   • https://<host>/         -> app:3000
 #
-# Configure the spec.rules[0].host field to your hostname, and set
-# spec.tls if you have cert-manager (or any other issuer) producing
-# TLS secrets named `<host>-tls` in this namespace.
+# Required before this manifest works in any real cluster:
+#   1. Set `spec.rules[0].host` to your real hostname.
+#   2. Set `spec.tls[0].hosts[0]` and `secretName` to the same host.
+#      The convention is `<host>-tls` so cert-manager's defaulting
+#      names match.
+#   3. Choose a ClusterIssuer via the `cert-manager.io/cluster-issuer`
+#      annotation. The cluster must have cert-manager installed —
+#      see k8s/50-cert-issuer.yaml and k8s/README.md for options.
+#   4. The `nginx.ingress.kubernetes.io/ssl-redirect: "true"`
+#      annotation upgrades any accidental HTTP request to HTTPS so
+#      cleartext traffic never reaches the API or app once the cert
+#      is issued.
 
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -15,13 +24,30 @@ metadata:
   namespace: xstreamroll
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    # Force HTTPS for every request — cleartext HTTP requests are
+    # permanently redirected (301) to the same path over TLS.
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # Cert-manager will mint a TLS cert into `<host>-tls` using this
+    # ClusterIssuer. Swap to `letsencrypt-prod` (see
+    # k8s/50-cert-issuer.yaml) once your hostname resolves publicly.
+    cert-manager.io/cluster-issuer: letsencrypt-staging
 spec:
   # Use the modern field instead of the deprecated
   # `kubernetes.io/ingress.class` annotation (removed in 1.22+).
   ingressClassName: nginx
-  # Replace with your real hostname in production.
+  # !! REPLACE-ME: xstreamroll.example.com is a placeholder so this
+  # manifest commits cleanly. cert-manager uses this exact host for
+  # the ACME http-01 challenge, so the hostname MUST resolve publicly
+  # before `letsencrypt-staging` or `letsencrypt-prod` will mint a
+  # cert. Use `selfsigned-issuer` if your cluster only has private DNS.
+  tls:
+    - hosts:
+        - xstreamroll.example.com  # REPLACE-ME
+      secretName: xstreamroll.example.com-tls  # REPLACE-ME: keep in sync with `hosts`
+  # REPLACE-ME: same hostname as above.
   rules:
-    - http:
+    - host: xstreamroll.example.com
+      http:
         paths:
           - path: /api(/|$)(.*)
             pathType: ImplementationSpecific
