@@ -150,6 +150,7 @@ describe("AuthService", () => {
         email: dto.email,
         username: dto.username,
         passwordChangedAt: expect.any(Number),
+        jti: expect.any(String),
       })
       expect(result.accessToken).toBe("jwt.token.here")
       expect(result.refreshToken).toBe("refresh.token.here")
@@ -268,6 +269,7 @@ describe("AuthService", () => {
         email: user.email,
         username: user.username,
         passwordChangedAt: expect.any(Number),
+        jti: expect.any(String),
       })
       expect(result.accessToken).toBe("jwt.token.here")
       expect(result.refreshToken).toBe("refresh.token.here")
@@ -341,6 +343,7 @@ describe("AuthService", () => {
         email: user.email,
         username: user.username,
         passwordChangedAt: expect.any(Number),
+        jti: expect.any(String),
       })
     })
   })

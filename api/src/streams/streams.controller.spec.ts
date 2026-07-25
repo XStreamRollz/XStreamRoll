@@ -80,7 +80,7 @@ describe("StreamsController", () => {
 
     const res = await controller.create(dto as CreateStreamDto, req)
     expect(res).toEqual(
-      expect.objectContaining({ id: "1", userId: "7", name: "s", description: "d" }),
+      expect.objectContaining({ id: "1", userId: "7", name: "s", description: "d", tags: [] }),
     )
     expect(mockService.create).toHaveBeenCalledWith({ userId: 7, name: dto.name, description: dto.description })
   })
@@ -95,7 +95,23 @@ describe("StreamsController", () => {
     })
     const res = await controller.list({})
     expect(mockService.list).toHaveBeenCalledWith(1, 20, { status: undefined })
-    expect(res.data).toEqual([expect.objectContaining({ id: "2" })])
+    expect(res.data).toEqual([
+      expect.objectContaining({ id: "2", tags: [] }),
+    ])
+  })
+
+  it("list serializes inline tags on each stream (issue #330)", async () => {
+    mockService.list.mockResolvedValue({
+      data: [makeStream({ id: 3, tags: [{ id: 1, name: "Live", slug: "live", createdAt: new Date("2026-01-01T00:00:00Z") }] })],
+      page: 1,
+      limit: 20,
+      total: 1,
+      hasMore: false,
+    })
+    const res = await controller.list({})
+    expect(res.data[0]?.tags).toEqual([
+      { id: "1", name: "Live", slug: "live", createdAt: "2026-01-01T00:00:00.000Z" },
+    ])
   })
 
   it("findById delegates to service and returns a serialized stream", async () => {

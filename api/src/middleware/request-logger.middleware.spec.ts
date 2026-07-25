@@ -1,5 +1,8 @@
 import { Response } from "express"
-import { RequestLoggerMiddleware } from "./request-logger.middleware"
+import {
+  RequestLoggerMiddleware,
+  getRequestId,
+} from "./request-logger.middleware"
 import type { AuthedRequest } from "./request-logger.middleware"
 
 type FakeResOptions = {
@@ -34,11 +37,21 @@ function makeReq(overrides: Partial<{
  * helper that triggers the registered "finish" listener, simulating
  * Express' response-completion lifecycle.
  */
-function makeRes(opts: FakeResOptions = {}): { res: Response; fire: () => void } {
+function makeRes(opts: FakeResOptions = {}): {
+  res: Response
+  headers: Record<string, string>
+  fire: () => void
+} {
   const listeners: Record<string, Array<() => void>> = {}
+  const headers: Record<string, string> = {}
   const res = {
     statusCode: opts.statusCode ?? 200,
+    setHeader(name: string, value: string) {
+      headers[name.toLowerCase()] = value
+      return res
+    },
     getHeader(name: string) {
+      if (name.toLowerCase() in headers) return headers[name.toLowerCase()]
       if (name === "content-length") return opts.contentLength ?? null
       return null
     },
@@ -47,9 +60,10 @@ function makeRes(opts: FakeResOptions = {}): { res: Response; fire: () => void }
       listeners[event].push(cb)
       return res
     },
-  } as Response
+  } as unknown as Response
   return {
     res,
+    headers,
     fire: () => {
       for (const cb of listeners["finish"] ?? []) cb()
     },
@@ -81,7 +95,7 @@ describe("RequestLoggerMiddleware", () => {
       headers: { "user-agent": "jest", "x-forwarded-for": "1.2.3.4, 10.0.0.1" },
       user: { id: 42 },
     })
-    const { res, fire } = makeRes({ statusCode: 201, contentLength: "128" })
+    const { res, headers, fire } = makeRes({ statusCode: 201, contentLength: "128" })
 
     mw.use(req, res, next)
     fire()
@@ -89,6 +103,7 @@ describe("RequestLoggerMiddleware", () => {
     expect(next).toHaveBeenCalledTimes(1)
     expect(logSpy).toHaveBeenCalledTimes(1)
     expect(errSpy).not.toHaveBeenCalled()
+    expect(headers["x-request-id"]).toBeDefined()
 
     const line = logSpy.mock.calls[0][0]
     const parsed = JSON.parse(line)
@@ -101,9 +116,31 @@ describe("RequestLoggerMiddleware", () => {
       ip: "1.2.3.4",
       bodyRedacted: false,
       contentLength: "128",
+      requestId: headers["x-request-id"],
     })
     expect(typeof parsed.timestamp).toBe("string")
     expect(typeof parsed.durationMs).toBe("number")
+  })
+
+  it("propagates incoming X-Request-Id header and AsyncLocalStorage context", () => {
+    const mw = new RequestLoggerMiddleware()
+    const req = makeReq({
+      headers: { "x-request-id": "custom-req-123" },
+    })
+    const { res, headers, fire } = makeRes()
+
+    let contextIdInNext: string | undefined
+    next.mockImplementation(() => {
+      contextIdInNext = getRequestId()
+    })
+
+    mw.use(req, res, next)
+    fire()
+
+    expect(headers["x-request-id"]).toBe("custom-req-123")
+    expect(contextIdInNext).toBe("custom-req-123")
+    const parsed = JSON.parse(logSpy.mock.calls[0][0])
+    expect(parsed.requestId).toBe("custom-req-123")
   })
 
   it("marks sensitive /auth paths with bodyRedacted=true and leaves userId null when unauth", () => {
@@ -127,6 +164,7 @@ describe("RequestLoggerMiddleware", () => {
       userId: null,
       bodyRedacted: true,
     })
+    expect(parsed.requestId).toBeDefined()
   })
 
   it("routes 5xx responses to console.error", () => {
@@ -145,5 +183,6 @@ describe("RequestLoggerMiddleware", () => {
     expect(errSpy).toHaveBeenCalledTimes(1)
     const parsed = JSON.parse(errSpy.mock.calls[0][0])
     expect(parsed.statusCode).toBe(500)
+    expect(parsed.requestId).toBeDefined()
   })
 })
