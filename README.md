@@ -100,6 +100,21 @@ Ensure these ports are available in your environment or update the environment v
 - **Database**: PostgreSQL with optimized streaming schemas
 - **Development**: npm workspaces, ESLint, Prettier, Husky
 
+## Accessibility
+
+XStreamRoll is committed to meeting **WCAG 2.1 AA** accessibility standards. Our goal is to ensure that all users, including those using assistive technologies, can effectively use and navigate the platform.
+
+### Our commitment includes:
+
+- **Semantic HTML** – Proper use of landmarks, headings, and ARIA roles to convey page structure.
+- **Keyboard navigation** – All interactive elements are operable via keyboard alone.
+- **Colour contrast** – Text and UI components meet minimum contrast ratios (4.5:1 for normal text, 3:1 for large text).
+- **Screen-reader support** – Descriptive `aria-label` attributes on icon buttons, status indicators, and form controls.
+- **Automated auditing** – We use `@axe-core/react` in our test suite to catch accessibility regressions early.
+- **Manual testing** – Dashboard pages are periodically reviewed against axe-core Level A and Level B criteria.
+
+If you encounter an accessibility barrier, please [open an issue](https://github.com/XStreamRollz/XStreamRoll/issues/new?labels=accessibility&template=blank) with the `accessibility` label.
+
 ## Development
 
 XStreamRoll is designed as a production-ready platform with comprehensive type safety, modern development practices, and scalable architecture. Each service is containerized and can be deployed independently or as part of the complete platform ecosystem. The codebase follows TypeScript best practices and includes extensive documentation for easy onboarding.

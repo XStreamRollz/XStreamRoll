@@ -44,37 +44,55 @@ export default function LoginPage() {
       <form
         onSubmit={handleSubmit(onSubmit)}
         className="w-full max-w-md space-y-4 rounded border p-6"
+        noValidate
+        aria-label="Login form"
       >
         <h1 className="text-2xl font-bold">Login</h1>
 
-        <div>
+        <div className="flex flex-col gap-1">
+          <label htmlFor="login-email" className="text-sm font-medium">
+            Email
+          </label>
           <input
+            id="login-email"
+            type="email"
             {...register('email')}
-            placeholder="Email"
+            placeholder="you@example.com"
             className="w-full border p-2"
+            autoComplete="email"
           />
           {errors.email && (
-            <p className="text-red-500">{errors.email.message}</p>
+            <p className="text-red-500" role="alert">
+              {errors.email.message}
+            </p>
           )}
         </div>
 
-        <div>
+        <div className="flex flex-col gap-1">
+          <label htmlFor="login-password" className="text-sm font-medium">
+            Password
+          </label>
           <input
+            id="login-password"
             type="password"
             {...register('password')}
-            placeholder="Password"
+            placeholder="Enter your password"
             className="w-full border p-2"
+            autoComplete="current-password"
           />
           {errors.password && (
-            <p className="text-red-500">{errors.password.message}</p>
+            <p className="text-red-500" role="alert">
+              {errors.password.message}
+            </p>
           )}
         </div>
 
         <button
+          type="submit"
           disabled={isSubmitting}
           className="w-full bg-black p-2 text-white"
         >
-          Login
+          {isSubmitting ? 'Logging in…' : 'Login'}
         </button>
       </form>
     </main>

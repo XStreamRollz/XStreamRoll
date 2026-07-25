@@ -80,6 +80,7 @@ export function StreamStatusBadge({
   return (
     <Badge
       variant={presentation.variant}
+      role="status"
       aria-label={`Stream status: ${presentation.label}`}
       className={cn("gap-1.5", className)}
       {...badgeProps}

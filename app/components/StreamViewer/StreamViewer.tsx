@@ -16,7 +16,10 @@ export const StreamViewer = ({
     useStreamSocket(socketUrl);
 
   return (
-    <div className="space-y-4 rounded-xl border p-5">
+    <section
+      className="space-y-4 rounded-xl border p-5"
+      aria-label="Live stream feed"
+    >
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">
           Live Stream Feed
@@ -26,6 +29,6 @@ export const StreamViewer = ({
       </div>
 
       <StreamFeed events={events} />
-    </div>
+    </section>
   );
 };
