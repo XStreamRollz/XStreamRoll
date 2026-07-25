@@ -86,6 +86,32 @@ describe("resolveCorsOrigins", () => {
     expect(resolveCorsOrigins(undefined)).not.toBe("*")
     expect(resolveCorsOrigins("https://a.com,https://b.com")).not.toContain("*")
   })
+
+  it("warns and falls back to default origin when CORS_ORIGIN is malformed in non-production", () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {})
+    const result = resolveCorsOrigins("not-a-valid-url")
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    expect(result).toBe("http://localhost:3000")
+    warnSpy.mockRestore()
+  })
+
+  it("logs an error and exits process when CORS_ORIGIN is malformed in production", () => {
+    const origEnv = process.env.NODE_ENV
+    process.env.NODE_ENV = "production"
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {})
+    const exitSpy = jest.spyOn(process, "exit").mockImplementation((() => {}) as never)
+
+    resolveCorsOrigins("invalid-url")
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid CORS_ORIGIN "invalid-url"'),
+    )
+    expect(exitSpy).toHaveBeenCalledWith(1)
+
+    process.env.NODE_ENV = origEnv
+    errorSpy.mockRestore()
+    exitSpy.mockRestore()
+  })
 })
 
 describe("StreamsGateway", () => {
