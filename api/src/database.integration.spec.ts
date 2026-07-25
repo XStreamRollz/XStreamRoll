@@ -344,7 +344,7 @@ describe("Database Integration Tests", () => {
       const result = await pool.query(
         `SELECT indexname FROM pg_indexes
          WHERE tablename = 'stream_events'
-         AND indexname = 'idx_stream_events_stream_id_occurred_at'`,
+         AND indexname = 'idx_stream_events_stream_id_created_at_desc'`,
       )
       expect(result.rows).toHaveLength(1)
     })

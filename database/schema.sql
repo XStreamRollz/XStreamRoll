@@ -44,7 +44,10 @@ CREATE INDEX idx_stream_data_stream_id ON stream_data(stream_id);
 CREATE INDEX idx_stream_data_timestamp ON stream_data(timestamp);
 
 -- Index for efficient event querying
-CREATE INDEX idx_stream_events_stream_id ON stream_events(stream_id);
+-- The composite index idx_stream_events_stream_id_created_at_desc covers
+-- the most common query pattern: filter by stream_id, order by created_at DESC.
+-- The single-column idx_stream_events_created_at is retained for admin queries
+-- that scan across all streams by time range.
 CREATE INDEX idx_stream_events_created_at ON stream_events(created_at);
 
 -- ---------------------------------------------------------------------
@@ -81,13 +84,13 @@ CREATE INDEX IF NOT EXISTS idx_stream_tags_tag_id    ON stream_tags(tag_id);
 
 -- ---------------------------------------------------------------------
 -- Issue #73: Indexes for common query patterns
--- Rollback: DROP INDEX idx_streams_user_id_status, idx_stream_events_stream_id_occurred_at, idx_users_email;
+-- Rollback: DROP INDEX idx_streams_user_id_status, idx_users_email;
 -- ---------------------------------------------------------------------
 
 CREATE INDEX IF NOT EXISTS idx_streams_user_id_status
     ON streams(user_id, status);
 
-CREATE INDEX IF NOT EXISTS idx_stream_events_stream_id_occurred_at
+CREATE INDEX IF NOT EXISTS idx_stream_events_stream_id_created_at_desc
     ON stream_events(stream_id, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_stream_events_stream_id_created_at_latency
