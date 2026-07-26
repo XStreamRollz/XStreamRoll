@@ -114,4 +114,39 @@ describe("NotificationsService", () => {
       )
     })
   })
+
+  describe("sweepExpired", () => {
+    it("sets a 30-day expiry on create", async () => {
+      const before = Date.now()
+      const n = await service.create(1, "a")
+      const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000
+
+      expect(n.expiresAt.getTime()).toBeGreaterThanOrEqual(
+        before + thirtyDaysMs - 1000,
+      )
+      expect(n.expiresAt.getTime()).toBeLessThanOrEqual(
+        before + thirtyDaysMs + 1000,
+      )
+    })
+
+    it("deletes notifications past their expiry and leaves others intact", async () => {
+      const n = await service.create(1, "a")
+      n.expiresAt = new Date(Date.now() - 1000)
+
+      await service.sweepExpired()
+
+      await expect(service.markRead(1, n.id)).rejects.toThrow(
+        NotFoundException,
+      )
+    })
+
+    it("does not delete notifications that haven't expired yet", async () => {
+      const n = await service.create(1, "a")
+
+      await service.sweepExpired()
+
+      const updated = await service.markRead(1, n.id)
+      expect(updated.id).toBe(n.id)
+    })
+  })
 })

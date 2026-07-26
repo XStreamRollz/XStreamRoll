@@ -2,12 +2,18 @@ import http from "http"
 import { randomBytes } from "crypto"
 import axios from "axios"
 import { env } from "./config"
-import { EventFilter } from "./pipeline"
+import {
+  EventFilter,
+  createFilterConfigStore,
+  MemoryFilterConfigStore,
+  type FilterConfigStore,
+} from "./pipeline"
 import { SessionRegistry } from "./session-registry"
 import { ProcessedStreamEvent, StreamEvent } from "./session"
 import { GracefulShutdown, ShutdownReason } from "./lifecycle"
-import { markShuttingDown, startMetricsServer } from "./metrics"
+import { markShuttingDown, setQueueDepth, startMetricsServer } from "./metrics"
 import { createLockManager, type LockManager } from "./leader-election"
+import { currentCorrelationId, newCorrelationId } from "./logger"
 
 const API_URL = env.API_URL
 const WORKER_ID = `worker-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -16,12 +22,24 @@ const MAX_CONCURRENT_SESSIONS = Math.max(
   1,
   Number(process.env.MAX_CONCURRENT_SESSIONS ?? 32),
 )
+const MAX_QUEUE_DEPTH = Math.max(1, Number(env.MAX_QUEUE_DEPTH))
+const HIGH_WATERMARK = MAX_CONCURRENT_SESSIONS * MAX_QUEUE_DEPTH
 // `env.LOCK_BACKEND` may be missing in hand-rolled test mocks; fall
 // back to the safe default so we don't crash on import.
 const LOCK_BACKEND: "memory" | "postgres" =
   (env.LOCK_BACKEND as "memory" | "postgres" | undefined) ?? "memory"
 const LOCK_TTL_MS: number =
   (env.LOCK_TTL_MS as number | undefined) ?? 30_000
+
+// Issue #351: the EventFilter config store. Defaults to the same
+// in-process `Map` the worker used before the issue so existing
+// behaviour is preserved when EVENT_FILTER_BACKEND is unset. When
+// switched to `redis` the URL falls back to REDIS_URL so workers
+// running in the same cluster as the API can reuse the connection.
+const EVENT_FILTER_BACKEND: "memory" | "redis" =
+  (env.EVENT_FILTER_BACKEND as "memory" | "redis" | undefined) ?? "memory"
+const EVENT_FILTER_REDIS_URL: string | undefined =
+  (env.EVENT_FILTER_REDIS_URL as string | undefined) ?? process.env.REDIS_URL
 
 // Shared keep-alive agent so axios reuses TCP connections and we can
 // explicitly destroy the pool on graceful shutdown.
@@ -57,6 +75,10 @@ function generateTraceparent(): string {
 axiosInstance.interceptors.request.use((config) => {
   const tp = activeTraceparent ?? generateTraceparent()
   config.headers["traceparent"] = tp
+  const reqId = currentCorrelationId() ?? newCorrelationId()
+  if (!config.headers["X-Request-Id"] && !config.headers["x-request-id"]) {
+    config.headers["X-Request-Id"] = reqId
+  }
   return config
 })
 
@@ -74,6 +96,7 @@ axiosInstance.interceptors.response.use((response) => {
 // to keep the option open for tests that re-initialise them.
 let lockManager: LockManager | null = null
 let registry: SessionRegistry | null = null
+let filterStore: FilterConfigStore | null = null
 let shuttingDown = false
 let pollPromise: Promise<void> = Promise.resolve()
 // Errors-per-dedupe-key are kept in a single Map with an LRU cap so
@@ -101,11 +124,45 @@ async function initLockManager(): Promise<LockManager> {
   })
 }
 
+async function initFilterStore(): Promise<FilterConfigStore> {
+  try {
+    return await createFilterConfigStore({
+      workerId: WORKER_ID,
+      backend: EVENT_FILTER_BACKEND,
+      redisUrl: EVENT_FILTER_REDIS_URL,
+    })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    // Fail loud when the operator asked for a distributed backend
+    // (otherwise the cluster would silently drift). Surface as a
+    // warning AND fall back to in-process state so a transient
+    // bootstrap error never blocks stream processing — the
+    // reconcile loop in the operator's runbook can flip the env var
+    // once Redis is healthy.
+    if (EVENT_FILTER_BACKEND === "redis") {
+      console.error(
+        `[${WORKER_ID}] failed to initialise redis filter store: ${message}; falling back to in-process state`,
+      )
+    } else {
+      console.warn(
+        `[${WORKER_ID}] filter store initialisation failed: ${message}`,
+      )
+    }
+    return new MemoryFilterConfigStore({ workerId: WORKER_ID })
+  }
+}
+
 async function pollOnce(): Promise<void> {
-  // Start a fresh trace for each polling cycle so all HTTP calls within
-  // the cycle (poll + any callbacks) share the same root traceparent.
   activeTraceparent = generateTraceparent()
   if (!registry) return
+  const totalDepth = registry.totalQueueDepth()
+  if (totalDepth >= HIGH_WATERMARK) {
+    setQueueDepth(totalDepth)
+    console.warn(
+      `[${WORKER_ID}] total queue depth (${totalDepth}) exceeds high-watermark (${HIGH_WATERMARK}); skipping poll`,
+    )
+    return
+  }
   let events: StreamEvent[] = []
   try {
     const response = await axiosInstance.get<StreamEvent[]>(
@@ -115,6 +172,7 @@ async function pollOnce(): Promise<void> {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error(`[${WORKER_ID}] polling failed: ${message}`)
+    setQueueDepth(registry.totalQueueDepth())
     return
   }
 
@@ -162,6 +220,8 @@ async function pollOnce(): Promise<void> {
       )
     }
   }
+
+  setQueueDepth(registry.totalQueueDepth())
 }
 
 async function start(): Promise<void> {
@@ -181,6 +241,23 @@ async function start(): Promise<void> {
     return
   }
 
+  // Issue #351: wire up the distributed filter store BEFORE the
+  // registry spins up so the first poll already sees the canonical
+  // snapshot from Redis (when applicable). The default construction
+  // `new EventFilter()` above already used the in-process store;
+  // `setStore()` swaps in the distributed one if we managed to
+  // construct it, then `start()` triggers the install + subscribe.
+  try {
+    filterStore = await initFilterStore()
+    filter.setStore(filterStore)
+    await filter.start()
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error(
+      `[${WORKER_ID}] filter store start failed: ${message}; continuing with an empty filter`,
+    )
+  }
+
   registry = new SessionRegistry(
     WORKER_ID,
     {
@@ -190,6 +267,7 @@ async function start(): Promise<void> {
     },
     {
       maxConcurrentSessions: MAX_CONCURRENT_SESSIONS,
+      maxQueueDepth: MAX_QUEUE_DEPTH,
       lockManager,
     },
   )
@@ -258,6 +336,16 @@ gracefulShutdown.register({
       const message = err instanceof Error ? err.message : String(err)
       console.warn(`[${WORKER_ID}] lockManager.close failed: ${message}`)
     }
+  },
+})
+
+gracefulShutdown.register({
+  name: "close filter store",
+  run: async () => {
+    // Tear down Redis pub/sub connections so the disconnect timer
+    // doesn't keep the loop alive past drain. The in-process store
+    // has no transport to close — its `close()` is a no-op.
+    await filter.close()
   },
 })
 

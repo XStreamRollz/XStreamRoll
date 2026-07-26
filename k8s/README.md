@@ -12,7 +12,8 @@ data store.
 - **API Deployment** (NestJS) — `k8s/20-api.yaml`
 - **App Deployment** (Next.js) — `k8s/30-app.yaml`
 - **Processing Deployment** (Node worker) — `k8s/40-processing.yaml`
-- **Ingress** — `k8s/60-ingress.yaml`
+- **Ingress** (TLS via cert-manager — issue #325) — `k8s/60-ingress.yaml`
+- **cert-manager ClusterIssuers** (self-signed + Let's Encrypt staging) — `k8s/50-cert-issuer.yaml`
 - **Kustomize entrypoint** — `k8s/kustomization.yaml`
 
 Container images are published by `.github/workflows/release.yml` to:
@@ -51,6 +52,53 @@ worker's 15s graceful-shutdown hook has room to drain.
   Dockerfiles.
 - The published API image does not yet drop privileges; the manifest
   therefore permits root with a comment to harden it upstream.
+
+## TLS / cert-manager (issue #325)
+
+The cluster MUST have [cert-manager](https://cert-manager.io/docs/installation/) installed before the Ingress can mint a real certificate. If cert-manager is missing, the Ingress will produce a `Ready: False` condition with reason `IssuerNotFound`.
+
+Two ClusterIssuers ship by default (`k8s/50-cert-issuer.yaml`):
+
+| Issuer | Use |
+|--------|-----|
+| `selfsigned-issuer` | Local clusters without public DNS — mints an untrusted cert so the rest of the stack can be exercised end-to-end. Use this while developing against `minikube`/`kind`. |
+| `letsencrypt-staging` | Preview / staging clusters where the hostname resolves publicly but a production-signed cert is not desired. |
+| `letsencrypt-prod` | **Commented out by default.** Enable only after `ops@example.com` is replaced in `k8s/50-cert-issuer.yaml` and DNS for `spec.rules[0].host` resolves to the Ingress controller. |
+
+The Ingress picks the issuer through this annotation:
+
+```yaml
+cert-manager.io/cluster-issuer: letsencrypt-staging
+```
+
+Switch to `selfsigned-issuer` for local development (no DNS / no ACME account), or `letsencrypt-prod` for real production.
+
+### Enabling the production issuer
+
+1. Replace `ops@example.com` with a real ops mailbox in `k8s/50-cert-issuer.yaml`.
+2. Uncomment the `letsencrypt-prod` ClusterIssuer block.
+3. Apply: `kubectl apply -f k8s/50-cert-issuer.yaml`.
+4. Update `k8s/60-ingress.yaml`'s annotation to `cert-manager.io/cluster-issuer: letsencrypt-prod`.
+5. Verify the cert was minted:
+
+   ```bash
+   kubectl -n xstreamroll get certificate
+   kubectl -n xstreamroll describe certificate xstreamroll.example.com-tls
+   ```
+
+### Hostname placeholders
+
+The Ingress ships with `xstreamroll.example.com` as a placeholder host so the manifest loads cleanly without a real DNS name. `SPEC.rules[0].host`, `spec.tls[0].hosts[0]`, and `spec.tls[0].secretName` MUST be replaced together before applying in any real cluster — the comments above each field are tagged `REPLACE-ME` so `grep -n REPLACE-ME k8s/60-ingress.yaml` finds the three lines.
+
+### Verification
+
+`k8s/30-app.yaml`'s `/api/health` readiness probe runs over the **cluster-internal** HTTP path and is unaffected by this PR. Confirm the public-facing TLS by hitting the host from outside the cluster:
+
+```bash
+curl -vI https://xstreamroll.example.com/api/health 2>&1 | grep -E '^< (HTTP|Location)'
+```
+
+The response must be `HTTP/2 200`. A `301` to the HTTPS URL confirms `ssl-redirect` is active; a cleartext `HTTP 200` indicates the issuer or annotation is misconfigured.
 
 ## Secrets
 
@@ -155,6 +203,7 @@ kubectl apply -f k8s/10-postgres.yaml
 kubectl apply -f k8s/20-api.yaml
 kubectl apply -f k8s/30-app.yaml
 kubectl apply -f k8s/40-processing.yaml
+kubectl apply -f k8s/50-cert-issuer.yaml
 kubectl apply -f k8s/60-ingress.yaml
 
 # Build the init ConfigMap yourself. With `disableNameSuffixHash: true`
@@ -180,6 +229,9 @@ kubectl -n xstreamroll exec deploy/api -- wget -q -O - http://localhost:3001/liv
 
 # Probe the worker readiness endpoint:
 kubectl -n xstreamroll exec deploy/processing -- wget -q -O - http://localhost:3002/healthz
+
+# Probe the Ingress TLS endpoint (issue #325):
+curl -vI https://xstreamroll.example.com/api/health
 ```
 
 ## Release process
@@ -228,3 +280,4 @@ is rejected before any build step runs.
 | Correct separation of ConfigMaps and Secrets | `ConfigMap` resources for `NODE_ENV`, `CORS_ORIGIN`, `PORT`, `API_URL`, etc. `Secret` resources exclusively for `DATABASE_URL`, `JWT_SECRET`, `STREAM_API_KEY`. |
 | Define resource requests/limits | Every container has `resources.requests` + `resources.limits`. |
 | DB credentials not hardcoded | `DATABASE_URL` is sourced from Secret refs (`secretKeyRef` / `secretRef`); only `CHANGEME-*` placeholders committed. |
+| **Issue #325 — Ingress TLS** | `k8s/60-ingress.yaml` `spec.tls` + `cert-manager.io/cluster-issuer` annotation, `k8s/50-cert-issuer.yaml` ClusterIssuers, `kustomization.yaml` wires the issuer into the build, `k8s/README.md` documents the rotation. |

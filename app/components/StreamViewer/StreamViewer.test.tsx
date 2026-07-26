@@ -18,12 +18,13 @@ describe("StreamViewer", () => {
     mockUseStreamSocket.mockReturnValue({
       status: "connecting",
       events: [],
+      streamStatus: null,
     })
 
     render(<StreamViewer socketUrl="ws://localhost:3001" />)
 
     expect(screen.getByText("Live Stream Feed")).toBeInTheDocument()
-    expect(screen.getByText("connecting")).toBeInTheDocument()
+    expect(screen.getByText("Connecting")).toBeInTheDocument()
     expect(screen.getByText("No events received yet.")).toBeInTheDocument()
     expect(mockUseStreamSocket).toHaveBeenCalledWith("ws://localhost:3001")
   })
@@ -40,11 +41,12 @@ describe("StreamViewer", () => {
     mockUseStreamSocket.mockReturnValue({
       status: "connected",
       events: mockEvents,
+      streamStatus: null,
     })
 
     render(<StreamViewer socketUrl="ws://localhost:3001" />)
 
-    expect(screen.getByText("connected")).toBeInTheDocument()
+    expect(screen.getByText("Connected")).toBeInTheDocument()
     expect(screen.getByText("click")).toBeInTheDocument()
     expect(screen.getByText("User clicked submit")).toBeInTheDocument()
   })
@@ -53,11 +55,24 @@ describe("StreamViewer", () => {
     mockUseStreamSocket.mockReturnValue({
       status: "error",
       events: [],
+      streamStatus: null,
     })
 
     render(<StreamViewer socketUrl="ws://localhost:3001" />)
 
-    expect(screen.getByText("error")).toBeInTheDocument()
+    expect(screen.getByText("Connection error")).toBeInTheDocument()
     expect(screen.getByText("No events received yet.")).toBeInTheDocument()
+  })
+
+  it("has accessible section landmark", () => {
+    mockUseStreamSocket.mockReturnValue({
+      status: "connected",
+      events: [],
+    })
+
+    render(<StreamViewer socketUrl="ws://localhost:3001" />)
+
+    const section = screen.getByRole("region", { name: "Live stream feed" })
+    expect(section).toBeInTheDocument()
   })
 })

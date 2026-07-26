@@ -30,6 +30,15 @@ interface AuthenticatedSocket extends Socket {
 /** Origin used when `CORS_ORIGIN` is unset or empty — keeps local dev working. */
 const DEFAULT_CORS_ORIGIN = "http://localhost:3000"
 
+function isValidUrl(origin: string): boolean {
+  try {
+    const parsed = new URL(origin)
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+  } catch {
+    return false
+  }
+}
+
 /**
  * Resolve the trusted WebSocket CORS origin(s) from the environment.
  *
@@ -52,6 +61,20 @@ export function resolveCorsOrigins(
   if (origins.length === 0) {
     return DEFAULT_CORS_ORIGIN
   }
+
+  for (const origin of origins) {
+    if (!isValidUrl(origin)) {
+      const errMsg = `Invalid CORS_ORIGIN "${origin}": must be a well-formed HTTP/HTTPS URL`
+      if (process.env.NODE_ENV === "production") {
+        console.error(`Environment validation failed:\n  - CORS_ORIGIN: ${errMsg}`)
+        process.exit(1)
+      } else {
+        console.warn(`[CORS Warning] ${errMsg}; falling back to default origin ${DEFAULT_CORS_ORIGIN}`)
+        return DEFAULT_CORS_ORIGIN
+      }
+    }
+  }
+
   return origins.length === 1 ? origins[0] : origins
 }
 

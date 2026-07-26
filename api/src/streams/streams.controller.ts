@@ -27,6 +27,7 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger"
+import type { PaginatedResponse, Stream } from "@xstreamroll/types"
 import type { Request } from "express"
 import { Cache } from "cache-manager"
 import { AuthGuard } from "../common/guards/auth.guard"
@@ -34,6 +35,7 @@ import { StreamOwnershipGuard } from "../common/guards/stream-ownership.guard"
 import { CreateStreamDto } from "./dto/create-stream.dto"
 import { ListStreamsQueryDto } from "./dto/list-streams.query.dto"
 import { StreamAnalyticsDto } from "./dto/stream-analytics.dto"
+import { toStreamResponse } from "./dto/stream-response.dto"
 import { UpdateStreamDto } from "./dto/update-stream.dto"
 import { StreamsService } from "./streams.service"
 
@@ -69,15 +71,16 @@ export class StreamsController {
   })
   @ApiCreatedResponse({ description: "Stream created successfully." })
   @ApiUnauthorizedResponse({ description: "Authentication required." })
-  create(
+  async create(
     @Body() body: CreateStreamDto,
     @Req() req: Request & { auth?: { userId: number } },
-  ) {
-    return this.streamsService.create({
+  ): Promise<Stream> {
+    const stream = await this.streamsService.create({
       userId: req.auth!.userId,
       name: body.name,
       description: body.description,
     })
+    return toStreamResponse(stream)
   }
 
   /**
@@ -93,12 +96,15 @@ export class StreamsController {
   })
   @ApiOkResponse({ description: "Paginated list of streams." })
   @ApiUnauthorizedResponse({ description: "Authentication required." })
-  list(@Query() query: ListStreamsQueryDto) {
+  async list(
+    @Query() query: ListStreamsQueryDto,
+  ): Promise<PaginatedResponse<Stream> & { hasMore: boolean }> {
     const page = query.page ?? 1
     const limit = query.limit ?? 20
-    return this.streamsService.list(page, limit, {
+    const paged = await this.streamsService.list(page, limit, {
       status: query.status,
     })
+    return { ...paged, data: paged.data.map(toStreamResponse) }
   }
 
   /**
@@ -145,8 +151,9 @@ export class StreamsController {
   @ApiNotFoundResponse({ description: "Stream not found." })
   @ApiUnauthorizedResponse({ description: "Authentication required." })
   @ApiForbiddenResponse({ description: "You do not own this stream." })
-  findById(@Param("id", ParseIntPipe) id: number) {
-    return this.streamsService.findById(id)
+  async findById(@Param("id", ParseIntPipe) id: number): Promise<Stream> {
+    const stream = await this.streamsService.findById(id)
+    return toStreamResponse(stream)
   }
 
   /**
@@ -165,11 +172,12 @@ export class StreamsController {
   @ApiConflictResponse({ description: "Invalid status transition." })
   @ApiUnauthorizedResponse({ description: "Authentication required." })
   @ApiForbiddenResponse({ description: "You do not own this stream." })
-  update(
+  async update(
     @Param("id", ParseIntPipe) id: number,
     @Body() body: UpdateStreamDto,
-  ) {
-    return this.streamsService.update(id, body)
+  ): Promise<Stream> {
+    const stream = await this.streamsService.update(id, body)
+    return toStreamResponse(stream)
   }
 
   /**

@@ -4,15 +4,47 @@ import type { components } from "./generated/schema"
 
 export type { components }
 
-// Convenience aliases for generated DTOs
+// Convenience aliases for generated DTOs.
+//
+// CreateStreamDto/UpdateStreamDto/CreateTagDto are deliberately NOT
+// aliased here even though the generator emits them: the corresponding
+// api DTOs (api/src/streams/dto/*.ts, api/src/tags/dto/*.ts) have no
+// @ApiProperty() decorators, so NestJS Swagger can't infer their shape
+// and openapi-typescript generates `Record<string, never>` — a type
+// that rejects every property. Aliasing that here would make the SDK
+// unusable for those calls. CreateStreamDto/UpdateStreamDto still come
+// from @xstreamroll/types below, which are hand-verified against the
+// real DTOs. Add the generated aliases once the api DTOs are annotated.
 export type RegisterDto = components["schemas"]["RegisterDto"]
 export type LoginDto = components["schemas"]["LoginDto"]
 export type ForgotPasswordDto = components["schemas"]["ForgotPasswordDto"]
 export type ResetPasswordDto = components["schemas"]["ResetPasswordDto"]
-export type CreateStreamDto = components["schemas"]["CreateStreamDto"]
-export type UpdateStreamDto = components["schemas"]["UpdateStreamDto"]
-export type CreateTagDto = components["schemas"]["CreateTagDto"]
 export type HealthCheckResponseDto = components["schemas"]["HealthCheckResponseDto"]
+
+// ─── Shared domain types ────────────────────────────────────────────────────
+//
+// User, Stream, StreamEvent, and pagination shapes are defined once in
+// @xstreamroll/types and re-exported here so SDK consumers keep importing
+// from "xstreamroll-sdk" without needing to know about the shared package.
+// See that package for the canonical definitions.
+
+export type {
+  User,
+  CreateUserDto,
+  Stream,
+  StreamStatus,
+  CreateStreamDto,
+  UpdateStreamDto,
+  StreamEventType,
+  StreamEvent,
+  StreamEventRecord,
+  PaginatedResponse,
+  PaginationParams,
+  ValidationError,
+  ApiErrorResponse,
+} from "@xstreamroll/types"
+
+import type { ApiErrorResponse, StreamEventType } from "@xstreamroll/types"
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -29,26 +61,6 @@ export interface StreamConfig {
 
 // ─── User ─────────────────────────────────────────────────────────────────────
 
-/** User roles available in the platform. */
-export type UserRole = "admin" | "viewer"
-
-/** A registered user account. */
-export interface User {
-  id: string
-  email: string
-  displayName: string
-  role: UserRole
-  createdAt: string
-  updatedAt: string
-}
-
-/** Payload for creating a new user. */
-export interface CreateUserDto {
-  email: string
-  password: string
-  displayName: string
-}
-
 /** Payload for updating user profile. */
 export interface UpdateUserDto {
   displayName?: string
@@ -62,54 +74,6 @@ export interface AuthTokens {
   accessToken: string
   refreshToken: string
   expiresIn: number
-}
-
-// ─── Stream ───────────────────────────────────────────────────────────────────
-
-/** Possible lifecycle states of a stream. */
-export type StreamStatus = "active" | "inactive" | "error"
-
-/** Visibility setting for a stream. */
-export type StreamVisibility = "public" | "private"
-
-/** A stream resource. */
-export interface Stream {
-  id: string
-  userId: string
-  name: string
-  description: string | null
-  status: StreamStatus
-  visibility: StreamVisibility
-  createdAt: string
-  updatedAt: string
-}
-
-// ─── Stream Events ────────────────────────────────────────────────────────────
-
-/** Types of events that can occur on a stream. */
-export type StreamEventType =
-  | "stream:started"
-  | "stream:stopped"
-  | "stream:error"
-  | "viewer:joined"
-  | "viewer:left"
-  | "data"
-
-/** A real-time event emitted by a stream. */
-export interface StreamEvent {
-  streamId: string
-  eventType: StreamEventType
-  data: Record<string, unknown>
-  timestamp?: string
-}
-
-/** A persisted stream event record from the API. */
-export interface StreamEventRecord {
-  id: string
-  streamId: string
-  eventType: StreamEventType
-  payload: Record<string, unknown>
-  occurredAt: string
 }
 
 // ─── Webhooks ─────────────────────────────────────────────────────────────────
@@ -152,38 +116,6 @@ export interface WebhookDelivery {
   nextAttemptAt: string | null
   deliveredAt: string | null
   createdAt: string
-}
-
-// ─── Pagination ───────────────────────────────────────────────────────────────
-
-/** Standard paginated API response wrapper. */
-export interface PaginatedResponse<T> {
-  data: T[]
-  total: number
-  page: number
-  limit: number
-}
-
-/** Query parameters for paginated list endpoints. */
-export interface PaginationParams {
-  page?: number
-  limit?: number
-}
-
-// ─── Errors ───────────────────────────────────────────────────────────────────
-
-/** A single field-level validation error. */
-export interface ValidationError {
-  field: string
-  message: string
-}
-
-/** Standard API error response shape. */
-export interface ApiErrorResponse {
-  statusCode: number
-  message: string | string[]
-  error: string
-  validationErrors?: ValidationError[]
 }
 
 /** Typed error thrown by the SDK on non-2xx responses. */

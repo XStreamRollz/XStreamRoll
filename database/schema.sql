@@ -44,7 +44,10 @@ CREATE INDEX idx_stream_data_stream_id ON stream_data(stream_id);
 CREATE INDEX idx_stream_data_timestamp ON stream_data(timestamp);
 
 -- Index for efficient event querying
-CREATE INDEX idx_stream_events_stream_id ON stream_events(stream_id);
+-- The composite index idx_stream_events_stream_id_created_at_desc covers
+-- the most common query pattern: filter by stream_id, order by created_at DESC.
+-- The single-column idx_stream_events_created_at is retained for admin queries
+-- that scan across all streams by time range.
 CREATE INDEX idx_stream_events_created_at ON stream_events(created_at);
 
 -- ---------------------------------------------------------------------
@@ -81,13 +84,13 @@ CREATE INDEX IF NOT EXISTS idx_stream_tags_tag_id    ON stream_tags(tag_id);
 
 -- ---------------------------------------------------------------------
 -- Issue #73: Indexes for common query patterns
--- Rollback: DROP INDEX idx_streams_user_id_status, idx_stream_events_stream_id_occurred_at, idx_users_email;
+-- Rollback: DROP INDEX idx_streams_user_id_status, idx_users_email;
 -- ---------------------------------------------------------------------
 
 CREATE INDEX IF NOT EXISTS idx_streams_user_id_status
     ON streams(user_id, status);
 
-CREATE INDEX IF NOT EXISTS idx_stream_events_stream_id_occurred_at
+CREATE INDEX IF NOT EXISTS idx_stream_events_stream_id_created_at_desc
     ON stream_events(stream_id, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_stream_events_stream_id_created_at_latency
@@ -108,11 +111,17 @@ CREATE TABLE IF NOT EXISTS notifications (
     type       VARCHAR(100) NOT NULL,
     payload    JSONB NOT NULL DEFAULT '{}',
     read_at    TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Issue #348: retention — rows are deleted once past expires_at by the
+    -- NotificationsService cleanup sweep. The application always sets this
+    -- explicitly to NOW() + INTERVAL '30 days' on insert; the column
+    -- default only backstops rows written outside that path.
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT (CURRENT_TIMESTAMP + INTERVAL '30 days')
 );
 
 CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_unread  ON notifications(user_id) WHERE read_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_notifications_expires_at ON notifications(expires_at);
 
 -- ---------------------------------------------------------------------
 -- Issue #392: Webhook delivery for stream lifecycle events
