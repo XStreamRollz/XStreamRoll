@@ -8,36 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-
-- Kubernetes deployment manifests for API, App, Processing Worker, and PostgreSQL (`#217`).
-- Health check endpoints (`/api/health`, `/livez`, `/healthz`) to support container orchestrator probes.
-- `SECURITY.md` policy covering supported versions, SLAs, and private vulnerability reporting.
-- Comprehensive `CONTRIBUTING.md` guide covering monorepo setup, conventional commits, and PR expectations.
-- PostgreSQL-backed `TagsDbRepository` and `StreamsDbRepository` for secure, parameterized data access.
-- User registration page (`/auth/register`) in the Next.js frontend with Zod schema validation.
+- Trivy vulnerability scanning for Docker images (`api`, `app`, `processing`) in CI; scans run on Dockerfile changes and weekly against published `ghcr.io` images, with SARIF reports uploaded to GitHub Code Scanning and the workflow failing on `CRITICAL` findings. Closes #372.
+- Dependabot configuration in `.github/dependabot.yml` covering all five `package.json` locations (root, `api`, `app`, `xstreamroll-sdk`, `xstreamroll-processing`), with grouped updates (`@nestjs/*`, `@opentelemetry/*`, React/Next, `@radix-ui/*`), weekly schedules, and auto-merge for patch and security updates via `.github/workflows/dependabot-auto-merge.yml`. Closes #368.
+- `.trivyignore` file at the repo root documenting the suppression format and serving as the canonical place for triaged false-positive findings.
 
 ### Changed
 
-- `StreamOwnershipService` in API backend now safely queries the PostgreSQL database via parameterized queries instead of relying on demo environment variables.
-- Prepared `AdminStatsService` for database integration to aggregate platform-wide stats.
-- **Breaking (xstreamroll-sdk):** `StreamingClient` now uses the fetch-based `HttpClient` (with shared `withRetry`) instead of axios. The `axios` dependency has been removed from `@stellar/streaming-sdk`. Callers that relied on axios-specific error shapes (`AxiosError`, `error.isAxiosError`, axios interceptors on the client instance) must switch to `ApiError` / `HttpRequestError`. The public `StreamingClient` method surface is unchanged.
-
 ### Fixed
 
-- UI `ConfirmDialog` component now properly handles async states and prevents dialog dismissal while action promises are pending.
+### Removed
 
-## [1.0.0] - 2024-05-24
-
-### Added
-
-- Initial release of the XStreamRoll platform.
-- `app`: Next.js 16 user-facing web frontend.
-- `api`: NestJS 10 REST and WebSocket backend.
-- `xstreamroll-sdk`: Lightweight, isomorphic TypeScript client for publishing events and API interaction.
-- `xstreamroll-processing`: Dedicated Node.js and TypeScript worker for real-time stream data processing.
-- `database`: Initial PostgreSQL schema and migrations.
-
-<!-- Links -->
-
-[Unreleased]: https://github.com/XStreamRollz/XStreamRoll/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/XStreamRollz/XStreamRoll/releases/tag/v1.0.0
+### Security
+- Scheduled re-scan of published `ghcr.io/<owner>/xstreamroll-{api,app,processing}:latest` images so newly disclosed CVEs are surfaced outside of release windows. (#372)
