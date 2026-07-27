@@ -15,9 +15,25 @@ describe("StreamsService", () => {
     getAnalytics: jest.Mock
     update: jest.Mock
     delete: jest.Mock
+    listEventsForStream: jest.Mock
   }
   let mockWebhooksService: { dispatchStreamEvent: jest.Mock }
   let mockTagsService: { listForStreamIds: jest.Mock }
+
+  /** Helper to build a fully-typed Stream with the new visibility field. */
+  function streamFixture(overrides: Partial<Stream> = {}): Stream {
+    return {
+      id: 1,
+      userId: 1,
+      name: "s",
+      description: null,
+      status: "inactive",
+      visibility: "private",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    }
+  }
 
   beforeEach(() => {
     mockRepo = {
@@ -27,6 +43,7 @@ describe("StreamsService", () => {
       getAnalytics: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+      listEventsForStream: jest.fn(),
     }
     mockWebhooksService = {
       dispatchStreamEvent: jest.fn().mockResolvedValue(undefined),
@@ -42,27 +59,29 @@ describe("StreamsService", () => {
   })
 
   it("create with valid data returns stream", async () => {
-    const expected: Stream = {
-      id: 1,
-      userId: 5,
-      name: "My Stream",
-      description: "desc",
-      status: "inactive",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }
+    const expected = streamFixture({ name: "My Stream", description: "desc" })
     mockRepo.create.mockResolvedValue(expected)
 
     const result = await service.create({ userId: 5, name: "My Stream", description: "desc" })
     expect(result).toEqual(expected)
-    expect(mockRepo.create).toHaveBeenCalledWith({ userId: 5, name: "My Stream", description: "desc" })
+    expect(mockRepo.create).toHaveBeenCalledWith({ userId: 5, name: "My Stream", description: "desc", visibility: undefined })
+  })
+
+  it("create forwards requested visibility to the repository (issue #393)", async () => {
+    const expected = streamFixture({ visibility: "public" })
+    mockRepo.create.mockResolvedValue(expected)
+
+    await service.create({ userId: 5, name: "Public Stream", visibility: "public" })
+    expect(mockRepo.create).toHaveBeenCalledWith({
+      userId: 5,
+      name: "Public Stream",
+      description: undefined,
+      visibility: "public",
+    })
   })
 
   it("list streams with pagination returns correct shape and hasMore", async () => {
-    const items: Stream[] = [
-      { id: 1, userId: 1, name: "a", description: null, status: "inactive", createdAt: new Date(), updatedAt: new Date() },
-      { id: 2, userId: 2, name: "b", description: null, status: "inactive", createdAt: new Date(), updatedAt: new Date() },
-    ]
+    const items = [streamFixture({ id: 1 }), streamFixture({ id: 2, name: "b" })]
     mockRepo.listPaginated.mockResolvedValue({ items, total: 3 })
 
     const page = 1
@@ -79,8 +98,8 @@ describe("StreamsService", () => {
   })
 
   it("list batches tags in a single call so each stream row ships with tags (issue #330)", async () => {
-    const streamA: Stream = { id: 1, userId: 1, name: "a", description: null, status: "inactive", createdAt: new Date(), updatedAt: new Date() }
-    const streamB: Stream = { id: 2, userId: 1, name: "b", description: null, status: "inactive", createdAt: new Date(), updatedAt: new Date() }
+    const streamA = streamFixture({ id: 1, name: "a" })
+    const streamB = streamFixture({ id: 2, name: "b" })
     mockRepo.listPaginated.mockResolvedValue({ items: [streamA, streamB], total: 2 })
     const tagsByStream = new Map<number, Tag[]>([
       [1, [{ id: 10, name: "live", slug: "live", createdAt: new Date() }]],
@@ -97,7 +116,7 @@ describe("StreamsService", () => {
   })
 
   it("list defaults tags to [] when the tag service returns no entry for a stream id", async () => {
-    const stream: Stream = { id: 99, userId: 1, name: "x", description: null, status: "inactive", createdAt: new Date(), updatedAt: new Date() }
+    const stream = streamFixture({ id: 99, name: "x" })
     mockRepo.listPaginated.mockResolvedValue({ items: [stream], total: 1 })
     mockTagsService.listForStreamIds.mockResolvedValue(new Map())
 
@@ -105,9 +124,15 @@ describe("StreamsService", () => {
     expect(res.data[0]?.tags).toEqual([])
   })
 
+  it("list forwards the visibility filter (issue #393)", async () => {
+    mockRepo.listPaginated.mockResolvedValue({ items: [], total: 0 })
+
+    await service.list(1, 20, { visibility: "public" })
+    expect(mockRepo.listPaginated).toHaveBeenCalledWith(1, 20, { visibility: "public" })
+  })
+
   it("list streams with status filter forwards filter", async () => {
-    const items: Stream[] = []
-    mockRepo.listPaginated.mockResolvedValue({ items, total: 0 })
+    mockRepo.listPaginated.mockResolvedValue({ items: [], total: 0 })
 
     await service.list(1, 10, { status: "active" })
     expect(mockRepo.listPaginated).toHaveBeenCalledWith(1, 10, { status: "active" })
@@ -119,19 +144,40 @@ describe("StreamsService", () => {
   })
 
   it("update status inactive -> active succeeds", async () => {
-    const existing: Stream = { id: 1, userId: 1, name: "s", description: null, status: "inactive", createdAt: new Date(), updatedAt: new Date() }
-    const updated: Stream = { ...existing, status: "active" }
+    const existing = streamFixture({ status: "inactive" })
+    const updated = { ...existing, status: "active" }
     mockRepo.findById.mockResolvedValue(existing)
     mockRepo.update.mockResolvedValue(updated)
 
     const res = await service.update(1, { status: "active" })
     expect(res).toEqual(updated)
-    expect(mockRepo.update).toHaveBeenCalledWith(1, { name: undefined, description: undefined, status: "active" })
+    expect(mockRepo.update).toHaveBeenCalledWith(1, {
+      name: undefined,
+      description: undefined,
+      status: "active",
+      visibility: undefined,
+    })
+  })
+
+  it("update visibility flip (issue #393) does not dispatch a status webhook", async () => {
+    const existing = streamFixture({ visibility: "private" })
+    const updated = { ...existing, visibility: "public" }
+    mockRepo.findById.mockResolvedValue(existing)
+    mockRepo.update.mockResolvedValue(updated)
+
+    await service.update(1, { visibility: "public" })
+    expect(mockRepo.update).toHaveBeenCalledWith(1, {
+      name: undefined,
+      description: undefined,
+      status: undefined,
+      visibility: "public",
+    })
+    expect(mockWebhooksService.dispatchStreamEvent).not.toHaveBeenCalled()
   })
 
   it("update status inactive -> active dispatches a stream:started webhook event", async () => {
-    const existing: Stream = { id: 1, userId: 7, name: "s", description: null, status: "inactive", createdAt: new Date(), updatedAt: new Date() }
-    const updated: Stream = { ...existing, status: "active" }
+    const existing = streamFixture({ status: "inactive", userId: 7 })
+    const updated = { ...existing, status: "active" }
     mockRepo.findById.mockResolvedValue(existing)
     mockRepo.update.mockResolvedValue(updated)
 
@@ -145,8 +191,8 @@ describe("StreamsService", () => {
   })
 
   it("update status active -> inactive dispatches a stream:stopped webhook event", async () => {
-    const existing: Stream = { id: 1, userId: 7, name: "s", description: null, status: "active", createdAt: new Date(), updatedAt: new Date() }
-    const updated: Stream = { ...existing, status: "inactive" }
+    const existing = streamFixture({ status: "active", userId: 7 })
+    const updated = { ...existing, status: "inactive" }
     mockRepo.findById.mockResolvedValue(existing)
     mockRepo.update.mockResolvedValue(updated)
 
@@ -160,8 +206,8 @@ describe("StreamsService", () => {
   })
 
   it("update without a status change does not dispatch a webhook event", async () => {
-    const existing: Stream = { id: 1, userId: 7, name: "s", description: null, status: "active", createdAt: new Date(), updatedAt: new Date() }
-    const updated: Stream = { ...existing, name: "renamed" }
+    const existing = streamFixture({ status: "active", userId: 7, name: "old" })
+    const updated = { ...existing, name: "renamed" }
     mockRepo.findById.mockResolvedValue(existing)
     mockRepo.update.mockResolvedValue(updated)
 
@@ -171,14 +217,14 @@ describe("StreamsService", () => {
   })
 
   it("update status active -> active throws ConflictException", async () => {
-    const existing: Stream = { id: 2, userId: 1, name: "s", description: null, status: "active", createdAt: new Date(), updatedAt: new Date() }
+    const existing = streamFixture({ id: 2, status: "active" })
     mockRepo.findById.mockResolvedValue(existing)
     await expect(service.update(2, { status: "active" })).rejects.toThrow(ConflictException)
     expect(mockRepo.update).not.toHaveBeenCalled()
   })
 
   it("update status error -> active throws ConflictException", async () => {
-    const existing: Stream = { id: 3, userId: 1, name: "s", description: null, status: "error", createdAt: new Date(), updatedAt: new Date() }
+    const existing = streamFixture({ id: 3, status: "error" })
     mockRepo.findById.mockResolvedValue(existing)
     await expect(service.update(3, { status: "active" })).rejects.toThrow(ConflictException)
   })
@@ -194,15 +240,7 @@ describe("StreamsService", () => {
   })
 
   it("getAnalytics checks stream existence before loading analytics", async () => {
-    const stream: Stream = {
-      id: 4,
-      userId: 1,
-      name: "s",
-      description: null,
-      status: "active",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }
+    const stream = streamFixture({ id: 4, status: "active" })
     const analytics = {
       streamId: 4,
       totalEventsProcessed: { last24h: 1, last7d: 2, last30d: 3 },
@@ -225,14 +263,76 @@ describe("StreamsService", () => {
     await expect(service.getAnalytics(404)).rejects.toThrow(NotFoundException)
     expect(mockRepo.getAnalytics).not.toHaveBeenCalled()
   })
+
+  // ── Stream event replay (#396) ───────────────────────────────────────────
+
+  it("listEvents returns paginated events for an existing stream", async () => {
+    const stream = streamFixture()
+    const events = [
+      {
+        id: "3",
+        streamId: "1",
+        eventType: "viewer:joined" as const,
+        payload: { viewerId: "u3" },
+        occurredAt: "2026-08-01T00:00:02.000Z",
+      },
+      {
+        id: "2",
+        streamId: "1",
+        eventType: "viewer:joined" as const,
+        payload: { viewerId: "u2" },
+        occurredAt: "2026-08-01T00:00:01.000Z",
+      },
+      {
+        id: "1",
+        streamId: "1",
+        eventType: "viewer:joined" as const,
+        payload: { viewerId: "u1" },
+        occurredAt: "2026-08-01T00:00:00.000Z",
+      },
+    ]
+    mockRepo.findById.mockResolvedValue(stream)
+    mockRepo.listEventsForStream.mockResolvedValue({ items: events, total: 3 })
+
+    const res = await service.listEvents(1, 1, 50)
+    expect(res.data).toHaveLength(3)
+    expect(res.total).toBe(3)
+    expect(res.hasMore).toBe(false)
+    expect(mockRepo.listEventsForStream).toHaveBeenCalledWith(1, 1, 50)
+  })
+
+  it("listEvents paginates correctly when more pages remain", async () => {
+    const stream = streamFixture()
+    const events = [
+      {
+        id: "5",
+        streamId: "1",
+        eventType: "viewer:left" as const,
+        payload: { viewerId: "u5" },
+        occurredAt: "2026-08-01T00:00:05.000Z",
+      },
+    ]
+    mockRepo.findById.mockResolvedValue(stream)
+    mockRepo.listEventsForStream.mockResolvedValue({ items: events, total: 7 })
+
+    const res = await service.listEvents(1, 2, 3)
+    expect(res.data).toHaveLength(1)
+    expect(res.hasMore).toBe(true)
+  })
+
+  it("listEvents throws NotFoundException for a missing stream", async () => {
+    mockRepo.findById.mockResolvedValue(undefined)
+    await expect(service.listEvents(404, 1, 50)).rejects.toThrow(NotFoundException)
+    expect(mockRepo.listEventsForStream).not.toHaveBeenCalled()
+  })
 })
 
 // ============================================
-// PROPERTY-BASED TESTS FOR STREAM STATUS TRANSITIONS
+// PROPERTY-BASED TESTS FOR STREAM STATUS TRANSITIONS + VISIBILITY TRANSITIONS
 // ============================================
-import * as fc from 'fast-check';
+import * as fc from "fast-check";
 
-describe('StreamsService - Property-Based Tests', () => {
+describe("StreamsService - Property-Based Tests", () => {
   let service: StreamsService;
   let mockRepo: any;
   let mockWebhooksService: { dispatchStreamEvent: jest.Mock };
@@ -244,44 +344,41 @@ describe('StreamsService - Property-Based Tests', () => {
       findById: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+      listEventsForStream: jest.fn(),
     };
     const mockWebhooksService = { sendStreamEvent: jest.fn() };
     const mockTagsService = { listForStreamIds: jest.fn().mockResolvedValue(new Map()) };
     service = new StreamsService(mockRepo, mockWebhooksService as any, mockTagsService as any);
   });
 
-  // Test 1: Verify the exact allowed transitions based on your implementation
-  it('should correctly implement the allowed transition rules', () => {
-    const statuses = ['inactive', 'active', 'error'] as const;
-    
-    // Define the expected allowed transitions based on your ACTUAL implementation
+  it("should correctly implement the allowed transition rules", () => {
+    const statuses = ["inactive", "active", "error"] as const;
+
     const allowedTransitions: Record<string, string[]> = {
-      'inactive': ['active', 'error'],   // inactive → active AND inactive → error are allowed
-      'active': ['inactive', 'error'],   // active → inactive AND active → error are allowed
-      'error': ['inactive']              // ONLY error → inactive is allowed
+      "inactive": ["active", "error"],
+      "active": ["inactive", "error"],
+      "error": ["inactive"],
     };
-    
+
     fc.assert(
       fc.property(
         fc.constantFrom(...statuses),
         fc.constantFrom(...statuses),
         (currentStatus: string, nextStatus: string) => {
           const shouldBeAllowed = allowedTransitions[currentStatus]?.includes(nextStatus) || false;
-          
+
           let wasAllowed = false;
           let errorThrown = null;
-          
+
           try {
             (service as any).validateStatusTransition(currentStatus, nextStatus);
             wasAllowed = true;
           } catch (error) {
             errorThrown = error;
           }
-          
-          // The result should match our expected allowed transitions
+
           expect(wasAllowed).toBe(shouldBeAllowed);
-          
-          // If not allowed, it should throw a ConflictException
+
           if (!shouldBeAllowed) {
             expect(errorThrown).toBeDefined();
             expect(errorThrown).toBeInstanceOf(ConflictException);
@@ -291,38 +388,28 @@ describe('StreamsService - Property-Based Tests', () => {
     );
   });
 
-  // Test 2: Check antisymmetric transition rules
-  it('should have antisymmetric transition rules', () => {
-    const statuses = ['inactive', 'active', 'error'] as const;
-    
+  it("should have antisymmetric transition rules", () => {
+    const statuses = ["inactive", "active", "error"] as const;
+
     fc.assert(
       fc.property(
         fc.constantFrom(...statuses),
         fc.constantFrom(...statuses),
         (statusA: string, statusB: string) => {
           if (statusA === statusB) {
-            return true; // Skip self-transitions
+            return true;
           }
-          
+
           const aToBAllowed = isTransitionAllowed(service, statusA, statusB);
           const bToAAllowed = isTransitionAllowed(service, statusB, statusA);
-          
-          // Based on the actual implementation:
-          // inactive ↔ active (both directions allowed)
-          // inactive → error (only one direction - error → inactive is NOT allowed)
-          // active → error (only one direction - error → active is NOT allowed)
-          // error → inactive (only one direction - inactive → error is NOT allowed)
-          
-          if (statusA === 'inactive' && statusB === 'active') {
-            // Both directions should be allowed
+
+          if (statusA === "inactive" && statusB === "active") {
             expect(aToBAllowed).toBe(true);
             expect(bToAAllowed).toBe(true);
-          } else if (statusA === 'inactive' && statusB === 'error') {
-            // inactive → error allowed, error → inactive allowed too
+          } else if (statusA === "inactive" && statusB === "error") {
             expect(aToBAllowed).toBe(true);
             expect(bToAAllowed).toBe(true);
-          } else if (statusA === 'active' && statusB === 'error') {
-            // active → error allowed, error → active NOT allowed
+          } else if (statusA === "active" && statusB === "error") {
             expect(aToBAllowed).toBe(true);
             expect(bToAAllowed).toBe(false);
           }
@@ -331,66 +418,58 @@ describe('StreamsService - Property-Based Tests', () => {
     );
   });
 
-  // Test 3: inactive → error should be allowed
-  it('should allow transition from inactive to error', () => {
+  it("should allow transition from inactive to error", () => {
     expect(() => {
-      (service as any).validateStatusTransition('inactive', 'error');
+      (service as any).validateStatusTransition("inactive", "error");
     }).not.toThrow();
   });
 
-  // Test 4: error → inactive should be allowed
-  it('should allow transition from error to inactive', () => {
+  it("should allow transition from error to inactive", () => {
     expect(() => {
-      (service as any).validateStatusTransition('error', 'inactive');
+      (service as any).validateStatusTransition("error", "inactive");
     }).not.toThrow();
   });
 
-  // Test 5: error → error should throw
-  it('should NOT allow transition from error to error', () => {
+  it("should NOT allow transition from error to error", () => {
     expect(() => {
-      (service as any).validateStatusTransition('error', 'error');
+      (service as any).validateStatusTransition("error", "error");
     }).toThrow(ConflictException);
   });
 
-  // Test 6: error → active should throw
-  it('should NOT allow transition from error to active', () => {
+  it("should NOT allow transition from error to active", () => {
     expect(() => {
-      (service as any).validateStatusTransition('error', 'active');
+      (service as any).validateStatusTransition("error", "active");
     }).toThrow(ConflictException);
   });
 
-  // Test 7: active → error should be allowed
-  it('should allow transition from active to error', () => {
+  it("should allow transition from active to error", () => {
     expect(() => {
-      (service as any).validateStatusTransition('active', 'error');
+      (service as any).validateStatusTransition("active", "error");
     }).not.toThrow();
   });
 
-  // Test 8: inactive → active should be allowed
-  it('should allow transition from inactive to active', () => {
+  it("should allow transition from inactive to active", () => {
     expect(() => {
-      (service as any).validateStatusTransition('inactive', 'active');
+      (service as any).validateStatusTransition("inactive", "active");
     }).not.toThrow();
   });
 
-  // Test 9: active → inactive should be allowed
-  it('should allow transition from active to inactive', () => {
+  it("should allow transition from active to inactive", () => {
     expect(() => {
-      (service as any).validateStatusTransition('active', 'inactive');
+      (service as any).validateStatusTransition("active", "inactive");
     }).not.toThrow();
   });
 
-  // Test 10: No other invalid transitions should be allowed
-  it('should only allow the defined transitions', () => {
-    const allStatuses = ['inactive', 'active', 'error'] as const;
+  it("should only allow the defined transitions", () => {
+    const allStatuses = ["inactive", "active", "error"] as const;
     const validTransitions: [string, string][] = [
-      ['inactive', 'active'],
-      ['inactive', 'error'],
-      ['active', 'inactive'],
-      ['active', 'error'],
-      ['error', 'inactive']
+      ["inactive", "active"],
+      ["inactive", "error"],
+      ["active", "inactive"],
+      ["active", "error"],
+      ["error", "inactive"]
     ];
-    
+
     fc.assert(
       fc.property(
         fc.constantFrom(...allStatuses),
@@ -399,7 +478,7 @@ describe('StreamsService - Property-Based Tests', () => {
           const isExpectedValid = validTransitions.some(
             ([c, n]) => c === current && n === next
           );
-          
+
           let isActuallyValid = false;
           try {
             (service as any).validateStatusTransition(current, next);
@@ -407,14 +486,13 @@ describe('StreamsService - Property-Based Tests', () => {
           } catch (error) {
             isActuallyValid = false;
           }
-          
+
           expect(isActuallyValid).toBe(isExpectedValid);
         }
       )
     );
   });
 
-  // Helper function to check if a transition is allowed
   function isTransitionAllowed(service: StreamsService, current: string, next: string): boolean {
     try {
       (service as any).validateStatusTransition(current, next);
@@ -424,3 +502,60 @@ describe('StreamsService - Property-Based Tests', () => {
     }
   }
 });
+
+// ============================================
+// VISIBILITY PROPERTY-BASED TESTS (issue #393)
+// ============================================
+describe("StreamsService - Visibility transitions (issue #393)", () => {
+  let mockRepo: any
+  let service: StreamsService
+
+  beforeEach(() => {
+    mockRepo = {
+      create: jest.fn(),
+      listPaginated: jest.fn(),
+      findById: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+      listEventsForStream: jest.fn(),
+    }
+    const mockWebhooksService = { dispatchStreamEvent: jest.fn() }
+    const mockTagsService = { listForStreamIds: jest.fn().mockResolvedValue(new Map()) }
+    service = new StreamsService(
+      mockRepo,
+      mockWebhooksService as any,
+      mockTagsService as any,
+    )
+  })
+
+  it("any visibility -> any visibility is allowed (no state machine)", async () => {
+    const visibilities = ["public", "private"] as const
+    await fc.assert(
+      fc.asyncProperty(
+        fc.constantFrom(...visibilities),
+        fc.constantFrom(...visibilities),
+        async (from: string, to: string): Promise<void> => {
+          const existing = {
+            id: 1,
+            userId: 1,
+            name: "s",
+            description: null,
+            status: "inactive" as const,
+            visibility: from,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }
+          mockRepo.findById.mockResolvedValue(existing)
+          mockRepo.update.mockResolvedValue({ ...existing, visibility: to })
+          let ok = true
+          try {
+            await service.update(1, { visibility: to as "public" | "private" })
+          } catch {
+            ok = false
+          }
+          expect(ok).toBe(true)
+        },
+      ),
+    )
+  })
+})

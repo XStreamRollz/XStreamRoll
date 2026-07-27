@@ -67,7 +67,9 @@ export class StreamsController {
   @ApiBearerAuth("bearer")
   @ApiOperation({
     summary: "Create a new stream",
-    description: "Creates a new stream with the authenticated user as owner.",
+    description:
+      "Creates a new stream with the authenticated user as owner. " +
+      "Visibility defaults to \"private\" (issue #393).",
   })
   @ApiCreatedResponse({ description: "Stream created successfully." })
   @ApiUnauthorizedResponse({ description: "Authentication required." })
@@ -79,12 +81,13 @@ export class StreamsController {
       userId: req.auth!.userId,
       name: body.name,
       description: body.description,
+      visibility: body.visibility,
     })
     return toStreamResponse(stream)
   }
 
   /**
-   * List all streams with optional status filter and pagination.
+   * List all streams with optional status and visibility filters and pagination.
    */
   @Get()
   @UseGuards(AuthGuard)
@@ -92,7 +95,8 @@ export class StreamsController {
   @ApiOperation({
     summary: "List streams",
     description:
-      "Returns a paginated list of streams with optional status filter.",
+      "Returns a paginated list of streams with optional status and " +
+      "visibility filters (issue #393).",
   })
   @ApiOkResponse({ description: "Paginated list of streams." })
   @ApiUnauthorizedResponse({ description: "Authentication required." })
@@ -103,6 +107,7 @@ export class StreamsController {
     const limit = query.limit ?? 20
     const paged = await this.streamsService.list(page, limit, {
       status: query.status,
+      visibility: query.visibility,
     })
     return { ...paged, data: paged.data.map(toStreamResponse) }
   }
@@ -135,6 +140,50 @@ export class StreamsController {
     const analytics = await this.streamsService.getAnalytics(id)
     await this.cache.set(cacheKey, analytics, STREAM_ANALYTICS_CACHE_TTL_MS)
     return analytics
+  }
+
+  /**
+   * Replay the historical event log for a stream (issue #396).
+   * Returns the most recent events newest-first, paginated like every
+   * other list endpoint. Owner-only via {@link StreamOwnershipGuard}.
+   */
+  @Get(":id/events")
+  @UseGuards(StreamOwnershipGuard)
+  @ApiBearerAuth("bearer")
+  @ApiOperation({
+    summary: "Replay stream events",
+    description:
+      "Returns a paginated list of historical events recorded for a stream, " +
+      "newest-first. Useful for catch-up after a worker restart, audit tooling, " +
+      "and any time the live WebSocket fan-out missed a window. Requires ownership.",
+  })
+  @ApiOkResponse({ description: "Paginated event log." })
+  @ApiNotFoundResponse({ description: "Stream not found." })
+  @ApiUnauthorizedResponse({ description: "Authentication required." })
+  @ApiForbiddenResponse({ description: "You do not own this stream." })
+  async listEvents(
+    @Param("id", ParseIntPipe) id: number,
+    @Query("page") page: number = 1,
+    @Query("limit") limit: number = 50,
+  ): Promise<{
+    data: Array<{
+      id: string
+      streamId: string
+      eventType: string
+      payload: Record<string, unknown>
+      occurredAt: string
+    }>
+    page: number
+    limit: number
+    total: number
+    hasMore: boolean
+  }> {
+    const paged = await this.streamsService.listEvents(id, page, limit)
+    // The repository already builds records with `streamId` as a
+    // stringified id (see {@link StreamsRepository.listEventsForStream}).
+    // Returning the paginated envelope unchanged avoids re-casting a
+    // value that's already in the canonical wire shape.
+    return paged
   }
 
   /**

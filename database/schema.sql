@@ -16,8 +16,13 @@ CREATE TABLE IF NOT EXISTS streams (
     name VARCHAR(255) NOT NULL,
     description TEXT,
     status VARCHAR(50) DEFAULT 'inactive',
+    -- Issue #393: visibility on the discover surface.
+    -- Defaults to "private" so never accidentally exposed.
+    visibility VARCHAR(16) NOT NULL DEFAULT 'private',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT streams_visibility_check
+      CHECK (visibility IN ('public', 'private'))
 );
 
 -- Stream data table

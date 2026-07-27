@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common"
+import type { StreamEventRecord, StreamVisibility } from "@xstreamroll/types"
 import { PaginatedResult } from "../common/dto/pagination.dto"
 import { STREAM_EVENTS } from "../gateways/stream-events"
 import { TagsService } from "../tags/tags.service"
@@ -34,11 +35,13 @@ export class StreamsService {
     userId: number
     name: string
     description?: string
+    visibility?: StreamVisibility
   }): Promise<Stream> {
     return this.repo.create({
       userId: dto.userId,
       name: dto.name.trim(),
       description: dto.description?.trim(),
+      visibility: dto.visibility,
     })
   }
 
@@ -61,7 +64,7 @@ export class StreamsService {
   async list(
     page: number,
     limit: number,
-    filter?: { status?: string },
+    filter?: { status?: string; visibility?: StreamVisibility },
   ): Promise<PagedStreams> {
     const { items, total } = await this.repo.listPaginated(
       page,
@@ -94,7 +97,12 @@ export class StreamsService {
 
   async update(
     id: number,
-    changes: { name?: string; description?: string; status?: string },
+    changes: {
+      name?: string
+      description?: string
+      status?: string
+      visibility?: StreamVisibility
+    },
   ): Promise<Stream> {
     const stream = await this.findById(id)
 
@@ -107,6 +115,7 @@ export class StreamsService {
       name: changes.name?.trim(),
       description: changes.description?.trim(),
       status: changes.status,
+      visibility: changes.visibility,
     })
 
     if (changes.status !== undefined && changes.status !== stream.status) {
@@ -151,6 +160,41 @@ export class StreamsService {
   async getAnalytics(id: number): Promise<StreamAnalyticsDto> {
     await this.findById(id)
     return this.repo.getAnalytics(id)
+  }
+
+  // ── Stream event replay (#396) ───────────────────────────────────────────
+
+  /**
+   * Returns the most recent events for a stream, paginated. The
+   * single-stream read is owner-only via the upstream
+   * `StreamOwnershipGuard`; visibility on this endpoint is not
+   * affected by `Stream.visibility` because event payloads are
+   * private regardless of metadata visibility.
+   */
+  async listEvents(
+    id: number,
+    page: number,
+    limit: number,
+  ): Promise<{
+    data: StreamEventRecord[]
+    page: number
+    limit: number
+    total: number
+    hasMore: boolean
+  }> {
+    await this.findById(id)
+    const { items, total } = await this.repo.listEventsForStream(
+      id,
+      page,
+      limit,
+    )
+    return {
+      data: items,
+      page,
+      limit,
+      total,
+      hasMore: page * limit < total,
+    }
   }
 
   /**

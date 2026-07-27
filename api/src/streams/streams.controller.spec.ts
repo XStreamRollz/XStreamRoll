@@ -29,6 +29,7 @@ type MockStreamsService = {
   getAnalytics: jest.Mock
   update: jest.Mock
   delete: jest.Mock
+  listEvents: jest.Mock
 }
 
 type MockCache = {
@@ -43,6 +44,7 @@ function makeStream(overrides: Partial<Stream> = {}): Stream {
     name: "s",
     description: "d",
     status: "inactive",
+    visibility: "private",
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
     ...overrides,
@@ -62,6 +64,7 @@ describe("StreamsController", () => {
       getAnalytics: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+      listEvents: jest.fn(),
     }
     mockCache = {
       get: jest.fn(),
@@ -80,9 +83,36 @@ describe("StreamsController", () => {
 
     const res = await controller.create(dto as CreateStreamDto, req)
     expect(res).toEqual(
-      expect.objectContaining({ id: "1", userId: "7", name: "s", description: "d", tags: [] }),
+      expect.objectContaining({
+        id: "1",
+        userId: "7",
+        name: "s",
+        description: "d",
+        visibility: "private",
+        tags: [],
+      }),
     )
-    expect(mockService.create).toHaveBeenCalledWith({ userId: 7, name: dto.name, description: dto.description })
+    expect(mockService.create).toHaveBeenCalledWith({
+      userId: 7,
+      name: dto.name,
+      description: dto.description,
+      visibility: undefined,
+    })
+  })
+
+  it("create with public visibility (issue #393) passes through and serializes", async () => {
+    const dto = { name: "s", description: "d", visibility: "public" as const }
+    const req = { auth: { userId: 7 } } as Request & { auth: { userId: number } }
+    mockService.create.mockResolvedValue(makeStream({ visibility: "public" }))
+
+    const res = await controller.create(dto, req)
+    expect(res).toEqual(expect.objectContaining({ visibility: "public" }))
+    expect(mockService.create).toHaveBeenCalledWith({
+      userId: 7,
+      name: "s",
+      description: "d",
+      visibility: "public",
+    })
   })
 
   it("list delegates to service with defaults and serializes each stream", async () => {
@@ -94,15 +124,33 @@ describe("StreamsController", () => {
       hasMore: false,
     })
     const res = await controller.list({})
-    expect(mockService.list).toHaveBeenCalledWith(1, 20, { status: undefined })
-    expect(res.data).toEqual([
-      expect.objectContaining({ id: "2", tags: [] }),
-    ])
+    expect(mockService.list).toHaveBeenCalledWith(1, 20, { status: undefined, visibility: undefined })
+    expect(res.data).toEqual([expect.objectContaining({ id: "2", tags: [] })])
+  })
+
+  it("list forwards status and visibility query filters (issue #393)", async () => {
+    mockService.list.mockResolvedValue({
+      data: [],
+      page: 1,
+      limit: 20,
+      total: 0,
+      hasMore: false,
+    })
+    await controller.list({ status: "active", visibility: "public" } as any)
+    expect(mockService.list).toHaveBeenCalledWith(1, 20, {
+      status: "active",
+      visibility: "public",
+    })
   })
 
   it("list serializes inline tags on each stream (issue #330)", async () => {
     mockService.list.mockResolvedValue({
-      data: [makeStream({ id: 3, tags: [{ id: 1, name: "Live", slug: "live", createdAt: new Date("2026-01-01T00:00:00Z") }] })],
+      data: [
+        makeStream({
+          id: 3,
+          tags: [{ id: 1, name: "Live", slug: "live", createdAt: new Date("2026-01-01T00:00:00Z") }],
+        }),
+      ],
       page: 1,
       limit: 20,
       total: 1,
@@ -152,9 +200,60 @@ describe("StreamsController", () => {
     expect(res).toEqual(expect.objectContaining({ id: "9", name: "n" }))
   })
 
+  it("update with visibility flip (issue #393) passes through to service", async () => {
+    const dto = { visibility: "public" as const }
+    mockService.update.mockResolvedValue(makeStream({ id: 9, visibility: "public" }))
+    const res = await controller.update(9, dto)
+    expect(mockService.update).toHaveBeenCalledWith(9, dto)
+    expect(res).toEqual(expect.objectContaining({ visibility: "public" }))
+  })
+
   it("delete delegates to service and returns void", async () => {
     mockService.delete.mockResolvedValue(undefined)
     await controller.delete(11)
     expect(mockService.delete).toHaveBeenCalledWith(11)
+  })
+
+  it("listEvents delegates to service and returns events with stringified streamId", async () => {
+    mockService.listEvents.mockResolvedValue({
+      data: [
+        {
+          id: "1",
+          streamId: "1",
+          eventType: "viewer:joined",
+          payload: { viewerId: "u1" },
+          occurredAt: "2026-08-01T00:00:00.000Z",
+        },
+      ],
+      page: 1,
+      limit: 50,
+      total: 1,
+      hasMore: false,
+    })
+    const res = await controller.listEvents(1)
+    expect(mockService.listEvents).toHaveBeenCalledWith(1, 1, 50)
+    expect(res.data[0]).toEqual(
+      expect.objectContaining({
+        id: "1",
+        streamId: "1",
+        eventType: "viewer:joined",
+        occurredAt: "2026-08-01T00:00:00.000Z",
+      }),
+    )
+    expect(res.hasMore).toBe(false)
+  })
+
+  it("listEvents paginates non-trivial totals", async () => {
+    mockService.listEvents.mockResolvedValue({
+      data: [],
+      page: 2,
+      limit: 25,
+      total: 51,
+      hasMore: true,
+    })
+    const res = await controller.listEvents(1, 2, 25)
+    expect(mockService.listEvents).toHaveBeenCalledWith(1, 2, 25)
+    expect(res.hasMore).toBe(true)
+    expect(res.total).toBe(51)
   })
 })

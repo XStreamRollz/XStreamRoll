@@ -1,13 +1,16 @@
 import { HttpClient, HttpRequestError } from "./http"
+import { paginateAll as createIterator, type PaginatedFetcher } from "./pagination"
+
 import {
   ApiError,
-  type StreamEvent,
-  type StreamConfig,
-  type Stream,
+  type ApiErrorResponse,
   type AuthTokens,
   type CreateUserDto,
-  type ApiErrorResponse,
   type CreateWebhookDto,
+  type Stream,
+  type StreamConfig,
+  type StreamEvent,
+  type PaginatedResponse,
   type WebhookSubscription,
 } from "./types"
 
@@ -133,6 +136,49 @@ export class StreamingClient {
       body: dto,
     })
   }
+
+  // ── Pagination (#390) ─────────────────────────────────────────────────────
+
+  /**
+   * Returns an `AsyncIterable<T>` that walks every page of a paginated
+   * list endpoint (issue #390). Each item is yielded exactly once,
+   * computed from the server's paginated envelope. `hasMore` is derived
+   * from `(page - 1) * limit < total`, so this works even on servers
+   * that omit the legacy `hasMore` boolean.
+   *
+   * ```ts
+   * for await (const stream of client.paginateAll<Stream>("/streams")) {
+   *   console.log(stream.id)
+   * }
+   * ```
+   */
+  paginateAll<T>(
+    path: string,
+    params: { limit?: number; startPage?: number; maxPages?: number } = {},
+    signal?: AbortSignal,
+  ): AsyncIterable<T> {
+    const fetcher: PaginatedFetcher<T> = async (
+      { page, limit }: { page: number; limit: number },
+      sig?: AbortSignal,
+    ): Promise<PaginatedResponse<T>> => {
+      const url = `${path}?page=${page}&limit=${limit}`
+      const response = sig
+        ? await this.http.get(url, { signal: sig })
+        : await this.http.get(url)
+      if (!response.ok) {
+        throw await toApiError(response)
+      }
+      return await parseJsonBody<PaginatedResponse<T>>(response)
+    }
+    return createIterator<T>(fetcher, {
+      limit: params.limit,
+      startPage: params.startPage,
+      maxPages: params.maxPages,
+      signal,
+    })
+  }
+
+  // ── Internal helpers ──────────────────────────────────────────────────────
 
   /**
    * Shared JSON request helper used by all StreamingClient methods.
