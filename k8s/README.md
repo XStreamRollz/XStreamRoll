@@ -14,6 +14,7 @@ data store.
 - **Processing Deployment** (Node worker) — `k8s/40-processing.yaml`
 - **Ingress** (TLS via cert-manager — issue #325) — `k8s/60-ingress.yaml`
 - **cert-manager ClusterIssuers** (self-signed + Let's Encrypt staging) — `k8s/50-cert-issuer.yaml`
+- **NetworkPolicies** (default-deny + scoped allow rules for every pod — issue #357) — `k8s/70-network-policies.yaml`
 - **Kustomize entrypoint** — `k8s/kustomization.yaml`
 
 Container images are published by `.github/workflows/release.yml` to:
@@ -99,6 +100,81 @@ curl -vI https://xstreamroll.example.com/api/health 2>&1 | grep -E '^< (HTTP|Loc
 ```
 
 The response must be `HTTP/2 200`. A `301` to the HTTPS URL confirms `ssl-redirect` is active; a cleartext `HTTP 200` indicates the issuer or annotation is misconfigured.
+
+## Network segmentation (issue #357)
+
+`k8s/70-network-policies.yaml` ships a default-deny, allow-by-exception
+posture for the `xstreamroll` namespace. The base rules drop **every**
+ingress and egress packet; specific allowances are layered on top for
+exactly the flows the platform needs.
+
+| Source | Port | Target | Use |
+|---|---|---|---|
+| `app=api` | 5432 | `app=postgres` | Postgres connection from the backend |
+| `app=api` | 6379 | `app=redis` | Redis cache + token denylist |
+| `app=api` | 4318 | `app=jaeger` | OTLP trace export (when Jaeger is deployed) |
+| `app=app` | 3001 | `app=api` | Server-side fetches from the Next.js app |
+| `app=processing` | 3001 | `app=api` | Worker polling the API for events |
+| `app=kube-system/kube-dns` | 53 (UDP/TCP) | any pod in namespace | Name resolution |
+
+Ingress rules are mirrored for the cluster-internal HTTP probes:
+
+| Source | Port | Target | Use |
+|---|---|---|---|
+| `app=api` | 5432 | `app=postgres` | Postgres ingress from the API |
+| `app=api` | 6379 | `app=redis` | Redis ingress from the API |
+| `app=app`, `app=processing` | 3001 | `app=api` | API ingress from the app + worker |
+| Any pod in namespace | 3000 | `app=app` | Ingress controller routes external HTTPS to the app |
+| Any pod in namespace | 3002 | `app=processing` | Prometheus health/metrics scrape on the worker |
+
+### Adding a new flow
+
+If a new component needs cross-pod traffic, add a narrowly-scoped
+`allow-<source>-<destination>` `NetworkPolicy` in
+`70-network-policies.yaml` and re-apply with `kubectl apply -k k8s/`.
+The default-deny guard makes the change visible in the diff (and easy
+to audit in a PR review).
+
+### Known limitations
+
+- **Prometheus scraping.** The `processing` worker’s `/healthz` and
+  metrics endpoints are reachable from any pod in the `xstreamroll`
+  namespace. The kube-prometheus-stack (or any Prometheus
+  installation) typically lives in a separate `monitoring` namespace;
+  operators deploying such a stack MUST either:
+  1. Add a `namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: monitoring } }`
+     ingress rule for label `app: processing` port `:3002`, or
+  2. Enable Pod-level labelling and rely on Prometheus to honor
+     NetworkPolicy-friendly `automaticallyInjectServiceLinks`.
+- **App -> external egress.** The Next.js app is locked down to
+  `api:3001` egress only. Outbound calls to third-party providers
+  (analytics, OAuth, image CDNs) will be silently dropped. Add
+  explicit egress policies before introducing such dependencies.
+- **API -> OTLP egress.** `4318/TCP` is opened to `app: jaeger` in the
+  same namespace. When Jaeger is replaced with an external OTLP
+  endpoint (e.g. Grafana Tempo or Honeycomb), update the egress rule
+  accordingly.
+- **Trust boundary.** The cert-manager HTTP-01 solver needs to reach
+  each Ingress pod on `:80`. If you apply NetworkPolicies that
+  restrict ingress to the `nginx` pods, also allow `cert-manager`
+  solver pods in the same `acme` challenge namespace. The default-deny
+  policy outside `acme/solver` is intentional—don’t relax it without
+  a corresponding `allow-cert-solver` rule.
+
+### Verifying
+
+```bash
+# List every policy in the namespace and confirm defaults are present.
+kubectl -n xstreamroll get networkpolicy
+# Expected (in addition to scenario-specific allow-* policies):
+#   default-deny-egress
+#   default-deny-ingress
+#   allow-dns-egress
+
+# Confirm the API can still reach Postgres after rolling the policy.
+kubectl -n xstreamroll exec deploy/api -- nc -zv postgres 5432
+# expected: postgres (172.20.x.x:5432) open
+```
 
 ## Secrets
 
@@ -205,6 +281,7 @@ kubectl apply -f k8s/30-app.yaml
 kubectl apply -f k8s/40-processing.yaml
 kubectl apply -f k8s/50-cert-issuer.yaml
 kubectl apply -f k8s/60-ingress.yaml
+kubectl apply -f k8s/70-network-policies.yaml
 
 # Build the init ConfigMap yourself. With `disableNameSuffixHash: true`
 # in the Kustomization, Kustomize emits a ConfigMap literally named

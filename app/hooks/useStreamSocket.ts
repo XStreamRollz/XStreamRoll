@@ -13,7 +13,13 @@ import {
   unsubscribeFromStream,
 } from '../lib/websocket';
 
-const MAX_EVENTS = 100;
+// Hard upper bound on the number of stream events the hook retains in
+// memory at any time. Combined with the windowed renderer in
+// `StreamFeed`, a queue of this size keeps the DOM lean even when the
+// underlying stream is sustained. The limit is enforced via
+// `slice(-MAX_EVENTS)` on every append, so the most recent MAX_EVENTS
+// entries always remain available while older ones drop off.
+const MAX_EVENTS = 1000;
 
 // Exponential backoff schedule for reconnection attempts after an
 // unexpected disconnect. See #350.
@@ -190,19 +196,32 @@ export const useStreamSocket = (url: string) => {
       targetStreamId === null ||
       String(payload?.streamId ?? payload?.id ?? '') === targetStreamId
 
+    // Events are appended in chronological order (oldest -> newest) so
+    // that `StreamFeed` can render them top-to-bottom in a virtualized
+    // list. With prepending, the most recent event would sit at index 0
+    // and `scrollToIndex(LAST)` would jump the user back to the top of
+    // the feed instead of the bottom; with appending, the newest event
+    // is always at `events.length - 1`, which is the natural target for
+    // a “scroll to bottom” gesture (#358).
+    //
+    // Behavioural note: this is a breaking change to any consumer that
+    // treated `events[0]` as “the most recent”. Today no consumer in
+    // this repo does that — the display layer renders top-to-bottom —
+    // so a future maintainer re-introducing prepend semantics should
+    // also update the virtualizer’s auto-scroll target.
+    const appendEvent = (ev: StreamEvent) =>
+      setEvents((prev) => [...prev, ev].slice(-MAX_EVENTS))
+
     const onStarted = (payload: any) => {
-      const ev = mapPayload('stream:started', payload)
-      setEvents((prev) => [ev, ...prev].slice(0, MAX_EVENTS))
+      appendEvent(mapPayload('stream:started', payload))
       if (matchesTarget(payload)) setStreamStatus('active')
     }
     const onStopped = (payload: any) => {
-      const ev = mapPayload('stream:stopped', payload)
-      setEvents((prev) => [ev, ...prev].slice(0, MAX_EVENTS))
+      appendEvent(mapPayload('stream:stopped', payload))
       if (matchesTarget(payload)) setStreamStatus('inactive')
     }
     const onError = (payload: any) => {
-      const ev = mapPayload('stream:error', payload)
-      setEvents((prev) => [ev, ...prev].slice(0, MAX_EVENTS))
+      appendEvent(mapPayload('stream:error', payload))
       if (matchesTarget(payload)) setStreamStatus('error')
     }
 
