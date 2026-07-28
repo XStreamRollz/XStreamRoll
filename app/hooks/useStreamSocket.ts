@@ -9,6 +9,7 @@ import {
 } from '../components/StreamViewer/types';
 import {
   createStreamSocket,
+  type CreateStreamSocketOptions,
   subscribeToStream,
   unsubscribeFromStream,
 } from '../lib/websocket';
@@ -53,7 +54,10 @@ export function computeBackoff(
   return Math.min(Math.round(exp), max)
 }
 
-export const useStreamSocket = (url: string) => {
+export const useStreamSocket = (
+  url: string,
+  options: CreateStreamSocketOptions = {},
+) => {
   const socketRef = useRef<Socket | null>(null);
   // AC: safety net inside the hook itself (#350). The consumer should
   // also memoize their `url` prop with useMemo, but if they don't we
@@ -80,6 +84,14 @@ export const useStreamSocket = (url: string) => {
     null,
   );
 
+  // Issue #319 — `options` is destructured into a primitive so it can be
+  // used safely as a useEffect dep without re-running setup every render
+  // (the optional `options` object would be referentially new each
+  // call). Consumers that want to swap tokens mid-lifecycle should
+  // memoise the surrounding options object or accept that changing the
+  // token tears the connection down and rebuilds it (intentional).
+  const token = options?.token
+
   useEffect(() => {
     // Safe-equality guard: skip when the URL is value-equal to the last
     // one we set up against. Strings are primitives so this is reliable;
@@ -97,7 +109,7 @@ export const useStreamSocket = (url: string) => {
     }
     attemptRef.current = 0
 
-    const socket = createStreamSocket(url);
+    const socket = createStreamSocket(url, { token });
     socketRef.current = socket;
 
     setStatus('connecting');
@@ -250,7 +262,7 @@ export const useStreamSocket = (url: string) => {
       // Do not disconnect the shared socket here — it's shared across
       // consumers. We only remove listeners to avoid duplicates.
     }
-  }, [url])
+  }, [url, token])
 
   // AC safety net (#350): memoize the returned object so a parent that
   // re-renders for unrelated reasons doesn't force every consumer to
