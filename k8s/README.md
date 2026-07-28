@@ -214,6 +214,38 @@ npm run validate:network-policies
 The script has no kubectl/docker dependency — it parses YAML and exits
 non-zero with a list of violating rules on failure.
 
+### CI matrix runtime
+
+The `quality` job in `.github/workflows/ci.yml` is a 6-entry matrix
+(`types`, `contracts`, `sdk`, `processing`, `app`, `api`) that runs
+lint + typecheck + test in parallel per workspace. Measured wall-clock
+on the same hardware (Ubuntu 24.04 runner, `npm ci` cache warm):
+
+| Run                                                      | Total wall-clock    | `quality` (max per-entry)                   | `bundle-analysis` |
+| -------------------------------------------------------- | ------------------- | ------------------------------------------- | ----------------- |
+| Pre-matrix (run `30396459659`, single `quality` job)     | **228 s** (3.8 min) | **161 s** (1 job, 6 workspaces serialized)  | 54 s              |
+| Matrix (run `30406266560`, 6 parallel `quality` entries) | **178 s** (3.0 min) | **110 s** (`Quality (api)` — slowest entry) | 62 s              |
+| **Delta**                                                | **−50 s (−22%)**    | **−51 s (−32%)**                            | +8 s              |
+
+The matrix wins ~50 s on the total run because each `quality` entry
+runs on its own runner. The `bundle-analysis` leg is slightly slower
+(+8 s) in the matrix run — not because of wiring (both runs implicitly
+waited on `quality` to finish), but because the matrix run consumes 6
+concurrent runners, which saturates the shared GitHub Actions pool and
+adds latency to the 7th runner that `bundle-analysis` requests. The
+slowest matrix entry is the bottleneck — `Quality (api)` includes the
+Postgres-backed integration spec, so further wall-clock wins would
+require splitting that entry into a `lint+typecheck` and a
+`test:integration` leg so the lighter workspaces don't wait on the
+postgres-backed suite to finish.
+
+Why the matrix refactor: the previous single `quality` job ran all 6
+workspaces sequentially in the same runner, so the wall-clock was the
+sum of every workspace's slowest step. The matrix runs them in parallel
+on separate runners and the wall-clock collapses to the slowest entry.
+The `fail-fast: false` strategy means a slow `Quality (api)` failure
+does not trip the faster workspaces' green status.
+
 ## Secrets
 
 `k8s/10-postgres.yaml` and `k8s/20-api.yaml` commit Secret **templates**
