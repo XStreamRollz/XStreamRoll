@@ -10,6 +10,7 @@ import { SanitizeStringsPipe } from "./common/sanitization/sanitize-strings.pipe
 import { ThrottlerExceptionFilter } from "./throttler-exception.filter"
 import { QueryTimeoutExceptionFilter } from "./database/query-timeout-exception.filter"
 import { resolveCorsOrigins } from "./gateways/streams.gateway"
+import { validateJwtSecret } from "./config/jwt-secret-validator"
 
 // Bypass compression when the response is smaller than this. Anything
 // under ~1 KB doesn't benefit from gzip and the per-request CPU cost
@@ -17,6 +18,12 @@ import { resolveCorsOrigins } from "./gateways/streams.gateway"
 const COMPRESSION_THRESHOLD_BYTES = 1024
 
 async function bootstrap() {
+  // Issue #318: reject weak JWT secrets with a non-zero exit before the
+  // HTTP server binds. Production crashes outright; development/test
+  // only warn so existing in-process fixtures ("test-secret") keep
+  // working.
+  validateJwtSecret()
+
   const app = await NestFactory.create(AppModule)
 
   // Issue #89: Apply Helmet middleware globally for secure HTTP headers
