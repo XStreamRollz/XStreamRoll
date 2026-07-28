@@ -146,20 +146,20 @@ describe('StreamSession - Property-Based Tests', () => {
             // We'll test error state separately
           }
           
-          const expectedValid = validTransitions[currentState]?.includes(nextState) || false;
+          const _expectedValid = validTransitions[currentState]?.includes(nextState) || false;
           
           // Test the transition
-          let actualValid = false;
+          let _actualValid = false;
           try {
             if (nextState === 'running' && currentState === 'idle') {
               s.start();
-              actualValid = true;
+              _actualValid = true;
             } else if (nextState === 'stopped' && (currentState === 'running' || currentState === 'errored')) {
               // stop is async, but we can test it's callable
-              actualValid = true;
+              _actualValid = true;
             }
           } catch (error) {
-            actualValid = false;
+            _actualValid = false;
           }
           
           // This is a simplified check - the actual implementation may vary
@@ -205,10 +205,10 @@ describe('StreamSession - Property-Based Tests', () => {
         (state) => {
           const s = createSession();
           
-          let expectedResult = false;
+          let _expectedResult = false;
           if (state === 'running') {
             s.start();
-            expectedResult = true;
+            _expectedResult = true;
           }
           
           const result = s.enqueue(makeEvent());
@@ -237,7 +237,7 @@ describe('StreamSession - Property-Based Tests', () => {
         fc.constantFrom(...sessionStates),
         fc.constantFrom(...sessionStates),
         (current, next) => {
-          const expectedValid = validTransitions.some(
+          const _expectedValid = validTransitions.some(
             ([c, n]) => c === current && n === next
           );
           
@@ -248,17 +248,17 @@ describe('StreamSession - Property-Based Tests', () => {
             s.start();
           }
           
-          let actualValid = false;
+          let _actualValid = false;
           try {
             if (next === 'running' && current === 'idle') {
               s.start();
-              actualValid = true;
+              _actualValid = true;
             } else if (next === 'stopped' && (current === 'running' || current === 'errored')) {
               // Simplified - just check it's callable
-              actualValid = true;
+              _actualValid = true;
             }
           } catch (error) {
-            actualValid = false;
+            _actualValid = false;
           }
           
           // Just verify no unexpected errors

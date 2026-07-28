@@ -1,5 +1,5 @@
 import { Pool } from "pg"
-import { applySchema, resetDb, createTestApp, destroyTestApp, TestAppContext } from "./database/test-utils"
+import { resetDb, createTestApp, destroyTestApp, TestAppContext } from "./database/test-utils"
 
 describe("Database Integration Tests", () => {
   let ctx: TestAppContext

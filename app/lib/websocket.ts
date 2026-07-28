@@ -60,7 +60,7 @@ export const subscribeToStream = async (
   }
 
   return await new Promise((resolve) => {
-    socket.emit('stream:subscribe', { streamId }, (res: any) => {
+    socket.emit('stream:subscribe', { streamId }, (res: { ok?: boolean } | null) => {
       if (res && res.ok) {
         counts.set(room, 1)
         roomCounts.set(socket, counts)
@@ -85,7 +85,7 @@ export const unsubscribeFromStream = async (
   }
 
   return await new Promise((resolve) => {
-    socket.emit('stream:unsubscribe', { streamId }, (res: any) => {
+    socket.emit('stream:unsubscribe', { streamId }, (res: { ok?: boolean } | null) => {
       counts.delete(room)
       roomCounts.set(socket, counts)
       resolve(res)

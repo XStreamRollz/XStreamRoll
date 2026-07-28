@@ -17,7 +17,6 @@ import { TokenDenylistService } from "./token-denylist.service"
 import { User, UsersRepository } from "./users.repository"
 import { PasswordResetService } from "./password-reset.service"
 import { AuditService } from "../audit/audit.service"
-import { JWT_REFRESH_TOKEN_EXPIRES_IN } from "../config/jwt.config"
 
 /** Rounds for bcrypt key derivation (auto-salt). */
 const BCRYPT_ROUNDS = 12
@@ -57,7 +56,7 @@ export class AuthService {
    */
   async register(dto: RegisterDto, req: Request): Promise<AuthResponse> {
     const ip = this.extractClientIp(req)
-    const userAgent = req.headers["user-agent"] ?? "unknown"
+    const _userAgent = req.headers["user-agent"] ?? "unknown"
 
     const emailExists = await this.usersRepository.findByEmail(dto.email)
     if (emailExists) {
