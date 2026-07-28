@@ -50,9 +50,26 @@ if [ "${#PATHS[@]}" -eq 0 ]; then
   exit 1
 fi
 
-if git diff --exit-code HEAD -- "${PATHS[@]}"; then
+# Capture the diff (including any non-drift git errors — corrupted
+# .git, shallow-clone missing objects, etc.) into a variable before
+# deciding what to emit. Working in a single checkpoint rather
+# than `if git ... then echo ... else ... fi` has two benefits:
+#   1. the diff body lands exactly ONCE, paired with the `::error::`
+#      remediation line — readers see the actionable next step
+#      before the supporting context;
+#   2. any non-drift git failure surfaces in the CI log instead of
+#      being silently swallowed by `|| true` under `set -e`.
+diff_body="$(git --no-pager diff HEAD -- "${PATHS[@]}" 2>&1)" || diff_body=""
+if [ -z "$diff_body" ]; then
   echo "Lockfiles are unchanged — npm ci respected the committed package-lock.json files."
 else
-  echo "::error::npm ci mutated a package-lock.json. Run 'npm install' locally, commit the resulting package-lock.json, and re-run the workflow."
+  # The annotation lands on stderr (not stdout) so it surfaces as a
+  # workflow-run "annotation" rather than just a log line. GitHub
+  # Actions parses `::error::` from either stream, but stderr is
+  # the idiomatic channel for warning-level annotations.
+  echo "::error::npm ci mutated a package-lock.json. Run 'npm install' locally, commit the resulting package-lock.json, and re-run the workflow." >&2
+  # Trim a trailing newline so the diff body sits cleanly under the
+  # remediation line in the GitHub Actions log viewer.
+  printf '%s' "$diff_body"
   exit 1
 fi
