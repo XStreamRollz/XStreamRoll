@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { render, type RenderOptions } from '@testing-library/react'
+import { render } from '@testing-library/react'
 
 export type ThemeMode = 'light' | 'dark'
 
