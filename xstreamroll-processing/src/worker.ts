@@ -1,5 +1,5 @@
 import http from "http"
-import { randomBytes } from "crypto"
+import { randomBytes, randomUUID } from "crypto"
 import axios from "axios"
 import { env } from "./config"
 import {
@@ -16,7 +16,12 @@ import { createLockManager, type LockManager } from "./leader-election"
 import { currentCorrelationId, newCorrelationId } from "./logger"
 
 const API_URL = env.API_URL
-const WORKER_ID = `worker-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+// Issue #347: Use POD_NAME from Kubernetes environment if available,
+// falling back to crypto.randomUUID() for guaranteed uniqueness. The
+// POD_NAME path lets operators correlate worker logs to specific pods
+// in kubectl/Grafana dashboards; the UUID fallback ensures local dev
+// and non-k8s deployments never see collisions.
+const WORKER_ID = process.env.POD_NAME ?? `worker-${randomUUID()}`
 const POLL_INTERVAL_MS = Number(env.POLL_INTERVAL_MS)
 const MAX_CONCURRENT_SESSIONS = Math.max(
   1,
@@ -28,8 +33,7 @@ const HIGH_WATERMARK = MAX_CONCURRENT_SESSIONS * MAX_QUEUE_DEPTH
 // back to the safe default so we don't crash on import.
 const LOCK_BACKEND: "memory" | "postgres" =
   (env.LOCK_BACKEND as "memory" | "postgres" | undefined) ?? "memory"
-const LOCK_TTL_MS: number =
-  (env.LOCK_TTL_MS as number | undefined) ?? 30_000
+const LOCK_TTL_MS: number = (env.LOCK_TTL_MS as number | undefined) ?? 30_000
 
 // Issue #351: the EventFilter config store. Defaults to the same
 // in-process `Map` the worker used before the issue so existing
@@ -236,7 +240,9 @@ async function start(): Promise<void> {
       // In tests, surface the failure as a rejected module load would
       // do, but `void start()` swallows rejections. Re-throw via a
       // process-warning so test runners see the cause.
-      console.warn(`[${WORKER_ID}] tests will see previously-routed events only`)
+      console.warn(
+        `[${WORKER_ID}] tests will see previously-routed events only`,
+      )
     }
     return
   }
@@ -274,7 +280,8 @@ async function start(): Promise<void> {
 
   console.log(
     `[${WORKER_ID}] stream processor started ` +
-      `(max concurrent sessions=${MAX_CONCURRENT_SESSIONS}, ` +
+      `(workerId=${WORKER_ID}, ` +
+      `max concurrent sessions=${MAX_CONCURRENT_SESSIONS}, ` +
       `poll=${POLL_INTERVAL_MS}ms, lockBackend=${LOCK_BACKEND})`,
   )
 
@@ -406,7 +413,10 @@ function logRouteError(streamId: string, message: string): void {
   // smallest — that key's dedup window has spent the most time
   // outside the active suppression period, so it is the most
   // likely candidate for a post-suppression log next.
-  if (!routeErrorDedupe.has(key) && routeErrorDedupe.size >= MAX_TRACKED_ERROR_KEYS) {
+  if (
+    !routeErrorDedupe.has(key) &&
+    routeErrorDedupe.size >= MAX_TRACKED_ERROR_KEYS
+  ) {
     let evictKey: string | undefined
     let evictAt = Number.POSITIVE_INFINITY
     for (const [k, v] of routeErrorDedupe) {
