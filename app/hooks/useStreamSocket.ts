@@ -156,7 +156,7 @@ export const useStreamSocket = (url: string) => {
     };
 
     // Map server payloads to the local StreamEvent shape
-    const mapPayload = (eventName: string, payload: any): StreamEvent => {
+    const mapPayload = (eventName: string, payload: Record<string, unknown>): StreamEvent => {
       const streamId = payload?.streamId ?? payload?.id ?? ''
       const ts =
         payload?.startedAt ?? payload?.stoppedAt ?? payload?.occurredAt ?? new Date().toISOString()
@@ -186,21 +186,21 @@ export const useStreamSocket = (url: string) => {
     // Only update `streamStatus` for events about the stream this hook
     // instance is scoped to. `events` (the raw log) still records
     // everything the socket delivers, unfiltered, as before.
-    const matchesTarget = (payload: any) =>
+    const matchesTarget = (payload: Record<string, unknown>) =>
       targetStreamId === null ||
       String(payload?.streamId ?? payload?.id ?? '') === targetStreamId
 
-    const onStarted = (payload: any) => {
+    const onStarted = (payload: Record<string, unknown>) => {
       const ev = mapPayload('stream:started', payload)
       setEvents((prev) => [ev, ...prev].slice(0, MAX_EVENTS))
       if (matchesTarget(payload)) setStreamStatus('active')
     }
-    const onStopped = (payload: any) => {
+    const onStopped = (payload: Record<string, unknown>) => {
       const ev = mapPayload('stream:stopped', payload)
       setEvents((prev) => [ev, ...prev].slice(0, MAX_EVENTS))
       if (matchesTarget(payload)) setStreamStatus('inactive')
     }
-    const onError = (payload: any) => {
+    const onError = (payload: Record<string, unknown>) => {
       const ev = mapPayload('stream:error', payload)
       setEvents((prev) => [ev, ...prev].slice(0, MAX_EVENTS))
       if (matchesTarget(payload)) setStreamStatus('error')

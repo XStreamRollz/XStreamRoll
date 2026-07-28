@@ -20,6 +20,7 @@ import { AuditModule } from "../audit/audit.module"
     JwtModule.registerAsync({
       name: "JWT_REFRESH",
       useFactory: () => createRefreshJwtConfig(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- required for NestJS named JwtModule registration
     } as any),
   ],
   controllers: [AuthController],
