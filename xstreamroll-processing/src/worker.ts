@@ -23,13 +23,14 @@ const MAX_CONCURRENT_SESSIONS = Math.max(
   Number(process.env.MAX_CONCURRENT_SESSIONS ?? 32),
 )
 const MAX_QUEUE_DEPTH = Math.max(1, Number(env.MAX_QUEUE_DEPTH))
+const POLL_BATCH_SIZE: number =
+  (env.POLL_BATCH_SIZE as number | undefined) ?? 100
 const HIGH_WATERMARK = MAX_CONCURRENT_SESSIONS * MAX_QUEUE_DEPTH
 // `env.LOCK_BACKEND` may be missing in hand-rolled test mocks; fall
 // back to the safe default so we don't crash on import.
 const LOCK_BACKEND: "memory" | "postgres" =
   (env.LOCK_BACKEND as "memory" | "postgres" | undefined) ?? "memory"
-const LOCK_TTL_MS: number =
-  (env.LOCK_TTL_MS as number | undefined) ?? 30_000
+const LOCK_TTL_MS: number = (env.LOCK_TTL_MS as number | undefined) ?? 30_000
 
 // Issue #351: the EventFilter config store. Defaults to the same
 // in-process `Map` the worker used before the issue so existing
@@ -163,65 +164,100 @@ async function pollOnce(): Promise<void> {
     )
     return
   }
-  let events: StreamEvent[] = []
-  try {
-    const response = await axiosInstance.get<StreamEvent[]>(
-      `${API_URL}/streams/pending`,
-    )
-    events = Array.isArray(response.data) ? response.data : []
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    console.error(`[${WORKER_ID}] polling failed: ${message}`)
-    setQueueDepth(registry.totalQueueDepth())
-    return
-  }
 
-  for (const event of events) {
-    if (
-      !event ||
-      typeof event.streamId !== "string" ||
-      event.streamId.length === 0
-    ) {
-      console.warn(`[${WORKER_ID}] dropping malformed event`, event)
-      continue
-    }
-    if (!filter.allow(event)) {
-      continue // silently drop filtered events
-    }
-    let result: "enqueued" | "capacity" | "rejected" | "locked"
+  // Fetch events in bounded batches until the server signals there are no
+  // more (nextCursor === null) or we reach the high-watermark mid-page.
+  let cursor = 0
+  let totalFetched = 0
+
+  while (!shuttingDown) {
+    let events: StreamEvent[] = []
+    let nextCursor: number | null = null
+
     try {
-      // `route()` re-throws coordinator errors (lock backend
-      // unreachable, etc.). Catching here keeps one bad event
-      // from tearing down the entire poll loop — the next batch
-      // gets a chance, the worker stays up, and we surface the
-      // error in the logs (deduplicated so a sustained outage
-      // doesn't flood stderr).
-      result = await registry.route(event)
+      const response = await axiosInstance.get<{
+        data: StreamEvent[]
+        nextCursor: number | null
+      }>(`${API_URL}/streams/pending?limit=${POLL_BATCH_SIZE}&cursor=${cursor}`)
+
+      // Support both the new paginated shape { data, nextCursor } and the
+      // legacy plain-array response so tests that mock the old format keep
+      // working during the rollout period.
+      if (Array.isArray(response.data)) {
+        events = response.data
+        nextCursor =
+          events.length < POLL_BATCH_SIZE ? null : cursor + events.length
+      } else {
+        events = Array.isArray(response.data?.data) ? response.data.data : []
+        nextCursor = response.data?.nextCursor ?? null
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      logRouteError(event.streamId, message)
-      continue
+      console.error(`[${WORKER_ID}] polling failed: ${message}`)
+      setQueueDepth(registry.totalQueueDepth())
+      return
     }
-    if (result === "capacity") {
-      const cap = registry.capacity()
-      console.warn(
-        `[${WORKER_ID}] at capacity (${cap.used}/${cap.max}); dropping event for stream ${event.streamId}`,
-      )
-    } else if (result === "rejected") {
-      console.warn(
-        `[${WORKER_ID}] session for stream ${event.streamId} no longer accepting events`,
-      )
-    } else if (result === "locked") {
-      // Another live worker owns this stream; the event will be
-      // re-polled by us or another worker after the holder
-      // releases or its TTL expires (issue #216).
-      console.log(
-        `[${WORKER_ID}] stream ${event.streamId} owned by another worker; skipping`,
-      )
-    }
-  }
 
-  setQueueDepth(registry.totalQueueDepth())
+    totalFetched += events.length
+
+    for (const event of events) {
+      if (
+        !event ||
+        typeof event.streamId !== "string" ||
+        event.streamId.length === 0
+      ) {
+        console.warn(`[${WORKER_ID}] dropping malformed event`, event)
+        continue
+      }
+      if (!filter.allow(event)) {
+        continue // silently drop filtered events
+      }
+      let result: "enqueued" | "capacity" | "rejected" | "locked"
+      try {
+        result = await registry.route(event)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        logRouteError(event.streamId, message)
+        continue
+      }
+      if (result === "capacity") {
+        const cap = registry.capacity()
+        console.warn(
+          `[${WORKER_ID}] at capacity (${cap.used}/${cap.max}); dropping event for stream ${event.streamId}`,
+        )
+      } else if (result === "rejected") {
+        console.warn(
+          `[${WORKER_ID}] session for stream ${event.streamId} no longer accepting events`,
+        )
+      } else if (result === "locked") {
+        console.log(
+          `[${WORKER_ID}] stream ${event.streamId} owned by another worker; skipping`,
+        )
+      }
+    }
+
+    setQueueDepth(registry.totalQueueDepth())
+
+    // Stop paging if:
+    //   • the server says there are no more events (nextCursor === null), or
+    //   • the batch was smaller than the page size (last page), or
+    //   • we've now hit the high-watermark (back-pressure)
+    const currentDepth = registry.totalQueueDepth()
+    if (
+      nextCursor === null ||
+      events.length < POLL_BATCH_SIZE ||
+      currentDepth >= HIGH_WATERMARK
+    ) {
+      if (currentDepth >= HIGH_WATERMARK && totalFetched > 0) {
+        console.warn(
+          `[${WORKER_ID}] high-watermark reached mid-poll (fetched ${totalFetched} events); pausing pagination`,
+        )
+      }
+      break
+    }
+
+    cursor = nextCursor
+  }
 }
 
 async function start(): Promise<void> {
@@ -236,7 +272,9 @@ async function start(): Promise<void> {
       // In tests, surface the failure as a rejected module load would
       // do, but `void start()` swallows rejections. Re-throw via a
       // process-warning so test runners see the cause.
-      console.warn(`[${WORKER_ID}] tests will see previously-routed events only`)
+      console.warn(
+        `[${WORKER_ID}] tests will see previously-routed events only`,
+      )
     }
     return
   }
@@ -406,7 +444,10 @@ function logRouteError(streamId: string, message: string): void {
   // smallest — that key's dedup window has spent the most time
   // outside the active suppression period, so it is the most
   // likely candidate for a post-suppression log next.
-  if (!routeErrorDedupe.has(key) && routeErrorDedupe.size >= MAX_TRACKED_ERROR_KEYS) {
+  if (
+    !routeErrorDedupe.has(key) &&
+    routeErrorDedupe.size >= MAX_TRACKED_ERROR_KEYS
+  ) {
     let evictKey: string | undefined
     let evictAt = Number.POSITIVE_INFINITY
     for (const [k, v] of routeErrorDedupe) {
