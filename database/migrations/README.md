@@ -1,14 +1,22 @@
 # Database Migrations
 
+> **Issue #340** — applied migrations are now tracked by
+> [node-pg-migrate](https://github.com/salsita/node-pg-migrate). The
+> runner replaces the previous "manually invoke each `psql -f` script"
+> workflow and the legacy `apply-migrations.sh` helper. Old psql
+> invocations still work against an existing migration file (they
+> remain idempotent), but new deployments and CI should use the
+> tracked runner so future rollouts know which migrations have already
+> been applied.
+
 Each migration is shipped as a paired `.up.sql` / `.down.sql` file under
-this directory. The filename convention is:
-
-```
-<YYYYMMDD><NN>_<short_description>.{up,down}.sql
-```
-
-where `<NN>` is a two-digit counter for migrations that land on the
-same day (so ordering remains deterministic).
+this directory. node-pg-migrate's SQL mode accepts the existing
+`<prefix>_<short_description>.up.sql` / `.down.sql` layout unchanged.
+The `<prefix>` is any sortable string; existing migrations use
+`<YYYYMMDD><NN>` where `<NN>` is a two-digit counter for migrations
+that land on the same day. New ones generated via `npm run migrate:create`
+land with the timestamp that node-pg-migrate picks at creation time —
+lexicographic ordering keeps both styles in lockstep.
 
 ## Conventions
 
@@ -22,7 +30,39 @@ same day (so ordering remains deterministic).
 - The cumulative state produced by applying every migration in order
   must be byte-equivalent to the schema in `database/schema.sql`.
 
-## Applying
+## Applying (recommended)
+
+The change is intentionally backwards-compatible: every existing
+migration is already idempotent (`CREATE ... IF NOT EXISTS`), so running
+`node-pg-migrate up` against a database that already has the schema
+applied manually will succeed without double-applying anything. The
+runner records each migration in a `pgmigrations` table so subsequent
+invocations only run the unappplied ones.
+
+```bash
+# Forward: apply all pending migrations
+cd api && npm run migrate
+
+# Roll back the most recently-applied migration
+cd api && npm run migrate:down
+
+# Re-apply the most recently-applied migration (after fixing the SQL)
+cd api && npm run migrate:redo
+
+# Generate a new migration pair (creates <timestamp>_<name>.up.sql and .down.sql)
+cd api && npm run migrate:create my-change
+```
+
+The runner reads its configuration from `api/.migraterc.js`, which
+points `dir` at this directory and sets `migrationFileLanguage: "sql"`.
+`DATABASE_URL` is consumed from the environment the same way NestJS
+already reads it at runtime.
+
+## Applying (legacy psql fallback)
+
+If you need to maintain a database that predates the migration runner
+and don't want to introduce node-pg-migrate, the original psql-based
+workflow remains valid because every migration is idempotent:
 
 ```bash
 # Forward
@@ -34,15 +74,16 @@ psql -d "$DATABASE_URL" -f database/migrations/2026051501_add_stream_tags.down.s
 
 ## Listing
 
-| File                                       | Adds                                  |
-| ------------------------------------------ | ------------------------------------- |
-| `2026051501_add_stream_tags.up.sql`        | `tags`, `stream_tags`, supporting indexes |
-| `2026061001_add_password_hash.up.sql`      | `users.password_hash` (nullable → backfill → `NOT NULL`, no default) |
-| `2026061002_add_user_password_hash.up.sql` | `users.password_hash` — redundant re-add, no-op after `2026061001` via `IF NOT EXISTS` |
-| `2026071701_add_stream_event_latency.up.sql` | `stream_events.processing_latency_ms`, covering analytics index |
-| `2026072001_add_webhook_subscriptions.up.sql` | `webhook_subscriptions`, `webhook_deliveries`, supporting indexes |
-| `2026072501_add_composite_stream_events_index.up.sql` | `idx_stream_events_stream_id_created_at_desc` — composite index for the `WHERE stream_id = ? ORDER BY created_at DESC` query pattern
-| | `2026072301_add_notifications_expiry.up.sql` | `notifications.expires_at`, backfilled from `created_at`, covering index |
+| File                                                  | Adds                                                                                                                                 |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `2026051501_add_stream_tags.up.sql`                   | `tags`, `stream_tags`, supporting indexes                                                                                            |
+| `2026061001_add_password_hash.up.sql`                 | `users.password_hash` (nullable → backfill → `NOT NULL`, no default)                                                                 |
+| `2026061002_add_user_password_hash.up.sql`            | `users.password_hash` — redundant re-add, no-op after `2026061001` via `IF NOT EXISTS`                                               |
+| `2026071701_add_stream_event_latency.up.sql`          | `stream_events.processing_latency_ms`, covering analytics index                                                                      |
+| `2026072001_add_webhook_subscriptions.up.sql`         | `webhook_subscriptions`, `webhook_deliveries`, supporting indexes                                                                    |
+| `2026072501_add_composite_stream_events_index.up.sql` | `idx_stream_events_stream_id_created_at_desc` — composite index for the `WHERE stream_id = ? ORDER BY created_at DESC` query pattern |
+|                                                       | `2026072301_add_notifications_expiry.up.sql`                                                                                         | `notifications.expires_at`, backfilled from `created_at`, covering index |
+
 > **Note on `2026061001` / `2026061002`:** both migrations add the same
 > `users.password_hash` column. `2026061001_add_password_hash` is the
 > canonical one — it matches `database/schema.sql` exactly
@@ -63,7 +104,7 @@ forever:
 - `NotificationsService.sweepExpired` runs on a fixed interval
   (`@Interval`, matching the retry-sweep pattern used by
   `WebhooksService`) and deletes rows with `DELETE FROM notifications
-  WHERE expires_at < NOW()`, in batches, until nothing due remains.
+WHERE expires_at < NOW()`, in batches, until nothing due remains.
 - `idx_notifications_expires_at` keeps that DELETE an index range scan
   rather than a full table scan as the table grows.
 
