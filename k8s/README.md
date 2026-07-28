@@ -19,32 +19,32 @@ data store.
 
 Container images are published by `.github/workflows/release.yml` to:
 
-| Component | Image |
-|-----------|-------|
-| api       | `ghcr.io/xstreamrollz/xstreamroll-api` |
-| app       | `ghcr.io/xstreamrollz/xstreamroll-app` |
+| Component  | Image                                         |
+| ---------- | --------------------------------------------- |
+| api        | `ghcr.io/xstreamrollz/xstreamroll-api`        |
+| app        | `ghcr.io/xstreamrollz/xstreamroll-app`        |
 | processing | `ghcr.io/xstreamrollz/xstreamroll-processing` |
 
 ## Health probes
 
-| Service    | Liveness  | Readiness  | Notes |
-|------------|-----------|------------|-------|
-| api        | `/livez`  | `/health`  | Readiness pings Postgres; liveness is DB-free to avoid restart loops. |
+| Service    | Liveness      | Readiness     | Notes                                                                                      |
+| ---------- | ------------- | ------------- | ------------------------------------------------------------------------------------------ |
+| api        | `/livez`      | `/health`     | Readiness pings Postgres; liveness is DB-free to avoid restart loops.                      |
 | app        | `/api/health` | `/api/health` | Returns static `ok` payload; bypasses project middleware (matcher is `/dashboard/:path*`). |
-| processing | `/livez`  | `/healthz` | Readiness flips to 503 the moment `GracefulShutdown` flips `shuttingDown=true`. |
+| processing | `/livez`      | `/healthz`    | Readiness flips to 503 the moment `GracefulShutdown` flips `shuttingDown=true`.            |
 
 `terminationGracePeriodSeconds` on every Deployment is ≥60s so the
 worker's 15s graceful-shutdown hook has room to drain.
 
 ### Processing worker shutdown timing
 
-| Phase | Duration | Notes |
-|-------|----------|-------|
-| `preStop` sleep | 5s | Delays SIGTERM delivery via `sleep 5` |
-| GracefulShutdown | 15s | Code drain in `src/lifecycle.ts` |
-| Readiness fail window | 30s | `failureThreshold: 6` × `periodSeconds: 5` |
-| Total drain budget | 20s | 5s + 15s — within the 60s grace period |
-| `terminationGracePeriodSeconds` | 60s | Hard limit before SIGKILL |
+| Phase                           | Duration | Notes                                      |
+| ------------------------------- | -------- | ------------------------------------------ |
+| `preStop` sleep                 | 5s       | Delays SIGTERM delivery via `sleep 5`      |
+| GracefulShutdown                | 15s      | Code drain in `src/lifecycle.ts`           |
+| Readiness fail window           | 30s      | `failureThreshold: 6` × `periodSeconds: 5` |
+| Total drain budget              | 20s      | 5s + 15s — within the 60s grace period     |
+| `terminationGracePeriodSeconds` | 60s      | Hard limit before SIGKILL                  |
 
 ## Non-root security
 
@@ -60,11 +60,11 @@ The cluster MUST have [cert-manager](https://cert-manager.io/docs/installation/)
 
 Two ClusterIssuers ship by default (`k8s/50-cert-issuer.yaml`):
 
-| Issuer | Use |
-|--------|-----|
-| `selfsigned-issuer` | Local clusters without public DNS — mints an untrusted cert so the rest of the stack can be exercised end-to-end. Use this while developing against `minikube`/`kind`. |
-| `letsencrypt-staging` | Preview / staging clusters where the hostname resolves publicly but a production-signed cert is not desired. |
-| `letsencrypt-prod` | **Commented out by default.** Enable only after `ops@example.com` is replaced in `k8s/50-cert-issuer.yaml` and DNS for `spec.rules[0].host` resolves to the Ingress controller. |
+| Issuer                | Use                                                                                                                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `selfsigned-issuer`   | Local clusters without public DNS — mints an untrusted cert so the rest of the stack can be exercised end-to-end. Use this while developing against `minikube`/`kind`.          |
+| `letsencrypt-staging` | Preview / staging clusters where the hostname resolves publicly but a production-signed cert is not desired.                                                                    |
+| `letsencrypt-prod`    | **Commented out by default.** Enable only after `ops@example.com` is replaced in `k8s/50-cert-issuer.yaml` and DNS for `spec.rules[0].host` resolves to the Ingress controller. |
 
 The Ingress picks the issuer through this annotation:
 
@@ -108,24 +108,24 @@ posture for the `xstreamroll` namespace. The base rules drop **every**
 ingress and egress packet; specific allowances are layered on top for
 exactly the flows the platform needs.
 
-| Source | Port | Target | Use |
-|---|---|---|---|
-| `app=api` | 5432 | `app=postgres` | Postgres connection from the backend |
-| `app=api` | 6379 | `app=redis` | Redis cache + token denylist |
-| `app=api` | 4318 | `app=jaeger` | OTLP trace export (when Jaeger is deployed) |
-| `app=app` | 3001 | `app=api` | Server-side fetches from the Next.js app |
-| `app=processing` | 3001 | `app=api` | Worker polling the API for events |
-| `app=kube-system/kube-dns` | 53 (UDP/TCP) | any pod in namespace | Name resolution |
+| Source                     | Port         | Target               | Use                                         |
+| -------------------------- | ------------ | -------------------- | ------------------------------------------- |
+| `app=api`                  | 5432         | `app=postgres`       | Postgres connection from the backend        |
+| `app=api`                  | 6379         | `app=redis`          | Redis cache + token denylist                |
+| `app=api`                  | 4318         | `app=jaeger`         | OTLP trace export (when Jaeger is deployed) |
+| `app=app`                  | 3001         | `app=api`            | Server-side fetches from the Next.js app    |
+| `app=processing`           | 3001         | `app=api`            | Worker polling the API for events           |
+| `app=kube-system/kube-dns` | 53 (UDP/TCP) | any pod in namespace | Name resolution                             |
 
 Ingress rules are mirrored for the cluster-internal HTTP probes:
 
-| Source | Port | Target | Use |
-|---|---|---|---|
-| `app=api` | 5432 | `app=postgres` | Postgres ingress from the API |
-| `app=api` | 6379 | `app=redis` | Redis ingress from the API |
-| `app=app`, `app=processing` | 3001 | `app=api` | API ingress from the app + worker |
-| Any pod in namespace | 3000 | `app=app` | Ingress controller routes external HTTPS to the app |
-| Any pod in namespace | 3002 | `app=processing` | Prometheus health/metrics scrape on the worker |
+| Source                      | Port | Target           | Use                                                 |
+| --------------------------- | ---- | ---------------- | --------------------------------------------------- |
+| `app=api`                   | 5432 | `app=postgres`   | Postgres ingress from the API                       |
+| `app=api`                   | 6379 | `app=redis`      | Redis ingress from the API                          |
+| `app=app`, `app=processing` | 3001 | `app=api`        | API ingress from the app + worker                   |
+| Any pod in namespace        | 3000 | `app=app`        | Ingress controller routes external HTTPS to the app |
+| Any pod in namespace        | 3002 | `app=processing` | Prometheus health/metrics scrape on the worker      |
 
 ### Adding a new flow
 
@@ -176,6 +176,44 @@ kubectl -n xstreamroll exec deploy/api -- nc -zv postgres 5432
 # expected: postgres (172.20.x.x:5432) open
 ```
 
+### Static validation (CI guard)
+
+The committed policies are also validated in CI without requiring a
+real cluster. `scripts/validate-network-policies.js` parses
+`k8s/70-network-policies.yaml` against the invariants documented
+above and fails the `validate-k8s` job in `.github/workflows/ci.yml`
+on any regression. The invariants checked are:
+
+1. Every resource is a `networking.k8s.io/v1` `NetworkPolicy`.
+2. `metadata.name` is non-empty and unique.
+3. `metadata.namespace` is `xstreamroll` (no implicit `default`).
+4. `spec.podSelector` and `spec.policyTypes` are present; policy types
+   are limited to `Ingress` / `Egress`.
+5. `podSelector.matchLabels.app` values come from the documented
+   allow-list (`api`, `app`, `processing`, `postgres`, `redis`,
+   `jaeger`). New app labels must be added alongside their traffic
+   rules so the platform team can audit them in the same PR.
+6. `allow-dns-egress` opens BOTH UDP and TCP port 53 (DNS falls back to
+   TCP for large responses; UDP-only would silently break that path).
+7. Every documented `app:*` label has at least one INGRESS allow
+   policy scoped directly to it. The validator does NOT require a
+   per-app egress allow policy: data stores (postgres, redis) and
+   opt-in dependencies (jaeger) don't outbound beyond DNS, and the
+   namespace-wide `default-deny-egress` + `allow-dns-egress` already
+   cover that case. Adding an unused per-app egress policy to satisfy
+   a CI check would be misleading — ops reviewers should see exactly
+   what the pod actually talks to.
+
+Run the validator locally before pushing:
+
+```bash
+npm run validate:network-policies
+# expected: NetworkPolicy validation OK (k8s/70-network-policies.yaml) — N policies (...)
+```
+
+The script has no kubectl/docker dependency — it parses YAML and exits
+non-zero with a list of violating rules on failure.
+
 ## Secrets
 
 `k8s/10-postgres.yaml` and `k8s/20-api.yaml` commit Secret **templates**
@@ -214,11 +252,11 @@ produced by the release workflow.
 The release workflow (`.github/workflows/release.yml`) pushes two tags per
 release:
 
-| Tag format | Example | Use |
-|---|---|---|
-| Semver | `v1.2.3` | Human-readable, used for rollbacks |
-| Short SHA | `sha-abc1234` | Immutable, used for precise rollback |
-| `latest` | `latest` | Convenience alias — **do not use in manifests** |
+| Tag format | Example       | Use                                             |
+| ---------- | ------------- | ----------------------------------------------- |
+| Semver     | `v1.2.3`      | Human-readable, used for rollbacks              |
+| Short SHA  | `sha-abc1234` | Immutable, used for precise rollback            |
+| `latest`   | `latest`      | Convenience alias — **do not use in manifests** |
 
 ### Deploying by semver tag
 
@@ -350,11 +388,11 @@ is rejected before any build step runs.
 
 ## Acceptance criteria mapping
 
-| Issue #217 criterion | Where it lands |
-|----------------------|----------------|
-| Deployments use published Docker images | `image:` in `20-api.yaml`, `30-app.yaml`, `40-processing.yaml` (all pinned to `ghcr.io/xstreamrollz/xstreamroll-*:latest`). |
-| Implement health-check endpoints | `/livez` on api, `/api/health` on app, `/livez`+`/healthz` on processing worker. Tests in `xstreamroll-processing/__tests__/metrics.test.ts`. |
-| Correct separation of ConfigMaps and Secrets | `ConfigMap` resources for `NODE_ENV`, `CORS_ORIGIN`, `PORT`, `API_URL`, etc. `Secret` resources exclusively for `DATABASE_URL`, `JWT_SECRET`, `STREAM_API_KEY`. |
-| Define resource requests/limits | Every container has `resources.requests` + `resources.limits`. |
-| DB credentials not hardcoded | `DATABASE_URL` is sourced from Secret refs (`secretKeyRef` / `secretRef`); only `CHANGEME-*` placeholders committed. |
-| **Issue #325 — Ingress TLS** | `k8s/60-ingress.yaml` `spec.tls` + `cert-manager.io/cluster-issuer` annotation, `k8s/50-cert-issuer.yaml` ClusterIssuers, `kustomization.yaml` wires the issuer into the build, `k8s/README.md` documents the rotation. |
+| Issue #217 criterion                         | Where it lands                                                                                                                                                                                                          |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deployments use published Docker images      | `image:` in `20-api.yaml`, `30-app.yaml`, `40-processing.yaml` (all pinned to `ghcr.io/xstreamrollz/xstreamroll-*:latest`).                                                                                             |
+| Implement health-check endpoints             | `/livez` on api, `/api/health` on app, `/livez`+`/healthz` on processing worker. Tests in `xstreamroll-processing/__tests__/metrics.test.ts`.                                                                           |
+| Correct separation of ConfigMaps and Secrets | `ConfigMap` resources for `NODE_ENV`, `CORS_ORIGIN`, `PORT`, `API_URL`, etc. `Secret` resources exclusively for `DATABASE_URL`, `JWT_SECRET`, `STREAM_API_KEY`.                                                         |
+| Define resource requests/limits              | Every container has `resources.requests` + `resources.limits`.                                                                                                                                                          |
+| DB credentials not hardcoded                 | `DATABASE_URL` is sourced from Secret refs (`secretKeyRef` / `secretRef`); only `CHANGEME-*` placeholders committed.                                                                                                    |
+| **Issue #325 — Ingress TLS**                 | `k8s/60-ingress.yaml` `spec.tls` + `cert-manager.io/cluster-issuer` annotation, `k8s/50-cert-issuer.yaml` ClusterIssuers, `kustomization.yaml` wires the issuer into the build, `k8s/README.md` documents the rotation. |

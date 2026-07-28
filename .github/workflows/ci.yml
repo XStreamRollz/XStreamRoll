@@ -12,9 +12,41 @@ permissions:
   pull-requests: write
 
 jobs:
+  # ----------------------------------------------------------------
+  # Per-workspace lint + typecheck + test, run in parallel. Each
+  # matrix entry runs on its own runner so the wall time drops from
+  # the previous ~15 min (6 sequential lints + 6 sequential
+  # typechecks + 4 sequential test:cov + lockfile checks) to roughly
+  # the slowest single workspace. The actions/setup-node `cache: npm`
+  # hint means each matrix entry's `npm ci` is near-instant on cache
+  # hits.
+  #
+  # The matrix drives WHICH scripts run (lint, typecheck, test:cov)
+  # AND whether the workspace needs the test Docker database. The
+  # postgres service in `services:` is therefore started on every
+  # matrix entry — a few seconds of unused-postgres overhead per entry
+  # in exchange for a single simplified workflow shape.
+  # ----------------------------------------------------------------
   quality:
+    name: Quality (${{ matrix.workspace.label }})
     runs-on: ubuntu-latest
-
+    # Cancel any in-flight job for the same branch / workspace on a new
+    # commit so force-pushes don't queue up.
+    concurrency:
+      group: ci-quality-${{ matrix.workspace.label }}-${{ github.ref }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace:
+          # id-only workspaces first so they fail fast; the integration
+          # suites are last so they get the longest wall-clock budget.
+          - { label: types, path: packages/types, needs_db: false }
+          - { label: contracts, path: tests/contracts, needs_db: false }
+          - { label: sdk, path: xstreamroll-sdk, needs_db: false }
+          - { label: processing, path: xstreamroll-processing, needs_db: false }
+          - { label: app, path: app, needs_db: false }
+          - { label: api, path: api, needs_db: true }
     services:
       postgres:
         image: postgres:16-alpine
@@ -29,7 +61,6 @@ jobs:
           --health-interval 2s
           --health-timeout 2s
           --health-retries 15
-
     steps:
       - uses: actions/checkout@v4
 
@@ -40,10 +71,10 @@ jobs:
           cache: "npm"
 
       # Install ALL workspace dependencies in one shot via the root
-      # `npm ci`. The npm CLI does not support `npm ci` inside individual
-      # workspaces (their lockfile would have to be present at that
-      # path), so a single root install is both correct and faster than
-      # the previous `cd <workspace> && npm install` loop. #375.
+      # `npm ci`. npm itself does not support `npm ci` inside an
+      # individual workspace (the lockfile lives at the repo root for
+      # workspaces in this repo), so a single root install is the
+      # documented path (#375).
       - name: Install workspace dependencies
         run: npm ci
 
@@ -53,147 +84,102 @@ jobs:
       - name: Build contract tests package
         run: npm run build --workspace=tests/contracts
 
-      - name: Lint — types
-        run: cd packages/types && npm run lint
-
-      - name: Lint — contract tests
-        run: cd tests/contracts && npm run lint
-
-      - name: Lint — api
-        run: cd api && npm run lint
+      - name: Lint — ${{ matrix.workspace.label }}
+        run: cd ${{ matrix.workspace.path }} && npm run lint
         env:
+          # Database-bound lint config (api) reads DATABASE_URL; give
+          # it the same postgres service that the test step will use.
           DATABASE_URL: postgresql://test:test@localhost:5432/test
           JWT_SECRET: test-secret
           STREAM_API_KEY: test-api-key
 
-      - name: Lint — sdk
-        run: cd xstreamroll-sdk && npm run lint
-
-      - name: Lint — processing
-        run: cd xstreamroll-processing && npm run lint
-
-      - name: Lint — app
-        run: cd app && npm run lint
-
-      - name: Typecheck — types (build must succeed cleanly)
-        run: cd packages/types && npm run typecheck
-
-      - name: Typecheck — contract tests
-        run: cd tests/contracts && npm run typecheck
-
-      - name: Typecheck — api
-        run: cd api && npx tsc --noEmit
-
-      - name: Typecheck — sdk
-        run: cd xstreamroll-sdk && npx tsc --noEmit
-
-      - name: Typecheck — processing
-        run: cd xstreamroll-processing && npx tsc --noEmit
-
-      - name: Typecheck — app
-        run: cd app && npx tsc --noEmit
+      - name: Typecheck — ${{ matrix.workspace.label }}
+        run: cd ${{ matrix.workspace.path }} && npm run typecheck
 
       - name: Start test database
+        if: matrix.workspace.needs_db
         run: docker compose -f docker-compose.test.yml up -d --wait
 
       # Provider verification for tests/contracts/ runs as part of this
       # step (api/src/contract-provider.spec.ts matches the api Jest
       # config's `*.spec.ts` pattern) — a contract violation fails the
-      # build the same way any other api test failure would.
-      - name: Test — api (with coverage)
-        run: cd api && npm run test:cov
+      # build the same way any other api test failure would. Consumer
+      # contract verification (xstreamroll-sdk/__tests__/contract.consumer.test.ts)
+      # runs in the sdk matrix entry.
+      - name: Test — ${{ matrix.workspace.label }} (with coverage)
+        run: cd ${{ matrix.workspace.path }} && npm run test:cov
         env:
           DATABASE_URL: postgresql://xstreamroll:xstreamroll@localhost:5433/xstreamroll_test
           JWT_SECRET: test-secret
           STREAM_API_KEY: test-api-key
 
       - name: Stop test database
+        if: always() && matrix.workspace.needs_db
         run: docker compose -f docker-compose.test.yml down -v
 
-      # Consumer contract verification for tests/contracts/ runs as part
-      # of this step (xstreamroll-sdk/__tests__/contract.consumer.test.ts).
-      - name: Test — sdk (with coverage)
-        run: cd xstreamroll-sdk && npm run test:cov
-
-      - name: Test — processing (with coverage)
-        run: cd xstreamroll-processing && npm run test:cov
-
-      - name: Test — app (with coverage)
-        run: cd app && npm run test:cov
-
-      - name: Upload api coverage to Codecov
+      - name: Upload ${{ matrix.workspace.label }} coverage to Codecov
         uses: codecov/codecov-action@v4
+        if: always()
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./api/coverage/lcov.info
-          flags: api
-          name: api-coverage
+          files: ${{ matrix.workspace.path }}/coverage/lcov.info
+          flags: ${{ matrix.workspace.label }}
+          name: ${{ matrix.workspace.label }}-coverage
           fail_ci_if_error: false
 
-      - name: Upload sdk coverage to Codecov
-        uses: codecov/codecov-action@v4
+  # ----------------------------------------------------------------
+  # Lockfile-drift guard (issue #375). Runs `npm ci` once at the repo
+  # root and confirms no `package-lock.json` was mutated by the
+  # install. Lives in its own job so it can run in parallel with the
+  # quality matrix — readers get the result faster — and so a failure
+  # is reported independently of any specific workspace's lint/test
+  # results. The samePaths list keeps the guard future-proof: any
+  # workspace that gains a workspace-local lockfile later MUST be
+  # added here.
+  # ----------------------------------------------------------------
+  lockfile:
+    name: Verify lockfile integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./xstreamroll-sdk/coverage/lcov.info
-          flags: sdk
-          name: sdk-coverage
-          fail_ci_if_error: false
+          node-version: "20"
+          cache: "npm"
 
-      - name: Upload processing coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./xstreamroll-processing/coverage/lcov.info
-          flags: processing
-          name: processing-coverage
-          fail_ci_if_error: false
+      - name: Install workspace dependencies
+        run: npm ci
 
-      - name: Upload app coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./app/coverage/lcov.info
-          flags: app
-          name: app-coverage
-          fail_ci_if_error: false
-
-      # Lockfile-drift guard (issue #375). If any `npm ci` invocation
-      # above ended up mutating a `package-lock.json` file, the diff
-      # vs HEAD will be non-empty and the workflow fails. Paths are
-      # listed explicitly because some of the workspaces (app, sdk,
-      # processing, packages/types, tests/contracts) do not have a
-      # workspace-local lockfile today—npm workspaces inherit lockfile
-      # resolution from the root; if a future PR adds a workspace-level
-      # lockfile, this list MUST be updated.
       - name: Verify lockfile integrity
-        run: |
-          set -e
-          # Snapshot every lockfile that npm could conceivably touch.
-          # Today this is just the root + api; the other workspaces
-          # resolve via the root lockfile, but listing them here keeps
-          # the guard future-proof.
-          LOCKFILES=(
-            "package-lock.json"
-            "api/package-lock.json"
-            "app/package-lock.json"
-            "xstreamroll-sdk/package-lock.json"
-            "xstreamroll-processing/package-lock.json"
-            "packages/types/package-lock.json"
-            "tests/contracts/package-lock.json"
-          )
-          # Translate each into a `-- path` arg that ignores files
-          # that don't exist (e.g., workspace-level lockfiles added
-          # later).
-          PATHS=()
-          for f in "${LOCKFILES[@]}"; do
-            [ -f "$f" ] && PATHS+=("$f")
-          done
-          if git diff --exit-code HEAD -- "${PATHS[@]}"; then
-            echo "Lockfiles are unchanged — npm ci respected the committed package-lock.json files."
-          else
-            echo "::error::npm ci mutated a package-lock.json. Run 'npm install' locally, commit the resulting package-lock.json, and re-run the workflow."
-            exit 1
-          fi
+        run: bash .github/scripts/verify-lockfiles.sh
+
+  # ----------------------------------------------------------------
+  # k8s/70-network-policies.yaml validator (issue #357). Runs WITHOUT
+  # a cluster: parses the YAML against documented invariants (see
+  # scripts/validate-network-policies.js for the full list). The
+  # validator fails CI on a regression that would otherwise break
+  # production traffic — e.g., a deleted allow rule or a typo'd
+  # podSelector label — instead of waiting for the rollout.
+  # ----------------------------------------------------------------
+  validate-k8s:
+    name: Validate k8s NetworkPolicies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install workspace dependencies
+        run: npm ci
+
+      - name: Validate NetworkPolicies
+        run: npm run validate:network-policies
 
   bundle-analysis:
     runs-on: ubuntu-latest
@@ -238,32 +224,12 @@ jobs:
           name: app-bundle-summary
           path: app/.next/analyze/summary.json
 
-      # Same lockfile-drift invariant as the `quality` job (#375). The
+      # Same lockfile-drift invariant as the `lockfile` job (#375). The
       # bundle-analysis install path runs again here, so any accidental
       # mutation to a package-lock.json must also fail this job rather
       # than silently propagate.
       - name: Verify lockfile integrity
-        run: |
-          set -e
-          LOCKFILES=(
-            "package-lock.json"
-            "api/package-lock.json"
-            "app/package-lock.json"
-            "xstreamroll-sdk/package-lock.json"
-            "xstreamroll-processing/package-lock.json"
-            "packages/types/package-lock.json"
-            "tests/contracts/package-lock.json"
-          )
-          PATHS=()
-          for f in "${LOCKFILES[@]}"; do
-            [ -f "$f" ] && PATHS+=("$f")
-          done
-          if git diff --exit-code HEAD -- "${PATHS[@]}"; then
-            echo "Lockfiles are unchanged — npm ci respected the committed package-lock.json files."
-          else
-            echo "::error::npm ci mutated a package-lock.json. Run 'npm install' locally, commit the resulting package-lock.json, and re-run the workflow."
-            exit 1
-          fi
+        run: bash .github/scripts/verify-lockfiles.sh
 
       - name: Comment PR with summary
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
