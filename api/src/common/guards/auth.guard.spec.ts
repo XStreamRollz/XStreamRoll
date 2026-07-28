@@ -35,6 +35,7 @@ function contextWithToken(token: string) {
   const context = {
     switchToHttp: () => ({ getRequest: () => req }),
   }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NestJS ExecutionContext requires cast in tests
   return { req, context: context as unknown as any }
 }
 

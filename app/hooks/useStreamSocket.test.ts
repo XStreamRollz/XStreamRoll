@@ -191,7 +191,7 @@ describe("useStreamSocket", () => {
   })
 
   it("escalates the delay across consecutive failed reconnects", () => {
-    const { result } = renderHook(() =>
+    const { result: _result } = renderHook(() =>
       useStreamSocket("ws://localhost:3001/streams/42"),
     )
     const socket = (mockCreate.mock.results[0].value as unknown) as FakeSocket
