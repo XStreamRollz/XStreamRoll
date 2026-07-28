@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
     accessToken = ''
   }
 
-  const apiRes = await fetch('http://localhost:3001/auth/logout', {
+  void await fetch('http://localhost:3001/auth/logout', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
