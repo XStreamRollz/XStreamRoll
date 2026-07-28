@@ -17,7 +17,7 @@ import { TokenDenylistService } from "./token-denylist.service"
 import { User, UsersRepository } from "./users.repository"
 import { PasswordResetService } from "./password-reset.service"
 import { AuditService } from "../audit/audit.service"
-import { JWT_REFRESH_TOKEN_EXPIRES_IN } from "../config/jwt.config"
+import { AuditAction } from "../audit/audit-action.enum"
 
 /** Rounds for bcrypt key derivation (auto-salt). */
 const BCRYPT_ROUNDS = 12
@@ -57,13 +57,13 @@ export class AuthService {
    */
   async register(dto: RegisterDto, req: Request): Promise<AuthResponse> {
     const ip = this.extractClientIp(req)
-    const userAgent = req.headers["user-agent"] ?? "unknown"
 
     const emailExists = await this.usersRepository.findByEmail(dto.email)
     if (emailExists) {
       await this.auditService.log(
         null,
-        `AUTH_REGISTER_FAILURE: email_conflict (${dto.email})`,
+        AuditAction.AUTH_REGISTER_FAILURE,
+        { reason: "email_conflict", email: dto.email },
         ip,
       )
       throw new ConflictException("email is already registered")
@@ -75,7 +75,8 @@ export class AuthService {
     if (usernameExists) {
       await this.auditService.log(
         null,
-        `AUTH_REGISTER_FAILURE: username_conflict (${dto.username})`,
+        AuditAction.AUTH_REGISTER_FAILURE,
+        { reason: "username_conflict", username: dto.username },
         ip,
       )
       throw new ConflictException("username is already taken")
@@ -89,7 +90,12 @@ export class AuthService {
       passwordHash,
     )
 
-    await this.auditService.log(null, `AUTH_REGISTER_SUCCESS (${dto.email})`, ip)
+    await this.auditService.log(
+      null,
+      AuditAction.AUTH_REGISTER_SUCCESS,
+      { email: dto.email },
+      ip,
+    )
 
     return {
       user: toSafeUser(user),
@@ -112,7 +118,8 @@ export class AuthService {
     if (!user) {
       await this.auditService.log(
         null,
-        `AUTH_LOGIN_FAILURE: user_not_found (${dto.email})`,
+        AuditAction.AUTH_LOGIN_FAILURE,
+        { reason: "user_not_found", email: dto.email },
         ip,
       )
       throw new UnauthorizedException("invalid email or password")
@@ -122,13 +129,19 @@ export class AuthService {
     if (!valid) {
       await this.auditService.log(
         user.id,
-        `AUTH_LOGIN_FAILURE: invalid_password (${dto.email})`,
+        AuditAction.AUTH_LOGIN_FAILURE,
+        { reason: "invalid_password", email: dto.email },
         ip,
       )
       throw new UnauthorizedException("invalid email or password")
     }
 
-    await this.auditService.log(user.id, `AUTH_LOGIN_SUCCESS (${dto.email})`, ip)
+    await this.auditService.log(
+      user.id,
+      AuditAction.AUTH_LOGIN_SUCCESS,
+      { email: dto.email },
+      ip,
+    )
 
     return {
       user: toSafeUser(user),
@@ -145,7 +158,9 @@ export class AuthService {
 
     await this.verifyRefreshToken(refreshToken)
 
-    const payload = this.refreshJwt.decode(refreshToken) as { sub?: number } | null
+    const payload = this.refreshJwt.decode(refreshToken) as {
+      sub?: number
+    } | null
     const userId = payload?.sub
     if (!userId) {
       throw new UnauthorizedException("invalid refresh token")
@@ -192,9 +207,9 @@ export class AuthService {
     await this.tokenDenylistService.revoke(token, ttlSeconds)
 
     if (refreshToken) {
-      const refreshPayload = this.refreshJwt.decode(refreshToken) as
-        | { exp?: number }
-        | null
+      const refreshPayload = this.refreshJwt.decode(refreshToken) as {
+        exp?: number
+      } | null
       const refreshExpiresAt =
         typeof refreshPayload?.exp === "number" ? refreshPayload.exp : undefined
       if (refreshExpiresAt) {
