@@ -33,7 +33,7 @@ const mockUnsubscribe = unsubscribeFromStream as jest.MockedFunction<
  * flag the backoff path reads before calling `.connect()`.
  */
 class FakeSocket {
-  public listeners = new Map<string, Set<(...args: any[]) => void>>()
+  public listeners = new Map<string, Set<(...args: unknown[]) => void>>()
   public connected = false
 
   public connect = jest.fn(() => {
@@ -43,13 +43,13 @@ class FakeSocket {
     this.connected = false
   })
 
-  public on(event: string, fn: (...args: any[]) => void) {
+  public on(event: string, fn: (...args: unknown[]) => void) {
     if (!this.listeners.has(event)) this.listeners.set(event, new Set())
     this.listeners.get(event)!.add(fn)
     return this
   }
 
-  public off(event: string, fn: (...args: any[]) => void) {
+  public off(event: string, fn: (...args: unknown[]) => void) {
     this.listeners.get(event)?.delete(fn)
     return this
   }

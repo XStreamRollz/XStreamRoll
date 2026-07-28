@@ -1,5 +1,4 @@
 import * as React from 'react'
-import { render } from '@testing-library/react'
 import { buildThemeTest } from '@/lib/test-utils'
 import { useIsMobile } from '@/hooks/use-mobile'
 
