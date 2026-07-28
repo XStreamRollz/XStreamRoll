@@ -2,6 +2,8 @@
 
 # dependencies
 /node_modules
+# scripts/ workspace tools (created by workspace-local `npm install`)
+/scripts/node_modules/
 
 # next.js
 /.next/
