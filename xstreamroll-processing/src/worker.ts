@@ -23,13 +23,14 @@ const MAX_CONCURRENT_SESSIONS = Math.max(
   Number(process.env.MAX_CONCURRENT_SESSIONS ?? 32),
 )
 const MAX_QUEUE_DEPTH = Math.max(1, Number(env.MAX_QUEUE_DEPTH))
+const MAX_PUBLISH_RETRIES: number =
+  (env.PROCESSING_PUBLISH_MAX_RETRIES as number | undefined) ?? 3
 const HIGH_WATERMARK = MAX_CONCURRENT_SESSIONS * MAX_QUEUE_DEPTH
 // `env.LOCK_BACKEND` may be missing in hand-rolled test mocks; fall
 // back to the safe default so we don't crash on import.
 const LOCK_BACKEND: "memory" | "postgres" =
   (env.LOCK_BACKEND as "memory" | "postgres" | undefined) ?? "memory"
-const LOCK_TTL_MS: number =
-  (env.LOCK_TTL_MS as number | undefined) ?? 30_000
+const LOCK_TTL_MS: number = (env.LOCK_TTL_MS as number | undefined) ?? 30_000
 
 // Issue #351: the EventFilter config store. Defaults to the same
 // in-process `Map` the worker used before the issue so existing
@@ -236,7 +237,9 @@ async function start(): Promise<void> {
       // In tests, surface the failure as a rejected module load would
       // do, but `void start()` swallows rejections. Re-throw via a
       // process-warning so test runners see the cause.
-      console.warn(`[${WORKER_ID}] tests will see previously-routed events only`)
+      console.warn(
+        `[${WORKER_ID}] tests will see previously-routed events only`,
+      )
     }
     return
   }
@@ -268,6 +271,7 @@ async function start(): Promise<void> {
     {
       maxConcurrentSessions: MAX_CONCURRENT_SESSIONS,
       maxQueueDepth: MAX_QUEUE_DEPTH,
+      maxPublishRetries: MAX_PUBLISH_RETRIES,
       lockManager,
     },
   )
@@ -406,7 +410,10 @@ function logRouteError(streamId: string, message: string): void {
   // smallest — that key's dedup window has spent the most time
   // outside the active suppression period, so it is the most
   // likely candidate for a post-suppression log next.
-  if (!routeErrorDedupe.has(key) && routeErrorDedupe.size >= MAX_TRACKED_ERROR_KEYS) {
+  if (
+    !routeErrorDedupe.has(key) &&
+    routeErrorDedupe.size >= MAX_TRACKED_ERROR_KEYS
+  ) {
     let evictKey: string | undefined
     let evictAt = Number.POSITIVE_INFINITY
     for (const [k, v] of routeErrorDedupe) {
