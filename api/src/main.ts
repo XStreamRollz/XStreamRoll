@@ -10,6 +10,7 @@ import { SanitizeStringsPipe } from "./common/sanitization/sanitize-strings.pipe
 import { ThrottlerExceptionFilter } from "./throttler-exception.filter"
 import { QueryTimeoutExceptionFilter } from "./database/query-timeout-exception.filter"
 import { resolveCorsOrigins } from "./gateways/streams.gateway"
+import { env } from "./config/env"
 
 // Bypass compression when the response is smaller than this. Anything
 // under ~1 KB doesn't benefit from gzip and the per-request CPU cost
@@ -74,34 +75,44 @@ async function bootstrap() {
     new QueryTimeoutExceptionFilter(httpAdapter),
   )
 
-  // Swagger / OpenAPI documentation served at /docs.
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle("XStreamRoll API")
-    .setDescription(
-      "REST and WebSocket API for the XStreamRoll streaming platform.",
-    )
-    .setVersion("1.0.0")
-    .addBearerAuth(
-      {
-        type: "http",
-        scheme: "bearer",
-        bearerFormat: "JWT",
-        description: "Enter a JWT access token issued by /auth/login.",
-      },
-      "bearer",
-    )
-    .addTag("health", "Liveness and readiness probes")
-    .addTag("streams", "Stream lifecycle CRUD")
-    .build()
+  // Issue #313: Swagger UI is only mounted when not in production or when
+  // explicitly enabled via SWAGGER_ENABLED=true. In production, exposing the
+  // full API schema including all endpoints and auth mechanisms is a security
+  // risk — it serves as an enumeration aid for attackers.
+  const isSwaggerEnabled =
+    env.NODE_ENV !== "production" || env.SWAGGER_ENABLED
 
-  const document = SwaggerModule.createDocument(app, swaggerConfig)
-  SwaggerModule.setup("docs", app, document, {
-    swaggerOptions: { persistAuthorization: true },
-  })
+  if (isSwaggerEnabled) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle("XStreamRoll API")
+      .setDescription(
+        "REST and WebSocket API for the XStreamRoll streaming platform.",
+      )
+      .setVersion("1.0.0")
+      .addBearerAuth(
+        {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT",
+          description: "Enter a JWT access token issued by /auth/login.",
+        },
+        "bearer",
+      )
+      .addTag("health", "Liveness and readiness probes")
+      .addTag("streams", "Stream lifecycle CRUD")
+      .build()
+
+    const document = SwaggerModule.createDocument(app, swaggerConfig)
+    SwaggerModule.setup("docs", app, document, {
+      swaggerOptions: { persistAuthorization: true },
+    })
+  }
 
   await app.listen(3001)
   console.log("API running on http://localhost:3001")
-  console.log("Swagger UI available at http://localhost:3001/docs")
+  if (isSwaggerEnabled) {
+    console.log("Swagger UI available at http://localhost:3001/docs")
+  }
 }
 
 bootstrap()
