@@ -41,12 +41,37 @@ jobs:
         workspace:
           # id-only workspaces first so they fail fast; the integration
           # suites are last so they get the longest wall-clock budget.
-          - { label: types, path: packages/types, needs_db: false }
-          - { label: contracts, path: tests/contracts, needs_db: false }
-          - { label: sdk, path: xstreamroll-sdk, needs_db: false }
-          - { label: processing, path: xstreamroll-processing, needs_db: false }
-          - { label: app, path: app, needs_db: false }
-          - { label: api, path: api, needs_db: true }
+          # `needs_tests: false` skips the `npm run test:cov` step and
+          # the Codecov upload — these workspaces don't ship Jest suites
+          # (types is compile-only; contracts is shared schema/zod
+          # definitions whose provider/consumer verification lives in
+          # the api and sdk matrices respectively).
+          - {
+              label: types,
+              path: packages/types,
+              needs_db: false,
+              needs_tests: false,
+            }
+          - {
+              label: contracts,
+              path: tests/contracts,
+              needs_db: false,
+              needs_tests: false,
+            }
+          - {
+              label: sdk,
+              path: xstreamroll-sdk,
+              needs_db: false,
+              needs_tests: true,
+            }
+          - {
+              label: processing,
+              path: xstreamroll-processing,
+              needs_db: false,
+              needs_tests: true,
+            }
+          - { label: app, path: app, needs_db: false, needs_tests: true }
+          - { label: api, path: api, needs_db: true, needs_tests: true }
     services:
       postgres:
         image: postgres:16-alpine
@@ -107,6 +132,7 @@ jobs:
       # contract verification (xstreamroll-sdk/__tests__/contract.consumer.test.ts)
       # runs in the sdk matrix entry.
       - name: Test — ${{ matrix.workspace.label }} (with coverage)
+        if: matrix.workspace.needs_tests
         run: cd ${{ matrix.workspace.path }} && npm run test:cov
         env:
           DATABASE_URL: postgresql://xstreamroll:xstreamroll@localhost:5433/xstreamroll_test
@@ -119,7 +145,7 @@ jobs:
 
       - name: Upload ${{ matrix.workspace.label }} coverage to Codecov
         uses: codecov/codecov-action@v4
-        if: always()
+        if: always() && matrix.workspace.needs_tests
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ${{ matrix.workspace.path }}/coverage/lcov.info
