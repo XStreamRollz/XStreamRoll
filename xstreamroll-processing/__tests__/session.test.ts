@@ -410,15 +410,12 @@ describe("StreamSession - Property-Based Tests", () => {
       fc.property(fc.constantFrom(...sessionStates), (state) => {
         const s = createSession()
 
-        let _expectedResult = false
         if (state === "running") {
           s.start()
-          _expectedResult = true
         }
 
         const result = s.enqueue(makeEvent())
 
-        // In running state, events should be accepted
         if (state === "running") {
           expect(result).toBe(true)
         } else {
