@@ -11,10 +11,10 @@
     "test": "jest",
     "test:cov": "jest --coverage",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
-    "migrate": "node-pg-migrate up",
-    "migrate:down": "node-pg-migrate down 1",
-    "migrate:redo": "node-pg-migrate redo",
-    "migrate:create": "node-pg-migrate create"
+    "migrate": "node-pg-migrate -m ../database/migrations --migration-file-language sql up",
+    "migrate:down": "node-pg-migrate -m ../database/migrations --migration-file-language sql down 1",
+    "migrate:redo": "node-pg-migrate -m ../database/migrations --migration-file-language sql redo",
+    "migrate:create": "node-pg-migrate -m ../database/migrations --migration-file-language sql create"
   },
   "dependencies": {
     "@nestjs/cache-manager": "^2.3.0",
