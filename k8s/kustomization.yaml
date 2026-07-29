@@ -31,7 +31,21 @@ resources:
   - 20-api.yaml
   - 30-app.yaml
   - 40-processing.yaml
+  - 50-redis.yaml
+  # ClusterIssuer(s) that mint the Ingress TLS cert — issue #325.
+  # Requires cert-manager to be installed in the cluster, see
+  # k8s/50-cert-issuer.yaml header comment.
+  - 50-cert-issuer.yaml
   - 60-ingress.yaml
+  # Network segmentation — issue #357. Required for any real cluster so
+  # pods can't talk to each other freely; pairs with the default-deny
+  # policy in 70-network-policies.yaml.
+  - 70-network-policies.yaml
+  # Uncomment to deploy a development-only Jaeger all-in-one trace collector.
+  # See k8s/70-jaeger.yaml for configuration and usage notes. The
+  # 70-network-policies.yaml file already opens :4318 egress for jaeger
+  # so OTLP traces will keep flowing when this is enabled.
+  # - 70-jaeger.yaml
 
 configMapGenerator:
   # Generates the postgres-init ConfigMap that the StatefulSet mounts

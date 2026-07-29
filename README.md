@@ -8,8 +8,7 @@
 XStreamRoll is a powerful distributed streaming platform designed for developers and content creators who need real-time data streaming capabilities. The platform provides a complete ecosystem for building, managing, and scaling streaming applications with a modern web interface, robust API backend, client SDKs, and dedicated stream processing infrastructure. It's built for teams looking to deploy production-ready streaming solutions without the complexity of managing multiple disconnected services.
 
 ## 📐 Architecture Overview
-
-XStreamRoll is built with scalability in mind.
+XStreamRoll is built with scalability in mind. 
 
 ```mermaid
 flowchart TD
@@ -26,12 +25,12 @@ flowchart TD
     %% Application Boundaries
     subgraph XStreamRoll [XStreamRoll System]
     direction TB
-
+        
         %% Packages
         Client[Client Dashboard\nReact / UI]:::primary
         API[API Gateway\nREST / GraphQL]:::primary
         Core[Core Engine\nRolling Aggregation & State]:::primary
-
+        
         %% Data Layer
         subgraph DataLayer [Data Storage]
          Redis[(Redis\nCache & Fast State)]:::database
@@ -43,30 +42,51 @@ flowchart TD
     Sources -->|Ingests Real-time Data| API
     User -->|Views Dashboard| Client
     Client -->|Queries/Subscribes| API
-
+    
     API -->|Routes Traffic| Core
     Core <-->|Manages State| Redis
     Core <-->|Persists Data| Postgres
     Core -.->|Pushes Updates| Client
-```
+   ```
 
 ### Installation
 
-1. **Fork/Clone the repository**
+#### Option A: Docker Compose (recommended)
 
+The fastest way to get a working environment — no manual `.env` setup, no
+local PostgreSQL install, no starting each service by hand.
+
+1. **Fork/Clone the repository**
+   ```bash
+   git clone https://github.com/XStreamRollz/XStreamRoll
+   cd xstreamroll
+   ```
+
+2. **Start everything**
+   ```bash
+   docker compose up
+   ```
+   This builds and starts PostgreSQL, Redis, the API, the App frontend, and
+   the Processing worker, seeding the database from `database/schema.sql`
+   automatically. All environment variables are pre-configured with
+   local-dev-only defaults in `docker-compose.yml`.
+
+The application should now be running at `http://localhost:3000`.
+
+#### Option B: Run services manually
+
+1. **Fork/Clone the repository**
    ```bash
    git clone https://github.com/XStreamRollz/XStreamRoll
    cd xstreamroll
    ```
 
 2. **Install all dependencies**
-
    ```bash
    npm run install:all
    ```
 
 3. **Set up environment variables**
-
    ```bash
    # Create environment files for each service
    cp app/.env.example app/.env
@@ -74,14 +94,13 @@ flowchart TD
    cp xstreamroll-sdk/.env.example xstreamroll-sdk/.env
    cp xstreamroll-processing/.env.example xstreamroll-processing/.env
    ```
-
+   
    Configure the following variables:
    - `DATABASE_URL` - PostgreSQL connection string
    - `JWT_SECRET` - JWT signing secret
    - `STREAM_API_KEY` - API key for stream authentication
 
 4. **Set up the database**
-
    ```bash
    # Import the schema into PostgreSQL
    psql -d your_database_name -f database/schema.sql
@@ -91,50 +110,82 @@ flowchart TD
    ```bash
    # Start all services concurrently
    npm run dev
-
+   
    # Or start individual services
    npm run dev:app    # Frontend on http://localhost:3000
    npm run dev:api    # API on http://localhost:3001
    ```
-
 The application should now be running at `http://localhost:3000`.
 
 ## 📦 Package Breakdown
-
 This repository contains the following core packages:
 
-| Package  | Description                                           |
-| -------- | ----------------------------------------------------- |
-| `core`   | The main processing engine and state management.      |
-| `api`    | REST/GraphQL API endpoints for external integrations. |
-| `client` | Frontend dashboard for monitoring streams.            |
+| Package | Description |
+|---------|-------------|
+| `core` | The main processing engine and state management. |
+| `api` | REST/GraphQL API endpoints for external integrations. |
+| `client` | Frontend dashboard for monitoring streams. |
 
-_For a full list, see [REPOSITORIES.md](./REPOSITORIES.md)._
+*For a full list, see [REPOSITORIES.md](./REPOSITORIES.md).*
 
 ## 🛠️ Technology Stack
 
-| Category      | Technology                       |
-| ------------- | -------------------------------- |
-| **Language**  | TypeScript / Node.js             |
+| Category | Technology |
+|----------|------------|
+| **Language** | TypeScript / Node.js |
 | **Framework** | [e.g., Express / NestJS / React] |
-| **Database**  | [e.g., PostgreSQL / Redis]       |
-| **Tooling**   | ESLint, Prettier, Jest           |
+| **Database** | [e.g., PostgreSQL / Redis] |
+| **Tooling** | ESLint, Prettier, Jest |
 
-## 📖 API Documentation
+## � Distributed Locking & Race Condition Prevention
 
+XStreamRoll Processing implements distributed locking to prevent duplicate event processing in multi-worker deployments (issue #338). The system ensures that:
+
+- **Lock acquisition happens before session spawning** - No session processes events without confirmed ownership
+- **Concurrent route() calls are deduplicated** - Multiple workers racing for the same stream share a single lock acquisition attempt
+- **Automatic lock renewal** - Heartbeats maintain ownership while sessions are active
+- **Graceful lock release** - Locks are released when sessions stop or error
+
+### Lock Manager Backends
+
+The system supports two lock manager backends:
+
+- **MemoryLockManager** (default) - In-process locking for single-worker deployments
+- **PostgresLockManager** - Distributed locking via PostgreSQL for multi-worker horizontal scaling
+
+Configure via `LOCK_BACKEND` environment variable:
+```bash
+LOCK_BACKEND=memory  # Default, single-worker
+LOCK_BACKEND=postgres  # Multi-worker with DATABASE_URL
+```
+
+### Observability
+
+The enhanced implementation includes comprehensive metrics and structured logging:
+
+**Metrics (exposed at `/metrics`):**
+- `xstreamroll_lock_acquisitions_total` - Total lock acquisition attempts
+- `xstreamroll_lock_acquisitions_denied` - Locks denied (another worker owns stream)
+- `xstreamroll_lock_renewals_total` - Successful lock renewals
+- `xstreamroll_lock_renewals_failed` - Failed renewals (lock lost)
+- `xstreamroll_lock_releases_total` - Successful lock releases
+- `xstreamroll_active_locks` - Current number of active locks
+- `xstreamroll_concurrent_route_dedupes` - Concurrent route() calls deduplicated
+
+**Structured Logging:**
+All lock operations are logged with detailed context including streamId, workerId, timestamps, and error details for production debugging.
+
+## �📖 API Documentation
 Once the local server is running, you can access the full OpenAPI/Swagger documentation at:
 👉 **`http://localhost:3000/docs`**
 
 ## 💻 Development Workflow
-
 We use standard scripts for our development lifecycle:
-
-- `npm run lint` - Run code formatting and linting.
-- `npm run test` - Execute unit and integration tests.
-- `npm run build` - Compile TypeScript to production-ready JavaScript.
+* `npm run lint` - Run code formatting and linting.
+* `npm run test` - Execute unit and integration tests.
+* `npm run build` - Compile TypeScript to production-ready JavaScript.
 
 ## 🚢 Deployment
-
 Deployments are handled automatically via GitHub Actions. Pushing to the `main` branch triggers the CI/CD pipeline which builds the Docker images and deploys them to our staging environment.
 
 ### Testing
@@ -152,7 +203,6 @@ npm run test:sdk
 ### Network Configuration
 
 The platform uses the following default ports:
-
 - Frontend: `3000`
 - API Backend: `3001`
 - Stream Processing: `3002`
@@ -177,13 +227,10 @@ Ensure these ports are available in your environment or update the environment v
 - **Development**: npm workspaces, ESLint, Prettier, Husky
 
 ## 🤝 Contributing
-
 We welcome contributions! Please read our guidelines before submitting a Pull Request:
-
-- [CONTRIBUTING.md](./CONTRIBUTING.md)
-- [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
-- [SECURITY.md](./SECURITY.md)
+* [CONTRIBUTING.md](./CONTRIBUTING.md)
+* [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
+* [SECURITY.md](./SECURITY.md)
 
 ## 📄 License
-
 This project is licensed under the terms found in the [LICENSE](./LICENSE) file.

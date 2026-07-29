@@ -48,6 +48,7 @@ export default function GlobalError({
           </p>
           <button
             onClick={reset}
+            aria-label="Try again after error"
             style={{
               padding: "0.5rem 1.25rem",
               borderRadius: "0.375rem",

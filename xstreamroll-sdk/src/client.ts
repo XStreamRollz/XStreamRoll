@@ -1,12 +1,17 @@
 import { HttpClient, HttpRequestError } from "./http"
+import { paginateAll as createIterator, type PaginatedFetcher } from "./pagination"
+
 import {
   ApiError,
   type ApiErrorResponse,
   type AuthTokens,
   type CreateUserDto,
+  type CreateWebhookDto,
   type Stream,
   type StreamConfig,
   type StreamEvent,
+  type PaginatedResponse,
+  type WebhookSubscription,
 } from "./types"
 
 /** Named environment presets for base URL resolution. */
@@ -72,11 +77,9 @@ export class StreamingClient {
 
   async logout(): Promise<void> {
     if (this.tokens) {
-      await this.requestJson<void>(
-        "/auth/logout",
-        { method: "POST" },
-        { skipAuthRefresh: true },
-      ).catch(() => {})
+      await this.requestJson<void>("/auth/logout", { method: "POST" }, { skipAuthRefresh: true }).catch(
+        () => {},
+      )
     }
     this.tokens = null
   }
@@ -84,7 +87,7 @@ export class StreamingClient {
   async refreshToken(): Promise<AuthTokens> {
     const data = await this.requestJson<AuthTokens>(
       "/auth/refresh",
-      { method: "POST", body: { refreshToken: this.tokens?.refreshToken } },
+      { method: "POST" },
       { skipAuthRefresh: true },
     )
     this.tokens = data
@@ -111,14 +114,71 @@ export class StreamingClient {
 
   async getStreamStatus(streamId: string): Promise<Stream> {
     try {
-      return await this.requestJson<Stream>(`/streams/${streamId}`, {
-        method: "GET",
-      })
+      return await this.requestJson<Stream>(`/streams/${streamId}`, { method: "GET" })
     } catch (error) {
       console.error("Failed to get stream status:", error)
       throw error
     }
   }
+
+  // ── Webhooks ──────────────────────────────────────────────────────────────
+
+  /**
+   * Registers a webhook subscription for stream lifecycle events.
+   *
+   * The returned `secret` is only ever present in this response — store it
+   * immediately and use it with {@link verifyWebhookSignature} to validate
+   * future deliveries.
+   */
+  async subscribeWebhook(dto: CreateWebhookDto): Promise<WebhookSubscription> {
+    return this.requestJson<WebhookSubscription>("/webhooks", {
+      method: "POST",
+      body: dto,
+    })
+  }
+
+  // ── Pagination (#390) ─────────────────────────────────────────────────────
+
+  /**
+   * Returns an `AsyncIterable<T>` that walks every page of a paginated
+   * list endpoint (issue #390). Each item is yielded exactly once,
+   * computed from the server's paginated envelope. `hasMore` is derived
+   * from `(page - 1) * limit < total`, so this works even on servers
+   * that omit the legacy `hasMore` boolean.
+   *
+   * ```ts
+   * for await (const stream of client.paginateAll<Stream>("/streams")) {
+   *   console.log(stream.id)
+   * }
+   * ```
+   */
+  paginateAll<T>(
+    path: string,
+    params: { limit?: number; startPage?: number; maxPages?: number } = {},
+    signal?: AbortSignal,
+  ): AsyncIterable<T> {
+    const fetcher: PaginatedFetcher<T> = async (
+      { page, limit }: { page: number; limit: number },
+      sig?: AbortSignal,
+    ): Promise<PaginatedResponse<T>> => {
+      const url = `${path}?page=${page}&limit=${limit}`
+      const response = sig
+        ? await this.http.get(url, { signal: sig })
+        : await this.http.get(url)
+      if (!response.ok) {
+        throw await toApiError(response)
+      }
+      return await parseJsonBody<PaginatedResponse<T>>(response)
+    }
+    return createIterator<T>(fetcher, {
+      limit: params.limit,
+      startPage: params.startPage,
+      maxPages: params.maxPages,
+      signal,
+    })
+  }
+
+  // ── Internal helpers ──────────────────────────────────────────────────────
 
   /**
    * Shared JSON request helper used by all StreamingClient methods.
@@ -127,11 +187,7 @@ export class StreamingClient {
    */
   private async requestJson<T>(
     path: string,
-    init: {
-      method?: string
-      body?: unknown
-      headers?: Record<string, string>
-    } = {},
+    init: { method?: string; body?: unknown; headers?: Record<string, string> } = {},
     options: { skipAuthRefresh?: boolean; retried?: boolean } = {},
   ): Promise<T> {
     try {

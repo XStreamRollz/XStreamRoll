@@ -1,6 +1,9 @@
 import type { Metadata } from "next"
-
+import { Suspense } from "react"
+import { StreamListSkeleton } from "@/components/dashboard/stream-list-skeleton"
+import { LiveStreamStatusBadge } from "@/components/streams/live-stream-status-badge"
 import { StreamTagEditor } from "./stream-tag-editor"
+import { StreamsListLive } from "./streams-list-live"
 
 export const metadata: Metadata = {
   title: "Streams | XStreamRoll",
@@ -10,13 +13,13 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic"
 
 /**
- * Streams dashboard page. The real implementation will list every
- * stream owned by the current user; this scaffold focuses on the
- * issue-100 acceptance criteria: a working tag editor that is wired
- * end-to-end against the tags API.
+ * Streams dashboard page. The list body is wrapped in `<Suspense>` so
+ * the `<StreamListSkeleton>` flows as the loading UI whenever the
+ * underlying data load suspends (#369).
  *
- * Replace `demoStreamId` and `demoUserId` with real values once the
- * data fetching + auth layers are available.
+ * Issue #345 phase B: the actual list body now lives in a client
+ * component that consumes {@link useStreamList} for React Query's
+ * 30-second stale-while-revalidate window.
  */
 export default function StreamsDashboardPage() {
   const demoStreamId = 1
@@ -25,16 +28,22 @@ export default function StreamsDashboardPage() {
   return (
     <main className="container mx-auto max-w-3xl px-4 py-10">
       <header className="mb-6 flex flex-col gap-1">
-        <h1 className="text-2xl font-bold tracking-tight">Stream tags</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold tracking-tight">Streams</h1>
+          <LiveStreamStatusBadge streamId={demoStreamId} initialStatus="inactive" />
+        </div>
         <p className="text-sm text-muted-foreground">
-          Manage the tags attached to your stream. Changes are saved as you go.
+          Manage your streams and their tags. Changes are saved as you go.
         </p>
       </header>
-      <StreamTagEditor
-        streamId={demoStreamId}
-        initialTags={[]}
-        actingUserId={demoUserId}
-      />
+      <Suspense fallback={<StreamListSkeleton />}>
+        <StreamsListLive />
+        <StreamTagEditor
+          streamId={demoStreamId}
+          initialTags={[]}
+          actingUserId={demoUserId}
+        />
+      </Suspense>
     </main>
   )
 }

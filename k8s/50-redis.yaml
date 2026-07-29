@@ -1,0 +1,92 @@
+# Redis Deployment — shared cache and token denylist backing store.
+# ---------------------------------------------------------------------------
+# Required by the token denylist in multi-replica deployments: an in-memory
+# cache means a token revoked on replica A is still valid on replica B.
+# Redis provides a shared, single-source-of-truth denylist.
+#
+# DNS: redis.xstreamroll.svc.cluster.local (or just "redis" in the namespace)
+# Port: 6379
+#
+# Production deployments should enable authentication:
+#   kubectl -n xstreamroll create secret generic redis-secret \
+#     --from-literal=REDIS_PASSWORD="$(openssl rand -base64 32)"
+# Then add --requirepass "$REDIS_PASSWORD" to the container args below.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: xstreamroll
+  labels:
+    app: redis
+spec:
+  type: ClusterIP
+  selector:
+    app: redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: xstreamroll
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+          args:
+            - --appendonly
+            - yes
+            - --appendfsync
+            - everysec
+            - --maxmemory
+            - 1gb
+            - --maxmemory-policy
+            - allkeys-lru
+            - --protected-mode
+            - "no"
+          ports:
+            - name: redis
+              containerPort: 6379
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 1Gi
+          startupProbe:
+            tcpSocket:
+              port: redis
+            failureThreshold: 30
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: redis
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3

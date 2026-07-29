@@ -1,250 +1,6 @@
-import { render } from "@testing-library/react"
 import * as React from "react"
-// ---------------------------------------------------------------------------
-// Form Components (require react-hook-form context)
-// ---------------------------------------------------------------------------
-
-import { useForm } from "react-hook-form"
-// ---------------------------------------------------------------------------
-// Chart Component (requires recharts)
-// ---------------------------------------------------------------------------
-
-import * as RechartsPrimitive from "recharts"
-
-import { useIsMobile } from "@/hooks/use-mobile"
 import { buildThemeTest } from "@/lib/test-utils"
-
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "./accordion"
-import { Alert, AlertDescription, AlertTitle } from "./alert"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "./alert-dialog"
-import { AspectRatio } from "./aspect-ratio"
-import { Avatar, AvatarFallback } from "./avatar"
-// ChartTooltipContent and ChartLegendContent are internal components that
-// must be used within a ChartContainer + recharts chart context.
-// They are implicitly tested by the main Chart test above.
-
-// ---------------------------------------------------------------------------
-// Imports (kept at bottom to avoid hoisting issues)
-// ---------------------------------------------------------------------------
-
-import { Badge } from "./badge"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "./breadcrumb"
-import { Button } from "./button"
-import { ButtonGroup } from "./button-group"
-import { Calendar } from "./calendar"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "./card"
-import { Carousel, CarouselContent, CarouselItem } from "./carousel"
-import { ChartContainer } from "./chart"
-import { Checkbox } from "./checkbox"
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "./collapsible"
-import {
-  CommandDialog,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "./command"
-import { ConfirmDialog } from "./confirm-dialog"
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "./context-menu"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "./dialog"
-import {
-  Drawer,
-  DrawerContent,
-  DrawerDescription,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-} from "./drawer"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from "./dropdown-menu"
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "./empty"
-import { Field, FieldContent, FieldDescription, FieldLabel } from "./field"
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "./form"
-import { HoverCard, HoverCardContent } from "./hover-card"
-import { Input } from "./input"
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-  InputGroupText,
-} from "./input-group"
-import {
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSeparator,
-  InputOTPSlot,
-} from "./input-otp"
-import {
-  Item,
-  ItemContent,
-  ItemDescription,
-  ItemGroup,
-  ItemTitle,
-} from "./item"
-import { Kbd, KbdGroup } from "./kbd"
-import { Label } from "./label"
-import {
-  Menubar,
-  MenubarContent,
-  MenubarItem,
-  MenubarMenu,
-  MenubarSeparator,
-  MenubarTrigger,
-} from "./menubar"
-import {
-  NavigationMenu,
-  NavigationMenuContent,
-  NavigationMenuItem,
-  NavigationMenuLink,
-  NavigationMenuList,
-  NavigationMenuTrigger,
-} from "./navigation-menu"
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "./pagination"
-import { Popover, PopoverContent } from "./popover"
-import { Progress } from "./progress"
-import { RadioGroup, RadioGroupItem } from "./radio-group"
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "./resizable"
-import { ScrollArea } from "./scroll-area"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectSeparator,
-} from "./select"
-import { Separator } from "./separator"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "./sheet"
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarInput,
-  SidebarInset,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-  SidebarRail,
-  SidebarTrigger,
-} from "./sidebar"
-import { Skeleton } from "./skeleton"
-import { Slider } from "./slider"
-import { Toaster } from "./sonner"
-import { Spinner } from "./spinner"
-import { Switch } from "./switch"
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableFooter,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "./table"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "./tabs"
-import { Textarea } from "./textarea"
-import {
-  Toast,
-  ToastAction,
-  ToastClose,
-  ToastDescription,
-  ToastProvider,
-  ToastTitle,
-  ToastViewport,
-} from "./toast"
-import { Toggle } from "./toggle"
-import { ToggleGroup, ToggleGroupItem } from "./toggle-group"
-import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -794,6 +550,12 @@ buildThemeTest("ToastProvider", () => (
 
 buildThemeTest("Toaster (custom)", () => <Toaster />)
 
+// ---------------------------------------------------------------------------
+// Form Components (require react-hook-form context)
+// ---------------------------------------------------------------------------
+
+import { useForm } from "react-hook-form"
+
 function FormTestWrapper() {
   const form = useForm()
   return (
@@ -817,6 +579,12 @@ function FormTestWrapper() {
 
 buildThemeTest("Form", () => <FormTestWrapper />)
 
+// ---------------------------------------------------------------------------
+// Chart Component (requires recharts)
+// ---------------------------------------------------------------------------
+
+import * as RechartsPrimitive from "recharts"
+
 buildThemeTest("Chart", () => (
   <ChartContainer
     config={{
@@ -828,3 +596,235 @@ buildThemeTest("Chart", () => (
     </RechartsPrimitive.BarChart>
   </ChartContainer>
 ))
+
+// ChartTooltipContent and ChartLegendContent are internal components that
+// must be used within a ChartContainer + recharts chart context.
+// They are implicitly tested by the main Chart test above.
+
+// ---------------------------------------------------------------------------
+// Imports (kept at bottom to avoid hoisting issues)
+// ---------------------------------------------------------------------------
+
+import { Badge } from "./badge"
+import { Button } from "./button"
+import { Input } from "./input"
+import { Textarea } from "./textarea"
+import { Label } from "./label"
+import { Kbd, KbdGroup } from "./kbd"
+import { Skeleton } from "./skeleton"
+import { Spinner } from "./spinner"
+import { Separator } from "./separator"
+import { Toggle } from "./toggle"
+import { Checkbox } from "./checkbox"
+import { Switch } from "./switch"
+import { Slider } from "./slider"
+import { Progress } from "./progress"
+import { Calendar } from "./calendar"
+import { AspectRatio } from "./aspect-ratio"
+import { ScrollArea } from "./scroll-area"
+import {
+  Card,
+  CardHeader,
+  CardFooter,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "./card"
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableCaption,
+} from "./table"
+import {
+  ItemGroup,
+  Item,
+  ItemContent,
+  ItemTitle,
+  ItemDescription,
+} from "./item"
+import {
+  Empty,
+  EmptyHeader,
+  EmptyTitle,
+  EmptyDescription,
+  EmptyContent,
+  EmptyMedia,
+} from "./empty"
+import { Field, FieldLabel, FieldContent, FieldDescription } from "./field"
+import {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+} from "./accordion"
+import { Alert, AlertTitle, AlertDescription } from "./alert"
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "./alert-dialog"
+import { Avatar, AvatarFallback } from "./avatar"
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "./breadcrumb"
+import { ButtonGroup } from "./button-group"
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "./collapsible"
+import { ConfirmDialog } from "./confirm-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+} from "./dialog"
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerFooter,
+  DrawerTitle,
+  DrawerDescription,
+} from "./drawer"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "./dropdown-menu"
+import { HoverCard, HoverCardContent } from "./hover-card"
+import {
+  Menubar,
+  MenubarMenu,
+  MenubarTrigger,
+  MenubarContent,
+  MenubarItem,
+  MenubarSeparator,
+} from "./menubar"
+import {
+  NavigationMenu,
+  NavigationMenuList,
+  NavigationMenuItem,
+  NavigationMenuTrigger,
+  NavigationMenuContent,
+  NavigationMenuLink,
+} from "./navigation-menu"
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationPrevious,
+  PaginationNext,
+} from "./pagination"
+import { Popover, PopoverContent } from "./popover"
+import { RadioGroup, RadioGroupItem } from "./radio-group"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectSeparator,
+} from "./select"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetFooter,
+  SheetTitle,
+  SheetDescription,
+} from "./sheet"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "./tabs"
+import { ToggleGroup, ToggleGroupItem } from "./toggle-group"
+import { Tooltip, TooltipTrigger, TooltipContent } from "./tooltip"
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "./resizable"
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+  InputOTPSeparator,
+} from "./input-otp"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupText,
+  InputGroupInput,
+  InputGroupButton,
+} from "./input-group"
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+} from "./context-menu"
+import { Carousel, CarouselContent, CarouselItem } from "./carousel"
+import {
+  CommandDialog,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+} from "./command"
+import {
+  SidebarProvider,
+  Sidebar,
+  SidebarContent,
+  SidebarHeader,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  SidebarInput,
+  SidebarInset,
+  SidebarTrigger,
+  SidebarRail,
+} from "./sidebar"
+import { Toaster } from "./sonner"
+import {
+  ToastProvider,
+  ToastViewport,
+  Toast,
+  ToastTitle,
+  ToastDescription,
+  ToastClose,
+  ToastAction,
+} from "./toast"
+import {
+  Form,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormControl,
+  FormDescription,
+  FormMessage,
+} from "./form"
+import { ChartContainer } from "./chart"

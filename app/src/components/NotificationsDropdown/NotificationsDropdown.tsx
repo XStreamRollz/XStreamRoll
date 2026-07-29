@@ -183,6 +183,8 @@ export function NotificationsDropdown() {
           {unreadCount > 0 && (
             <Badge
               variant="destructive"
+              role="status"
+              aria-label={`${unreadCount} unread notifications`}
               className="absolute -top-1 -right-1 min-w-5 justify-center rounded-full px-1.5 py-0.5 text-[10px] leading-none"
             >
               {badgeLabel}
@@ -274,6 +276,7 @@ function NotificationRow({
     <button
       type="button"
       onClick={onSelect}
+      aria-label={`${notification.title}${unread ? ", unread" : ""}`}
       className={cn(
         "flex w-full items-start gap-3 border-b px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-accent focus:bg-accent focus:outline-none",
         unread && "bg-accent/30",

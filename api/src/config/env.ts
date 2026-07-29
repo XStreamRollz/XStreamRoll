@@ -10,6 +10,21 @@ const envSchema = z.object({
   JWT_SECRET: z.string().optional(),
   STREAM_API_KEY: z.string().min(1, "STREAM_API_KEY is required"),
   DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
+  // Issue #313: Swagger UI is disabled in production by default.
+  // Set SWAGGER_ENABLED=true to force-enable it (e.g. for staging).
+  SWAGGER_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+  // Issue #328: Connection pool tuning
+  DB_POOL_MAX: z.coerce.number().int().positive().default(20),
+  DB_POOL_MIN: z.coerce.number().int().min(0).default(2),
+  DB_POOL_IDLE_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
+  DB_POOL_CONNECTION_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(5000),
 })
 
 export type Env = z.infer<typeof envSchema>

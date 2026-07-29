@@ -27,6 +27,41 @@ const envSchema = z.object({
     .default("30000")
     .transform((s) => Number(s))
     .pipe(z.number().int().positive()),
+  MAX_QUEUE_DEPTH: z
+    .string()
+    .default("1000")
+    .transform((s) => Number(s))
+    .pipe(z.number().int().positive()),
+  POLL_BATCH_SIZE: z
+    .string()
+    .default("100")
+    .transform((s) => Number(s))
+    .pipe(z.number().int().positive()),
+  PROCESSING_PUBLISH_MAX_RETRIES: z
+    .string()
+    .default("3")
+    .transform((s) => Number(s))
+    .pipe(z.number().int().min(0)),
+  /**
+   * Backend for the per-stream {@link EventFilter} config store
+   * (issue #351). `memory` keeps every config in-process and matches
+   * the pre-#351 behaviour — appropriate for the test suite and
+   * for single-worker deployments. `redis` fronts a small hash +
+   * pub/sub channel so every worker in a horizontally-scaled fleet
+   * agrees on which events to drop.
+   */
+  EVENT_FILTER_BACKEND: z.enum(["memory", "redis"]).default("memory"),
+  /**
+   * Redis URL used when `EVENT_FILTER_BACKEND=redis`. Optional —
+   * falls back to `REDIS_URL` so workers running in the same
+   * cluster as the API can reuse the existing connection. Ignored
+   * when `EVENT_FILTER_BACKEND=memory`.
+   */
+  EVENT_FILTER_REDIS_URL: z
+    .string()
+    .url()
+    .optional()
+    .or(z.literal("").transform(() => undefined)),
 })
 
 export type Env = z.infer<typeof envSchema>

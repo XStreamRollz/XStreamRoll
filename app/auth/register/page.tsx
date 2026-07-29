@@ -118,6 +118,7 @@ export default function RegisterPage() {
             aria-invalid={errors.email ? "true" : "false"}
             aria-describedby={errors.email ? "email-error" : undefined}
             className="w-full border p-2"
+            autoComplete="email"
           />
           {errors.email && (
             <p
@@ -143,6 +144,7 @@ export default function RegisterPage() {
             aria-invalid={errors.password ? "true" : "false"}
             aria-describedby={errors.password ? "password-error" : undefined}
             className="w-full border p-2"
+            autoComplete="new-password"
           />
           {errors.password && (
             <p

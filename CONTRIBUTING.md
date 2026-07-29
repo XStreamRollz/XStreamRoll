@@ -14,11 +14,12 @@ If anything below is unclear, please open an issue using one of the [issue templ
    - [Prerequisites](#prerequisites)
    - [Clone & Bootstrap](#clone--bootstrap)
    - [Per-Package Setup](#per-package-setup)
-4. [Branching Strategy](#branching-strategy)
-5. [Commit Message Conventions](#commit-message-conventions)
-6. [Pull Request Process](#pull-request-process)
-7. [Code Review Expectations](#code-review-expectations)
-8. [Reporting Issues](#reporting-issues)
+4. [Pre-commit Hooks](#pre-commit-hooks)
+5. [Branching Strategy](#branching-strategy)
+6. [Commit Message Conventions](#commit-message-conventions)
+7. [Pull Request Process](#pull-request-process)
+8. [Code Review Expectations](#code-review-expectations)
+9. [Reporting Issues](#reporting-issues)
 
 ---
 
@@ -30,15 +31,17 @@ By participating in this project you agree to uphold a respectful, inclusive, an
 
 ## Repository Layout
 
-XStreamRoll is a monorepo managed with npm workspaces. The four packages are:
+XStreamRoll is a monorepo managed with npm workspaces:
 
-| Path                      | Stack                   | Description                                        |
-| ------------------------- | ----------------------- | -------------------------------------------------- |
-| `app/`                    | Next.js 16 + TypeScript | User-facing web frontend                           |
-| `api/`                    | NestJS 10 + TypeScript  | REST + WebSocket backend                           |
-| `xstreamroll-sdk/`        | TypeScript              | Client SDK for publishing events & calling the API |
-| `xstreamroll-processing/` | Node.js + TypeScript    | Stream-processing worker                           |
-| `database/`               | PostgreSQL              | Schema and migrations                              |
+| Path                       | Stack                          | Description                                           |
+| -------------------------- | ------------------------------ | ----------------------------------------------------- |
+| `app/`                     | Next.js 16 + TypeScript        | User-facing web frontend                              |
+| `api/`                     | NestJS 10 + TypeScript         | REST + WebSocket backend                              |
+| `xstreamroll-sdk/`         | TypeScript                     | Client SDK for publishing events & calling the API    |
+| `xstreamroll-processing/`  | Node.js + TypeScript           | Stream-processing worker                              |
+| `packages/types/`          | TypeScript                     | `@xstreamroll/types` — shared domain types             |
+| `tests/contracts/`         | TypeScript                     | `@xstreamroll/contract-tests` — api/sdk contract tests |
+| `database/`                | PostgreSQL                     | Schema and migrations                                 |
 
 See [`REPOSITORIES.md`](./REPOSITORIES.md) for a deeper breakdown.
 
@@ -146,6 +149,50 @@ Environment variables of interest:
 
 - `DATABASE_URL` — PostgreSQL connection string.
 - `STREAM_QUEUE_URL` — broker URL (Redis / NATS / etc.).
+
+---
+
+## Pre-commit Hooks
+
+This repository uses [Husky](https://typicode.github.io/husky/) and [lint-staged](https://github.com/lint-staged/lint-staged) to run quality checks automatically on every commit and push, catching issues locally before they reach CI.
+
+### Installing the hooks
+
+Husky hooks are installed automatically when you run `npm install` at the root (the `prepare` lifecycle script runs `husky`). If you skipped the root install or cloned the repo without running the bootstrap command, install them manually:
+
+```bash
+npm run prepare
+```
+
+You only need to do this once per clone.
+
+### What the hooks do
+
+| Hook         | Trigger      | Action                                                                                                                                                       |
+| ------------ | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pre-commit` | `git commit` | Runs **ESLint** + **Prettier** on staged files only (via `lint-staged`). The commit is blocked if any lint errors or formatting violations are found.        |
+| `pre-push`   | `git push`   | Runs `tsc --noEmit` in parallel across `api/`, `xstreamroll-sdk/`, and `xstreamroll-processing/`. The push is blocked if TypeScript reports any type errors. |
+
+> **Note:** The `app/` package (Next.js) is excluded from the pre-push type-check because its TypeScript compilation is driven by the Next.js build pipeline. Run `npm run build:app` locally to verify the frontend before raising a PR.
+
+### Skipping hooks in exceptional cases
+
+Use the standard Git escape hatch only when you have a deliberate reason (e.g., a WIP commit you intend to amend before review):
+
+```bash
+git commit --no-verify -m "wip: work in progress"
+```
+
+Do **not** make `--no-verify` a habit — CI will still catch violations, and the feedback loop will be slower.
+
+### Lint-staged configuration
+
+The staged-file rules live in [`.lintstagedrc.json`](./.lintstagedrc.json) at the repo root:
+
+| File pattern                | Commands run                                       |
+| --------------------------- | -------------------------------------------------- |
+| `*.{ts,tsx,js,jsx,mjs,cjs}` | `eslint --max-warnings=0`, then `prettier --write` |
+| `*.{json,md,yml,yaml,css}`  | `prettier --write`                                 |
 
 ---
 

@@ -22,12 +22,13 @@ import { UsersRepository } from "./users.repository"
 
 describe("Auth Rate Limiting (Integration)", () => {
   let app: INestApplication
-  let authService: AuthService
-  let usersRepository: UsersRepository
+  let _authService: AuthService
+  let _usersRepository: UsersRepository
 
   const mockAuthService = {
     register: jest.fn(),
     login: jest.fn(),
+    refresh: jest.fn(),
     logout: jest.fn(),
     forgotPassword: jest.fn(),
     resetPassword: jest.fn(),
@@ -99,8 +100,8 @@ describe("Auth Rate Limiting (Integration)", () => {
     app.useGlobalPipes(new ValidationPipe())
     await app.init()
 
-    authService = moduleFixture.get<AuthService>(AuthService)
-    usersRepository = moduleFixture.get<UsersRepository>(UsersRepository)
+    _authService = moduleFixture.get<AuthService>(AuthService)
+    _usersRepository = moduleFixture.get<UsersRepository>(UsersRepository)
   })
 
   afterEach(async () => {
@@ -118,6 +119,7 @@ describe("Auth Rate Limiting (Integration)", () => {
           createdAt: new Date(),
         },
         accessToken: "token.here",
+        refreshToken: "refresh.token.here",
       })
 
       const loginDto = { email: "test@example.com", password: "password" }
@@ -145,6 +147,7 @@ describe("Auth Rate Limiting (Integration)", () => {
           createdAt: new Date(),
         },
         accessToken: "token.here",
+        refreshToken: "refresh.token.here",
       })
 
       const loginDto = { email: "test@example.com", password: "password" }
@@ -179,6 +182,7 @@ describe("Auth Rate Limiting (Integration)", () => {
           createdAt: new Date(),
         },
         accessToken: "token.here",
+        refreshToken: "refresh.token.here",
       })
 
       const loginDto = { email: "test@example.com", password: "password" }
@@ -212,6 +216,7 @@ describe("Auth Rate Limiting (Integration)", () => {
           createdAt: new Date(),
         },
         accessToken: "token.here",
+        refreshToken: "refresh.token.here",
       })
 
       const loginDto = { email: "test@example.com", password: "password" }
@@ -252,6 +257,7 @@ describe("Auth Rate Limiting (Integration)", () => {
           createdAt: new Date(),
         },
         accessToken: "token.here",
+        refreshToken: "refresh.token.here",
       })
 
       const registerDto = {

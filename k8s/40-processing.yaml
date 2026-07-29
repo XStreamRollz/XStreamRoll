@@ -52,10 +52,11 @@ spec:
       labels:
         app: processing
     spec:
-      # Greenshutdown timeout in src/lifecycle.ts is 15s; allow the
-      # kubelet a 30s window so the worker can flush in-flight polls
-      # before being SIGKILL'd.
-      terminationGracePeriodSeconds: 30
+      # Graceful shutdown timeout in src/lifecycle.ts is 15s. With a
+      # preStop sleep of 5s and readiness failureThreshold of 6 at
+      # periodSeconds 5 (= 30s to mark unready), the total drain window
+      # is 5 + 15 = 20s, well within the 60s termination grace period.
+      terminationGracePeriodSeconds: 60
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -83,7 +84,10 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 3
-            failureThreshold: 3
+            # 6 failures × 5s = 30s before marking unready; this
+            # outlasts the 15s graceful-shutdown window plus preStop
+            # so the service removes this pod before SIGKILL.
+            failureThreshold: 6
           # Liveness: stays 200 throughout the drain so we don't get
           # SIGKILLed mid-shutdown.
           livenessProbe:
@@ -94,6 +98,10 @@ spec:
             periodSeconds: 30
             timeoutSeconds: 3
             failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "5"]
           resources:
             requests:
               cpu: 100m

@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException, Optional } from "@nestjs/common"
+import { Injectable, Logger, NotFoundException, Optional } from "@nestjs/common"
+import { Interval } from "@nestjs/schedule"
 import { PaginatedResult } from "../common/dto/pagination.dto"
 import { StreamsGateway } from "../gateways/streams.gateway"
 import { Notification } from "./notification.entity"
@@ -8,8 +9,15 @@ export interface PagedNotifications extends PaginatedResult<Notification> {
   unreadCount: number
 }
 
+/** How often the expired-notification sweep runs (issue #348). */
+const EXPIRY_SWEEP_INTERVAL_MS = 60 * 60 * 1000
+/** Cap on rows deleted per batch, so one sweep pass can't lock the table for long. */
+const EXPIRY_SWEEP_BATCH_SIZE = 500
+
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name)
+
   constructor(
     private readonly notifications: NotificationsRepository,
     @Optional() private readonly gateway?: StreamsGateway,
@@ -75,6 +83,27 @@ export class NotificationsService {
     const removed = await this.notifications.deleteById(userId, id)
     if (!removed) {
       throw new NotFoundException(`notification ${id} not found`)
+    }
+  }
+
+  /**
+   * Periodic retention sweep (issue #348). Deletes notifications past
+   * their `expiresAt` in bounded batches so the table doesn't grow
+   * unbounded, without holding a single long-running DELETE.
+   */
+  @Interval(EXPIRY_SWEEP_INTERVAL_MS)
+  async sweepExpired(): Promise<void> {
+    let totalDeleted = 0
+    let deletedInBatch: number
+    do {
+      deletedInBatch = await this.notifications.deleteExpiredBatch(
+        EXPIRY_SWEEP_BATCH_SIZE,
+      )
+      totalDeleted += deletedInBatch
+    } while (deletedInBatch === EXPIRY_SWEEP_BATCH_SIZE)
+
+    if (totalDeleted > 0) {
+      this.logger.log(`Swept ${totalDeleted} expired notification(s)`)
     }
   }
 }
