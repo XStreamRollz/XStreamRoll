@@ -1,15 +1,30 @@
 import { Inject, Injectable } from "@nestjs/common"
 import { Pool } from "pg"
 import { PG_POOL } from "../database/database.module"
+import { AuditAction } from "./audit-action.enum"
 
 @Injectable()
 export class AuditService {
   constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
 
-  async log(userId: number | null, action: string, ip: string) {
+  /**
+   * Persist an audit log entry.
+   *
+   * @param userId  - the authenticated user, or `null` for anonymous events.
+   * @param action  - a value from {@link AuditAction}; never a free-form string.
+   * @param metadata - structured context for the action (e.g. `{ email, reason }`).
+   *                   Variable data must live here, NOT embedded in `action`.
+   * @param ip      - the client IP address extracted from the request.
+   */
+  async log(
+    userId: number | null,
+    action: AuditAction,
+    metadata: Record<string, unknown>,
+    ip: string,
+  ): Promise<void> {
     await this.pool.query(
-      "INSERT INTO audit_logs (user_id, action, ip) VALUES ($1, $2, $3)",
-      [userId, action, ip],
+      "INSERT INTO audit_logs (user_id, action, metadata, ip) VALUES ($1, $2, $3, $4)",
+      [userId, action, JSON.stringify(metadata), ip],
     )
   }
 

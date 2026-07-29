@@ -4,6 +4,17 @@ import { StreamAnalyticsDto } from "../dto/stream-analytics.dto"
 import { Stream } from "../stream.entity"
 
 /**
+ * Shape of a pending (unprocessed) stream event returned by
+ * {@link StreamsRepository.getPendingEvents} and consumed by the
+ * processing worker via `GET /streams/pending`.
+ */
+export interface PendingStreamEvent {
+  streamId: string
+  data: Record<string, unknown>
+  timestamp: string
+}
+
+/**
  * In-memory streams repository.
  *
  * Kept for unit testing and local development without a database.
@@ -50,9 +61,7 @@ export class StreamsRepository {
     if (filter?.visibility) {
       results = results.filter((s) => s.visibility === filter.visibility)
     }
-    return results.sort(
-      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-    )
+    return results.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
   }
 
   /**
@@ -120,6 +129,18 @@ export class StreamsRepository {
   async delete(id: number): Promise<boolean> {
     this.eventsByStream.delete(id)
     return this.streamsById.delete(id)
+  }
+
+  /**
+   * Returns a paginated slice of pending (unprocessed) stream events.
+   * In-memory stub: always returns an empty array because the in-memory
+   * repository has no stream_data store. Used only in unit tests.
+   */
+  async getPendingEvents(
+    _limit: number,
+    _offset: number,
+  ): Promise<{ data: PendingStreamEvent[]; nextCursor: number | null }> {
+    return { data: [], nextCursor: null }
   }
 
   async getAnalytics(streamId: number): Promise<StreamAnalyticsDto> {

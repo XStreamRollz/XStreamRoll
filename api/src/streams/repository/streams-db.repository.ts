@@ -10,6 +10,7 @@ import type { StreamVisibility } from "@xstreamroll/types"
 import { PG_POOL } from "../../database/database.module"
 import { StreamAnalyticsDto } from "../dto/stream-analytics.dto"
 import { Stream } from "../stream.entity"
+import { PendingStreamEvent } from "./streams.repository"
 
 /**
  * PostgreSQL-backed streams repository.
@@ -213,6 +214,43 @@ export class StreamsDbRepository {
     }
   }
 
+  /**
+   * Returns a paginated slice of unprocessed stream-data rows ordered by
+   * insertion time (oldest first) so the worker processes events in FIFO order.
+   *
+   * `nextCursor` is the offset for the next page, or `null` when the returned
+   * batch is smaller than `limit` (i.e. there are no more rows to fetch).
+   */
+  async getPendingEvents(
+    limit: number,
+    offset: number,
+  ): Promise<{ data: PendingStreamEvent[]; nextCursor: number | null }> {
+    try {
+      const { rows } = await this.pool.query<{
+        stream_id: number
+        data: Record<string, unknown>
+        timestamp: Date
+      }>(
+        `SELECT stream_id, data, timestamp
+         FROM stream_data
+         ORDER BY timestamp ASC
+         LIMIT $1 OFFSET $2`,
+        [limit, offset],
+      )
+
+      const data: PendingStreamEvent[] = rows.map((r) => ({
+        streamId: String(r.stream_id),
+        data: r.data,
+        timestamp: r.timestamp.toISOString(),
+      }))
+
+      const nextCursor = data.length < limit ? null : offset + data.length
+      return { data, nextCursor }
+    } catch (err) {
+      this.handleDbError(err, "getPendingEvents")
+    }
+  }
+
   async getAnalytics(streamId: number): Promise<StreamAnalyticsDto> {
     try {
       const { rows } = await this.pool.query<{
@@ -279,7 +317,8 @@ export class StreamsDbRepository {
           window: "30d",
           totalEvents: last30d,
           errorEvents,
-          percentage: last30d === 0 ? 0 : roundPercent((errorEvents / last30d) * 100),
+          percentage:
+            last30d === 0 ? 0 : roundPercent((errorEvents / last30d) * 100),
         },
         processingLatency: {
           window: "30d",
@@ -298,7 +337,9 @@ export class StreamsDbRepository {
   }
 }
 
-function nullableNumber(value: number | string | null | undefined): number | null {
+function nullableNumber(
+  value: number | string | null | undefined,
+): number | null {
   if (value === null || value === undefined) return null
   return Number(value)
 }
