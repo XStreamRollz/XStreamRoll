@@ -12,9 +12,80 @@ permissions:
   pull-requests: write
 
 jobs:
+  # ----------------------------------------------------------------
+  # Per-workspace lint + typecheck + test, run in parallel. Each
+  # matrix entry runs on its own runner so the wall time drops from
+  # the previous ~15 min (6 sequential lints + 6 sequential
+  # typechecks + 4 sequential test:cov + lockfile checks) to roughly
+  # the slowest single workspace. The actions/setup-node `cache: npm`
+  # hint means each matrix entry's `npm ci` is near-instant on cache
+  # hits.
+  #
+  # The matrix drives WHICH scripts run (lint, typecheck, test:cov)
+  # AND whether the workspace needs the test Docker database. The
+  # postgres service in `services:` is therefore started on every
+  # matrix entry — a few seconds of unused-postgres overhead per entry
+  # in exchange for a single simplified workflow shape.
+  # ----------------------------------------------------------------
   quality:
+    name: Quality (${{ matrix.workspace.label }})
     runs-on: ubuntu-latest
-
+    # Cancel any in-flight job for the same branch / workspace on a new
+    # commit so force-pushes don't queue up.
+    concurrency:
+      group: ci-quality-${{ matrix.workspace.label }}-${{ github.ref }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace:
+          # id-only workspaces first so they fail fast; the integration
+          # suites are last so they get the longest wall-clock budget.
+          # `needs_tests: false` skips the `npm run test:cov` step and
+          # the Codecov upload — these workspaces don't ship Jest suites
+          # (types is compile-only; contracts is shared schema/zod
+          # definitions whose provider/consumer verification lives in
+          # the api and sdk matrices respectively).
+          - {
+              label: types,
+              path: packages/types,
+              needs_db: false,
+              needs_tests: false,
+            }
+          - {
+              label: contracts,
+              path: tests/contracts,
+              needs_db: false,
+              needs_tests: false,
+            }
+          - {
+              label: sdk,
+              path: xstreamroll-sdk,
+              needs_db: false,
+              needs_tests: true,
+            }
+          - {
+              label: processing,
+              path: xstreamroll-processing,
+              needs_db: false,
+              needs_tests: true,
+            }
+          - { label: app, path: app, needs_db: false, needs_tests: true }
+          - { label: api, path: api, needs_db: true, needs_tests: true }
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 15
     steps:
       - uses: actions/checkout@v4
 
@@ -24,115 +95,129 @@ jobs:
           node-version: "20"
           cache: "npm"
 
-      - name: Install root dependencies
-        run: npm install
+      # Install ALL workspace dependencies in one shot via the root
+      # `npm ci`. npm itself does not support `npm ci` inside an
+      # individual workspace (the lockfile lives at the repo root for
+      # workspaces in this repo), so a single root install is the
+      # documented path (#375).
+      - name: Install workspace dependencies
+        run: npm ci
 
-      - name: Install & build types package
-        run: cd packages/types && npm install && npm run build
+      - name: Build types package
+        run: npm run build --workspace=packages/types
 
-      - name: Install app dependencies
-        run: cd app && npm install
+      - name: Build contract tests package
+        run: npm run build --workspace=tests/contracts
 
-      - name: Install api dependencies
-        run: cd api && npm install
-
-      - name: Install sdk dependencies
-        run: cd xstreamroll-sdk && npm install
-
-      - name: Install processing dependencies
-        run: cd xstreamroll-processing && npm install
-
-      - name: Lint — types
-        run: cd packages/types && npm run lint
-
-      - name: Lint — api
-        run: cd api && npm run lint
+      - name: Lint — ${{ matrix.workspace.label }}
+        run: cd ${{ matrix.workspace.path }} && npm run lint
         env:
+          # Database-bound lint config (api) reads DATABASE_URL; give
+          # it the same postgres service that the test step will use.
           DATABASE_URL: postgresql://test:test@localhost:5432/test
           JWT_SECRET: test-secret
           STREAM_API_KEY: test-api-key
 
-      - name: Lint — sdk
-        run: cd xstreamroll-sdk && npm run lint
-
-      - name: Lint — processing
-        run: cd xstreamroll-processing && npm run lint
-
-      - name: Lint — app
-        run: cd app && npm run lint
-
-      - name: Typecheck — types (build must succeed cleanly)
-        run: cd packages/types && npm run typecheck
-
-      - name: Typecheck — api
-        run: cd api && npx tsc --noEmit
-
-      - name: Typecheck — sdk
-        run: cd xstreamroll-sdk && npx tsc --noEmit
-
-      - name: Typecheck — processing
-        run: cd xstreamroll-processing && npx tsc --noEmit
-
-      - name: Typecheck — app
-        run: cd app && npx tsc --noEmit
+      - name: Typecheck — ${{ matrix.workspace.label }}
+        run: cd ${{ matrix.workspace.path }} && npm run typecheck
 
       - name: Start test database
+        if: matrix.workspace.needs_db
         run: docker compose -f docker-compose.test.yml up -d --wait
 
-      - name: Test — api (with coverage)
-        run: cd api && npm run test:cov
+      # Issue #340 — exercise the migration runner against the freshly
+      # provisioned test DB before the api test suite runs. The test DB
+      # starts empty (no schema.sql autoload), so this also confirms the
+      # migration files together reproduce the schema end-to-end. Runs
+      # the idempotent "up" migration; the runner tracks applied
+      # migrations in `pgmigrations` so reruns against a polluted DB
+      # stay safe.
+      - name: Run database migrations (Issue #340)
+        run: cd api && npm run migrate
+        env:
+          DATABASE_URL: postgresql://xstreamroll:xstreamroll@localhost:5433/xstreamroll_test
+
+      # Provider verification for tests/contracts/ runs as part of this
+      # step (api/src/contract-provider.spec.ts matches the api Jest
+      # config's `*.spec.ts` pattern) — a contract violation fails the
+      # build the same way any other api test failure would. Consumer
+      # contract verification (xstreamroll-sdk/__tests__/contract.consumer.test.ts)
+      # runs in the sdk matrix entry.
+      - name: Test — ${{ matrix.workspace.label }} (with coverage)
+        if: matrix.workspace.needs_tests
+        run: cd ${{ matrix.workspace.path }} && npm run test:cov
         env:
           DATABASE_URL: postgresql://xstreamroll:xstreamroll@localhost:5433/xstreamroll_test
           JWT_SECRET: test-secret
           STREAM_API_KEY: test-api-key
 
       - name: Stop test database
+        if: always() && matrix.workspace.needs_db
         run: docker compose -f docker-compose.test.yml down -v
 
-      - name: Test — sdk (with coverage)
-        run: cd xstreamroll-sdk && npm run test:cov
-
-      - name: Test — processing (with coverage)
-        run: cd xstreamroll-processing && npm run test:cov
-
-      - name: Test — app (with coverage)
-        run: cd app && npm run test:cov
-
-      - name: Upload api coverage to Codecov
+      - name: Upload ${{ matrix.workspace.label }} coverage to Codecov
         uses: codecov/codecov-action@v4
+        if: always() && matrix.workspace.needs_tests
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./api/coverage/lcov.info
-          flags: api
-          name: api-coverage
+          files: ${{ matrix.workspace.path }}/coverage/lcov.info
+          flags: ${{ matrix.workspace.label }}
+          name: ${{ matrix.workspace.label }}-coverage
           fail_ci_if_error: false
 
-      - name: Upload sdk coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./xstreamroll-sdk/coverage/lcov.info
-          flags: sdk
-          name: sdk-coverage
-          fail_ci_if_error: false
+  # ----------------------------------------------------------------
+  # Lockfile-drift guard (issue #375). Runs `npm ci` once at the repo
+  # root and confirms no `package-lock.json` was mutated by the
+  # install. Lives in its own job so it can run in parallel with the
+  # quality matrix — readers get the result faster — and so a failure
+  # is reported independently of any specific workspace's lint/test
+  # results. The samePaths list keeps the guard future-proof: any
+  # workspace that gains a workspace-local lockfile later MUST be
+  # added here.
+  # ----------------------------------------------------------------
+  lockfile:
+    name: Verify lockfile integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Upload processing coverage to Codecov
-        uses: codecov/codecov-action@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./xstreamroll-processing/coverage/lcov.info
-          flags: processing
-          name: processing-coverage
-          fail_ci_if_error: false
+          node-version: "20"
+          cache: "npm"
 
-      - name: Upload app coverage to Codecov
-        uses: codecov/codecov-action@v4
+      - name: Install workspace dependencies
+        run: npm ci
+
+      - name: Verify lockfile integrity
+        run: bash .github/scripts/verify-lockfiles.sh
+
+  # ----------------------------------------------------------------
+  # k8s/70-network-policies.yaml validator (issue #357). Runs WITHOUT
+  # a cluster: parses the YAML against documented invariants (see
+  # scripts/validate-network-policies.js for the full list). The
+  # validator fails CI on a regression that would otherwise break
+  # production traffic — e.g., a deleted allow rule or a typo'd
+  # podSelector label — instead of waiting for the rollout.
+  # ----------------------------------------------------------------
+  validate-k8s:
+    name: Validate k8s NetworkPolicies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./app/coverage/lcov.info
-          flags: app
-          name: app-coverage
-          fail_ci_if_error: false
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install workspace dependencies
+        run: npm ci
+
+      - name: Validate NetworkPolicies
+        run: npm run validate:network-policies
 
   bundle-analysis:
     runs-on: ubuntu-latest
@@ -147,14 +232,11 @@ jobs:
           node-version: "20"
           cache: "npm"
 
-      - name: Install root dependencies
-        run: npm install
+      - name: Install workspace dependencies
+        run: npm ci
 
-      - name: Install & build types package
-        run: cd packages/types && npm install && npm run build
-
-      - name: Install app dependencies
-        run: cd app && npm install
+      - name: Build types package
+        run: npm run build --workspace=packages/types
 
       - name: Build app with analysis
         run: cd app && npm run analyze
@@ -179,6 +261,13 @@ jobs:
         with:
           name: app-bundle-summary
           path: app/.next/analyze/summary.json
+
+      # Same lockfile-drift invariant as the `lockfile` job (#375). The
+      # bundle-analysis install path runs again here, so any accidental
+      # mutation to a package-lock.json must also fail this job rather
+      # than silently propagate.
+      - name: Verify lockfile integrity
+        run: bash .github/scripts/verify-lockfiles.sh
 
       - name: Comment PR with summary
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository

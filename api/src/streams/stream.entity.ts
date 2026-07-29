@@ -1,4 +1,5 @@
-import type { StreamStatus } from "@xstreamroll/types"
+import type { StreamVisibility } from "./dto/visibility"
+import type { Tag } from "../tags/tag.entity"
 
 /**
  * In-memory representation of a stream. Mirrors the `streams` table
@@ -12,13 +13,27 @@ import type { StreamStatus } from "@xstreamroll/types"
  * public contract matches `@xstreamroll/types#Stream` without forcing
  * every internal consumer (guards, repositories, SQL params) to work
  * with stringly-typed ids.
+ *
+ * `tags` is populated inline by {@link StreamsService.list} so a
+ * single `GET /streams` round-trip carries everything the dashboard
+ * needs to render tag chips (issue #330). Endpoints that fetch a
+ * single stream (create / update / findOne) leave the field undefined;
+ * callers that want the tags there should hit `GET /streams/:id/tags`.
+ *
+ * `visibility` is always populated (defaults to `"private"` on
+ * creation — issue #393). It is orthogonal to `status`: a stream can
+ * simultaneously be `"inactive"` and `"public"` (intentional, so that
+ * dashboards can preview an offline stream).
  */
 export interface Stream {
   id: number
   userId: number
   name: string
   description: string | null
-  status: StreamStatus
+  status: "inactive" | "active" | "error"
+  visibility: StreamVisibility
   createdAt: Date
   updatedAt: Date
+  /** See StreamsService.list for how this is populated. */
+  tags?: Tag[]
 }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 import { StreamListSkeleton } from "@/components/dashboard/stream-list-skeleton"
+import { LiveStreamStatusBadge } from "@/components/streams/live-stream-status-badge"
 import { StreamTagEditor } from "./stream-tag-editor"
 import { StreamsListLive } from "./streams-list-live"
 
@@ -27,7 +28,10 @@ export default function StreamsDashboardPage() {
   return (
     <main className="container mx-auto max-w-3xl px-4 py-10">
       <header className="mb-6 flex flex-col gap-1">
-        <h1 className="text-2xl font-bold tracking-tight">Streams</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold tracking-tight">Streams</h1>
+          <LiveStreamStatusBadge streamId={demoStreamId} initialStatus="inactive" />
+        </div>
         <p className="text-sm text-muted-foreground">
           Manage your streams and their tags. Changes are saved as you go.
         </p>

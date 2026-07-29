@@ -38,6 +38,25 @@ export class MetricsService implements OnModuleInit {
     registers: [this.registry],
   })
 
+  // Issue #328: PostgreSQL connection pool metrics
+  readonly dbPoolActive = new Gauge({
+    name: "db_pool_active_connections",
+    help: "Number of active (checked-out) PostgreSQL connections",
+    registers: [this.registry],
+  })
+
+  readonly dbPoolIdle = new Gauge({
+    name: "db_pool_idle_connections",
+    help: "Number of idle PostgreSQL connections in the pool",
+    registers: [this.registry],
+  })
+
+  readonly dbPoolWaiting = new Gauge({
+    name: "db_pool_waiting_requests",
+    help: "Number of queued requests waiting for a PostgreSQL connection",
+    registers: [this.registry],
+  })
+
   onModuleInit(): void {
     collectDefaultMetrics({ register: this.registry })
   }

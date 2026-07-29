@@ -128,16 +128,24 @@ export function AdminDashboard() {
 
 function RefreshStatus({ state }: { state: FetchState }) {
   if (state.kind === "loading") {
-    return <Badge variant="secondary">loading…</Badge>
+    return (
+      <Badge variant="secondary" role="status" aria-label="Loading stats">
+        loading…
+      </Badge>
+    )
   }
   if (state.kind === "ready") {
     return (
-      <Badge variant="outline">
+      <Badge variant="outline" role="status" aria-label={`Stats updated at ${state.loadedAt.toLocaleTimeString()}`}>
         updated {state.loadedAt.toLocaleTimeString()}
       </Badge>
     )
   }
-  return <Badge variant="destructive">stale</Badge>
+  return (
+    <Badge variant="destructive" role="status" aria-label="Stats stale">
+      stale
+    </Badge>
+  )
 }
 
 function StatCard({
