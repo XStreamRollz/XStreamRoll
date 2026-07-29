@@ -133,6 +133,7 @@ jobs:
       # migrations in `pgmigrations` so reruns against a polluted DB
       # stay safe.
       - name: Run database migrations (Issue #340)
+        if: matrix.workspace.needs_db
         run: cd api && npm run migrate
         env:
           DATABASE_URL: postgresql://xstreamroll:xstreamroll@localhost:5433/xstreamroll_test
