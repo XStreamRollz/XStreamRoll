@@ -34,15 +34,17 @@ psql -d "$DATABASE_URL" -f database/migrations/2026051501_add_stream_tags.down.s
 
 ## Listing
 
-| File                                       | Adds                                  |
-| ------------------------------------------ | ------------------------------------- |
-| `2026051501_add_stream_tags.up.sql`        | `tags`, `stream_tags`, supporting indexes |
-| `2026061001_add_password_hash.up.sql`      | `users.password_hash` (nullable → backfill → `NOT NULL`, no default) |
-| `2026061002_add_user_password_hash.up.sql` | `users.password_hash` — redundant re-add, no-op after `2026061001` via `IF NOT EXISTS` |
-| `2026071701_add_stream_event_latency.up.sql` | `stream_events.processing_latency_ms`, covering analytics index |
-| `2026072001_add_webhook_subscriptions.up.sql` | `webhook_subscriptions`, `webhook_deliveries`, supporting indexes |
-| `2026072501_add_composite_stream_events_index.up.sql` | `idx_stream_events_stream_id_created_at_desc` — composite index for the `WHERE stream_id = ? ORDER BY created_at DESC` query pattern
-| | `2026072301_add_notifications_expiry.up.sql` | `notifications.expires_at`, backfilled from `created_at`, covering index |
+| File                                                  | Adds                                                                                                                                 |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `2026051501_add_stream_tags.up.sql`                   | `tags`, `stream_tags`, supporting indexes                                                                                            |
+| `2026061001_add_password_hash.up.sql`                 | `users.password_hash` (nullable → backfill → `NOT NULL`, no default)                                                                 |
+| `2026061002_add_user_password_hash.up.sql`            | `users.password_hash` — redundant re-add, no-op after `2026061001` via `IF NOT EXISTS`                                               |
+| `2026071701_add_stream_event_latency.up.sql`          | `stream_events.processing_latency_ms`, covering analytics index                                                                      |
+| `2026072001_add_webhook_subscriptions.up.sql`         | `webhook_subscriptions`, `webhook_deliveries`, supporting indexes                                                                    |
+| `2026072301_add_notifications_expiry.up.sql`          | `notifications.expires_at`, backfilled from `created_at`, covering index                                                             |
+| `2026072501_add_composite_stream_events_index.up.sql` | `idx_stream_events_stream_id_created_at_desc` — composite index for the `WHERE stream_id = ? ORDER BY created_at DESC` query pattern |
+| `2026072801_alter_timestamp_to_timestamptz.up.sql`    | Converts all `TIMESTAMP` columns to `TIMESTAMPTZ` across every table; rewrites `DEFAULT CURRENT_TIMESTAMP` → `DEFAULT NOW()`         |
+
 > **Note on `2026061001` / `2026061002`:** both migrations add the same
 > `users.password_hash` column. `2026061001_add_password_hash` is the
 > canonical one — it matches `database/schema.sql` exactly
@@ -63,7 +65,7 @@ forever:
 - `NotificationsService.sweepExpired` runs on a fixed interval
   (`@Interval`, matching the retry-sweep pattern used by
   `WebhooksService`) and deletes rows with `DELETE FROM notifications
-  WHERE expires_at < NOW()`, in batches, until nothing due remains.
+WHERE expires_at < NOW()`, in batches, until nothing due remains.
 - `idx_notifications_expires_at` keeps that DELETE an index range scan
   rather than a full table scan as the table grows.
 

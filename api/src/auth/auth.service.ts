@@ -57,6 +57,7 @@ export class AuthService {
    */
   async register(dto: RegisterDto, req: Request): Promise<AuthResponse> {
     const ip = this.extractClientIp(req)
+    const _userAgent = req.headers["user-agent"] ?? "unknown"
 
     const emailExists = await this.usersRepository.findByEmail(dto.email)
     if (emailExists) {
