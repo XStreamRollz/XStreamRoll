@@ -1,22 +1,22 @@
-'use client';
+"use client"
 
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { useRouter } from 'next/navigation';
+import { zodResolver } from "@hookform/resolvers/zod"
+import { useRouter } from "next/navigation"
+import { useForm } from "react-hook-form"
+import { z } from "zod"
 
 const schema = z.object({
-  email: z.string().email({ message: 'Please enter a valid email address.' }),
+  email: z.string().email({ message: "Please enter a valid email address." }),
   password: z
     .string()
-    .min(8, { message: 'Password must contain at least 8 characters.' })
+    .min(8, { message: "Password must contain at least 8 characters." })
     .max(128),
-});
+})
 
-type FormData = z.infer<typeof schema>;
+type FormData = z.infer<typeof schema>
 
 export default function LoginPage() {
-  const router = useRouter();
+  const router = useRouter()
 
   const {
     register,
@@ -24,31 +24,33 @@ export default function LoginPage() {
     formState: { errors, isSubmitting, isValid, isValidating },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    mode: 'onChange',
-    reValidateMode: 'onChange',
-  });
+    mode: "onChange",
+    reValidateMode: "onChange",
+  })
 
   const onSubmit = async (data: FormData) => {
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
+    const response = await fetch("/api/auth/login", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify(data),
-    });
+    })
 
     if (response.ok) {
-      router.push('/dashboard');
+      router.push("/dashboard")
     } else {
-      alert('Invalid credentials');
+      alert("Invalid credentials")
     }
-  };
+  }
 
   return (
     <main className="flex min-h-screen items-center justify-center">
       <form
         onSubmit={handleSubmit(onSubmit)}
         className="w-full max-w-md space-y-4 rounded border p-6"
+        noValidate
+        aria-label="Login form"
       >
         <h1 className="text-2xl font-bold">Login</h1>
 
@@ -58,14 +60,20 @@ export default function LoginPage() {
           </label>
           <input
             id="email"
-            {...register('email')}
+            {...register("email")}
             placeholder="Email"
-            aria-invalid={errors.email ? 'true' : 'false'}
-            aria-describedby={errors.email ? 'email-error' : undefined}
+            aria-invalid={errors.email ? "true" : "false"}
+            aria-describedby={errors.email ? "email-error" : undefined}
             className="w-full border p-2"
+            autoComplete="email"
           />
           {errors.email && (
-            <p id="email-error" role="alert" aria-live="assertive" className="text-red-500">
+            <p
+              id="email-error"
+              role="alert"
+              aria-live="assertive"
+              className="text-red-500"
+            >
               {errors.email.message}
             </p>
           )}
@@ -78,14 +86,20 @@ export default function LoginPage() {
           <input
             id="password"
             type="password"
-            {...register('password')}
+            {...register("password")}
             placeholder="Password"
-            aria-invalid={errors.password ? 'true' : 'false'}
-            aria-describedby={errors.password ? 'password-error' : undefined}
+            aria-invalid={errors.password ? "true" : "false"}
+            aria-describedby={errors.password ? "password-error" : undefined}
             className="w-full border p-2"
+            autoComplete="current-password"
           />
           {errors.password && (
-            <p id="password-error" role="alert" aria-live="assertive" className="text-red-500">
+            <p
+              id="password-error"
+              role="alert"
+              aria-live="assertive"
+              className="text-red-500"
+            >
               {errors.password.message}
             </p>
           )}
@@ -96,9 +110,9 @@ export default function LoginPage() {
           className="w-full bg-black p-2 text-white disabled:opacity-50"
           aria-disabled={isSubmitting || isValidating || !isValid}
         >
-          Login
+          {isSubmitting ? 'Logging in…' : 'Login'}
         </button>
       </form>
     </main>
-  );
+  )
 }

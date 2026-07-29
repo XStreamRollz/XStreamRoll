@@ -1,4 +1,5 @@
 import { HealthCheckError } from "@nestjs/terminus"
+
 import { MemoryHealthIndicator } from "./memory.health-indicator"
 
 describe("MemoryHealthIndicator", () => {
@@ -34,7 +35,9 @@ describe("MemoryHealthIndicator", () => {
         arrayBuffers: 0,
       })
 
-      await expect(indicator.checkHeap("memory_heap")).rejects.toBeInstanceOf(HealthCheckError)
+      await expect(indicator.checkHeap("memory_heap")).rejects.toBeInstanceOf(
+        HealthCheckError,
+      )
     })
   })
 
@@ -54,9 +57,9 @@ describe("MemoryHealthIndicator", () => {
         return callCount++ === 0 ? BigInt(0) : BigInt(200_000_000)
       })
 
-      await expect(indicator.checkEventLoopLag("event_loop")).rejects.toBeInstanceOf(
-        HealthCheckError,
-      )
+      await expect(
+        indicator.checkEventLoopLag("event_loop"),
+      ).rejects.toBeInstanceOf(HealthCheckError)
     })
   })
 })

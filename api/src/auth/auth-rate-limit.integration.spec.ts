@@ -7,27 +7,28 @@
  * - Other endpoints unaffected by strict auth throttling
  * - Retry-After header present on 429 responses
  */
-
 import { INestApplication, ValidationPipe } from "@nestjs/common"
-import { Test, TestingModule } from "@nestjs/testing"
-import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler"
 import { APP_GUARD } from "@nestjs/core"
+import { Test, TestingModule } from "@nestjs/testing"
+import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler"
 import request from "supertest"
+
+import { AuditService } from "../audit/audit.service"
 import { AuthController } from "./auth.controller"
 import { AuthService } from "./auth.service"
-import { UsersRepository } from "./users.repository"
-import { TokenDenylistService } from "./token-denylist.service"
 import { PasswordResetService } from "./password-reset.service"
-import { AuditService } from "../audit/audit.service"
+import { TokenDenylistService } from "./token-denylist.service"
+import { UsersRepository } from "./users.repository"
 
 describe("Auth Rate Limiting (Integration)", () => {
   let app: INestApplication
-  let authService: AuthService
-  let usersRepository: UsersRepository
+  let _authService: AuthService
+  let _usersRepository: UsersRepository
 
   const mockAuthService = {
     register: jest.fn(),
     login: jest.fn(),
+    refresh: jest.fn(),
     logout: jest.fn(),
     forgotPassword: jest.fn(),
     resetPassword: jest.fn(),
@@ -91,12 +92,16 @@ describe("Auth Rate Limiting (Integration)", () => {
       ],
     }).compile()
 
-    app = moduleFixture.createNestApplication(); const expressApp = app.getHttpAdapter().getInstance(); if (expressApp && typeof expressApp.set === "function") { expressApp.set("trust proxy", true); }
+    app = moduleFixture.createNestApplication()
+    const expressApp = app.getHttpAdapter().getInstance()
+    if (expressApp && typeof expressApp.set === "function") {
+      expressApp.set("trust proxy", true)
+    }
     app.useGlobalPipes(new ValidationPipe())
     await app.init()
 
-    authService = moduleFixture.get<AuthService>(AuthService)
-    usersRepository = moduleFixture.get<UsersRepository>(UsersRepository)
+    _authService = moduleFixture.get<AuthService>(AuthService)
+    _usersRepository = moduleFixture.get<UsersRepository>(UsersRepository)
   })
 
   afterEach(async () => {
@@ -114,6 +119,7 @@ describe("Auth Rate Limiting (Integration)", () => {
           createdAt: new Date(),
         },
         accessToken: "token.here",
+        refreshToken: "refresh.token.here",
       })
 
       const loginDto = { email: "test@example.com", password: "password" }
@@ -141,6 +147,7 @@ describe("Auth Rate Limiting (Integration)", () => {
           createdAt: new Date(),
         },
         accessToken: "token.here",
+        refreshToken: "refresh.token.here",
       })
 
       const loginDto = { email: "test@example.com", password: "password" }
@@ -175,6 +182,7 @@ describe("Auth Rate Limiting (Integration)", () => {
           createdAt: new Date(),
         },
         accessToken: "token.here",
+        refreshToken: "refresh.token.here",
       })
 
       const loginDto = { email: "test@example.com", password: "password" }
@@ -208,6 +216,7 @@ describe("Auth Rate Limiting (Integration)", () => {
           createdAt: new Date(),
         },
         accessToken: "token.here",
+        refreshToken: "refresh.token.here",
       })
 
       const loginDto = { email: "test@example.com", password: "password" }
@@ -248,6 +257,7 @@ describe("Auth Rate Limiting (Integration)", () => {
           createdAt: new Date(),
         },
         accessToken: "token.here",
+        refreshToken: "refresh.token.here",
       })
 
       const registerDto = {

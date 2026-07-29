@@ -1,5 +1,6 @@
-import { render, screen, act, waitFor } from "@testing-library/react"
+import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+
 import { EmbedSnippet } from "./embed-snippet"
 
 type MutableNavigator = Omit<Navigator, "clipboard"> & { clipboard?: unknown }
@@ -64,9 +65,6 @@ describe("EmbedSnippet", () => {
     } catch (e) {}
   })
 
-
-
-
   beforeEach(() => {
     jest.clearAllMocks()
     jest.useFakeTimers()
@@ -125,8 +123,6 @@ describe("EmbedSnippet", () => {
 
     render(<EmbedSnippet publicId="stream-123" />)
 
-
-
     const copyBtn = screen.getByRole("button", { name: "Copy embed snippet" })
     await user.click(copyBtn)
 
@@ -135,13 +131,11 @@ describe("EmbedSnippet", () => {
       '        width="640" height="360"\n' +
       '        frameborder="0"\n' +
       '        allow="autoplay; encrypted-media; picture-in-picture"\n' +
-      '        allowfullscreen></iframe>'
+      "        allowfullscreen></iframe>"
 
     await waitFor(() => {
       expect(mockWriteText).toHaveBeenCalledWith(expectedSnippet)
-      expect(
-        screen.getByRole("button", { name: "Copied" }),
-      ).toBeInTheDocument()
+      expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument()
     })
 
     // Fast-forward 1800ms

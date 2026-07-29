@@ -1,4 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing"
+
 import { MetricsService } from "./metrics.service"
 
 describe("MetricsService", () => {
@@ -31,7 +32,11 @@ describe("MetricsService", () => {
   })
 
   it("increments httpRequestsTotal counter", async () => {
-    service.httpRequestsTotal.inc({ method: "GET", path: "/health", status_code: "200" })
+    service.httpRequestsTotal.inc({
+      method: "GET",
+      path: "/health",
+      status_code: "200",
+    })
     const output = await service.getMetrics()
     expect(output).toContain("http_requests_total")
     expect(output).toMatch(/http_requests_total\{[^}]+\} 1/)

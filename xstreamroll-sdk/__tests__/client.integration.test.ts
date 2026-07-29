@@ -1,8 +1,30 @@
 import nock from "nock"
+
 import { StreamingClient } from "../src/client"
 import { ApiError } from "../src/types"
 
-const BASE_URL = "http://api.test"
+// When INTEGRATION_API_URL is set the tests run against a live API server and
+// nock intercepts that same base URL (so mocks still apply). Without it the
+// tests fall back to the inert host "http://api.test", which never resolves,
+// so every test that sets up a nock interceptor passes without any network I/O.
+//
+// To run against a real server:
+//   INTEGRATION_API_URL=http://localhost:3001 npm test
+//
+// In CI, tests run in mock mode by default (no server required). A separate
+// workflow job can set INTEGRATION_API_URL to exercise the live stack.
+const BASE_URL = process.env.INTEGRATION_API_URL ?? "http://api.test"
+
+// Hard block real network traffic in the test process. Any request to a host
+// that does not have a matching nock interceptor — including accidental calls
+// to localhost:3001 — throws immediately rather than timing out.
+beforeAll(() => {
+  nock.disableNetConnect()
+})
+
+afterAll(() => {
+  nock.enableNetConnect()
+})
 
 describe("StreamingClient Integration", () => {
   let client: StreamingClient
@@ -28,7 +50,10 @@ describe("StreamingClient Integration", () => {
       }
 
       nock(BASE_URL)
-        .post("/auth/login", { email: "test@example.com", password: "password" })
+        .post("/auth/login", {
+          email: "test@example.com",
+          password: "password",
+        })
         .reply(200, tokens)
 
       const result = await client.login("test@example.com", "password")
@@ -42,18 +67,18 @@ describe("StreamingClient Integration", () => {
         error: "Unauthorized",
       }
 
-      nock(BASE_URL)
-        .post("/auth/login")
-        .reply(401, errorResponse)
+      nock(BASE_URL).post("/auth/login").reply(401, errorResponse)
 
-      await expect(client.login("wrong@example.com", "wrong")).rejects.toThrow(ApiError)
+      await expect(client.login("wrong@example.com", "wrong")).rejects.toThrow(
+        ApiError,
+      )
     })
 
     it("register with valid data returns tokens", async () => {
       const dto = {
+        username: "newuser",
         email: "new@example.com",
         password: "password",
-        displayName: "New User",
       }
       const tokens = {
         accessToken: "access-456",
@@ -61,9 +86,7 @@ describe("StreamingClient Integration", () => {
         expiresIn: 3600,
       }
 
-      nock(BASE_URL)
-        .post("/auth/register", dto)
-        .reply(201, tokens)
+      nock(BASE_URL).post("/auth/register", dto).reply(201, tokens)
 
       const result = await client.register(dto)
       expect(result).toEqual(tokens)
@@ -125,9 +148,7 @@ describe("StreamingClient Integration", () => {
         status: "active",
       }
 
-      nock(BASE_URL)
-        .get("/streams/stream-1")
-        .reply(200, streamData)
+      nock(BASE_URL).get("/streams/stream-1").reply(200, streamData)
 
       const result = await client.getStreamStatus("stream-1")
       expect(result).toEqual(streamData)
@@ -186,24 +207,20 @@ describe("StreamingClient Integration", () => {
   describe("token refresh", () => {
     it("automatically retries with new token on 401", async () => {
       // 1. Initial login to set tokens
-      nock(BASE_URL)
-        .post("/auth/login")
-        .reply(200, {
-          accessToken: "old-access",
-          refreshToken: "refresh-123",
-          expiresIn: 3600,
-        })
+      nock(BASE_URL).post("/auth/login").reply(200, {
+        accessToken: "old-access",
+        refreshToken: "refresh-123",
+        expiresIn: 3600,
+      })
 
       await client.login("test@example.com", "password")
 
       // 2. Request fails with 401
-      nock(BASE_URL)
-        .get("/streams/stream-1")
-        .reply(401)
+      nock(BASE_URL).get("/streams/stream-1").reply(401)
 
-      // 3. Refresh token call
+      // 3. Refresh token call (no body, relies on cookie/server-side session)
       nock(BASE_URL)
-        .post("/auth/refresh", { refreshToken: "refresh-123" })
+        .post("/auth/refresh")
         .reply(200, {
           accessToken: "new-access",
           refreshToken: "new-refresh",
@@ -252,13 +269,11 @@ describe("StreamingClient Integration", () => {
     })
 
     it("maps non-2xx responses to ApiError with status and message", async () => {
-      nock(BASE_URL)
-        .get("/streams/missing")
-        .reply(404, {
-          statusCode: 404,
-          message: "Stream not found",
-          error: "Not Found",
-        })
+      nock(BASE_URL).get("/streams/missing").reply(404, {
+        statusCode: 404,
+        message: "Stream not found",
+        error: "Not Found",
+      })
 
       try {
         await client.getStreamStatus("missing")
@@ -282,14 +297,16 @@ describe("StreamingClient Integration", () => {
 
       try {
         await client.register({
+          username: "x",
           email: "bad",
           password: "x",
-          displayName: "x",
         })
         fail("expected ApiError")
       } catch (err) {
         expect(err).toBeInstanceOf(ApiError)
-        expect((err as ApiError).message).toBe("email must be an email, password too short")
+        expect((err as ApiError).message).toBe(
+          "email must be an email, password too short",
+        )
       }
     })
 
@@ -301,14 +318,16 @@ describe("StreamingClient Integration", () => {
           streamId: "s1",
           eventType: "data",
           data: {},
-        })
+        }),
       ).resolves.toBeUndefined()
     })
 
     it("retries transient 503 via HttpClient withRetry then succeeds", async () => {
-      nock(BASE_URL)
-        .get("/streams/flaky")
-        .reply(503, { statusCode: 503, message: "Unavailable", error: "Service Unavailable" })
+      nock(BASE_URL).get("/streams/flaky").reply(503, {
+        statusCode: 503,
+        message: "Unavailable",
+        error: "Service Unavailable",
+      })
       nock(BASE_URL)
         .get("/streams/flaky")
         .reply(200, { id: "flaky", status: "active" })
@@ -319,14 +338,11 @@ describe("StreamingClient Integration", () => {
     })
 
     it("maps exhausted retryable errors to ApiError", async () => {
-      nock(BASE_URL)
-        .get("/streams/down")
-        .times(3)
-        .reply(503, {
-          statusCode: 503,
-          message: "Unavailable",
-          error: "Service Unavailable",
-        })
+      nock(BASE_URL).get("/streams/down").times(3).reply(503, {
+        statusCode: 503,
+        message: "Unavailable",
+        error: "Service Unavailable",
+      })
 
       await expect(client.getStreamStatus("down")).rejects.toMatchObject({
         name: "ApiError",
@@ -343,7 +359,7 @@ describe("StreamingClient Integration", () => {
           streamId: "s1",
           eventType: "data",
           data: {},
-        })
+        }),
       ).rejects.toThrow()
     })
 

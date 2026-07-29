@@ -7,11 +7,11 @@ entries surgically.
 
 ## Files
 
-| File             | Purpose                                                  |
-| ---------------- | -------------------------------------------------------- |
-| `cache-config.ts`| Single source of truth for cache tags + TTLs             |
-| `cached.ts`      | Thin wrapper around `unstable_cache` with dev hit/miss logs |
-| `streams.ts`     | `getStreamList`, `getStreamDetail`, and invalidate helpers |
+| File              | Purpose                                                     |
+| ----------------- | ----------------------------------------------------------- |
+| `cache-config.ts` | Single source of truth for cache tags + TTLs                |
+| `cached.ts`       | Thin wrapper around `unstable_cache` with dev hit/miss logs |
+| `streams.ts`      | `getStreamList`, `getStreamDetail`, and invalidate helpers  |
 
 ## Cache lifecycle
 
@@ -45,10 +45,11 @@ The acceptance criteria for issue 93 are:
 
 ```ts
 // lib/cache/users.ts
-import "server-only"
 import { revalidateTag } from "next/cache"
-import { cached } from "./cached"
+import "server-only"
+
 import { CACHE_TAGS, CACHE_TTL_SECONDS } from "./cache-config"
+import { cached } from "./cached"
 
 export const getCurrentUserProfile = cached(
   async (userId: string) => {

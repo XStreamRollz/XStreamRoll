@@ -1,0 +1,307 @@
+# Kubernetes NetworkPolicies — issue #357
+# ---------------------------------------------------------------------------
+# Defense-in-depth segmentation for the `xstreamroll` namespace. The base
+# rule is deny-by-default: every pod has a `default-deny` policy that drops
+# all ingress and egress traffic that isn't matched by a more specific policy.
+# Layered on top are narrowly-scoped allowances for exactly the traffic
+# flows the platform needs. Any service that needs new connectivity MUST land
+# its own `allow-*` policy — implicit cross-pod traffic is no longer free.
+#
+# Reference traffic matrix (only flows below are allowed):
+#
+#   app  ──── :3001 ───▶  api
+#   app  ──── :53   ───▶  kube-system/kube-dns
+#   api  ──── :5432 ───▶ postgres
+#   api  ──── :6379 ───▶ redis
+#   api  ──── :4318 ───▶ jaeger (when deployed; same-namespace)
+#   api  ──── :53    ───▶ kube-system/kube-dns
+#   processing ── :3001 ──▶ api
+#   processing ── :53   ──▶ kube-system/kube-dns
+#   postgres ──── :53   ──▶ kube-system/kube-dns
+#   redis ────── :53   ──▶ kube-system/kube-dns
+#   jaeger ───── :53   ──▶ kube-system/kube-dns
+#
+#   (ingress)
+#   postgres  :5432  ◀── api
+#   redis     :6379  ◀── api
+#   api       :3001  ◀── app, processing
+#   app       :3000  ◀── any pod in the namespace (Ingress controller)
+#   processing:3002  ◀── any pod in the namespace (Prometheus scrape)
+#
+# Policies are mutually exclusive on a per-direction basis: each pod gets
+# exactly one `default-deny-<direction>` AND an `allow-*` for every flow
+# it participates in. Adding the deny policy that matches a pod doesn't
+# break anything; traffic that doesn't match an `allow-*` was already
+# dropping silently under the broader `default-deny` anyway.
+#
+# Selector notes:
+#   * `podSelector: {}` in a per-namespace policy matches every pod in
+#     the policy's namespace. We scope to specific pods by adding an
+#     explicit `matchLabels` filter that aligns with the `app:` labels
+#     on each Deployment.
+#   * `namespaceSelector` matches the namespace of the SOURCE pod (the
+#     selector is applied to the policy's own namespace by Kubernetes).
+#   * The DNS egress policy uses `namespaceSelector` for `kube-system`
+#     because the kubelet schedules `kube-dns` (CoreDNS) there; some
+#     providers also expose `kube-dns-public` but for this cluster the
+#     CoreDNS Service is the canonical resolver.
+
+# ---------------------------------------------------------------------------
+# 1. Default deny — every pod in the namespace.
+# ---------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: xstreamroll
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-egress
+  namespace: xstreamroll
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+
+# ---------------------------------------------------------------------------
+# 2. DNS egress to kube-dns — every pod. Without this, name resolution
+#    inside the cluster breaks because `kube-dns` lives in `kube-system`.
+# ---------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: xstreamroll
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+# ---------------------------------------------------------------------------
+# 3. postgres — ingress only from the API on 5432. No egress beyond DNS.
+# ---------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postgres-ingress
+  namespace: xstreamroll
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: api
+      ports:
+        - protocol: TCP
+          port: 5432
+
+# ---------------------------------------------------------------------------
+# 4. redis — ingress only from the API on 6379 (cache + token denylist).
+# ---------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-redis-ingress
+  namespace: xstreamroll
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: api
+      ports:
+        - protocol: TCP
+          port: 6379
+
+# ---------------------------------------------------------------------------
+# 5. API — ingress from app + processing on 3001; egress to postgres, redis,
+#    and (when present) jaeger. Without the OTLP egress, distributed traces
+#    silently drop on the way out.
+# ---------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-ingress
+  namespace: xstreamroll
+spec:
+  podSelector:
+    matchLabels:
+      app: api
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: app
+        - podSelector:
+            matchLabels:
+              app: processing
+      ports:
+        - protocol: TCP
+          port: 3001
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-egress
+  namespace: xstreamroll
+spec:
+  podSelector:
+    matchLabels:
+      app: api
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Jaeger is opt-in (commented out in kustomization.yaml); the policy
+    # allows the traffic when jaeger is deployed and silently no-ops
+    # otherwise. We allow cross-namespace DNS resolution to keep name
+    # lookups working without listing every pod selector.
+    - to:
+        - podSelector:
+            matchLabels:
+              app: jaeger
+      ports:
+        - protocol: TCP
+          port: 4318
+
+# ---------------------------------------------------------------------------
+# 6. App — ingress from any pod in the namespace (Ingress controller sits
+#    inside the same namespace with its own `app: ingress-nginx` label,
+#    but we accept any pod here so any ingress-class swap still works).
+#    Egress is restricted to the API and DNS.
+# ---------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-ingress
+  namespace: xstreamroll
+spec:
+  podSelector:
+    matchLabels:
+      app: app
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-egress
+  namespace: xstreamroll
+spec:
+  podSelector:
+    matchLabels:
+      app: app
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: api
+      ports:
+        - protocol: TCP
+          port: 3001
+
+# ---------------------------------------------------------------------------
+# 7. Cert-manager HTTP-01 solver. cert-manager creates a short-lived
+#    pod (labelled `acme.cert-manager.io/http01-solver=true`) inside
+#    the namespace of the Ingress it's solving for. Without an explicit
+#    ingress policy, the namespace's `default-deny-ingress` will block
+#    Let's Encrypt from reaching the solver on :80 and renewals will
+#    fail silently. The policy below accepts HTTP traffic on :80 from
+#    anywhere in the cluster — narrower than default-allow but wide
+#    enough for the ACME HTTP-01 challenge to land. (DNS-01 challenges
+#    need no solver pod and are unaffected.)
+# ---------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-cert-solver-ingress
+  namespace: xstreamroll
+spec:
+  podSelector:
+    matchLabels:
+      acme.cert-manager.io/http01-solver: "true"
+  policyTypes: ["Ingress"]
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 80
+
+# ---------------------------------------------------------------------------
+# 8. Processing — ingress on 3002 from any pod in the namespace (Prometheus
+#    scrape job). Egress is restricted to the API and DNS.
+# ---------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-processing-ingress
+  namespace: xstreamroll
+spec:
+  podSelector:
+    matchLabels:
+      app: processing
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 3002
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-processing-egress
+  namespace: xstreamroll
+spec:
+  podSelector:
+    matchLabels:
+      app: processing
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: api
+      ports:
+        - protocol: TCP
+          port: 3001

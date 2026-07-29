@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export function middleware(request: NextRequest) {
-  const token = request.cookies.get('token');
+  const token = request.cookies.get('refresh_token');
 
   const isDashboardRoute = request.nextUrl.pathname.startsWith('/dashboard');
 

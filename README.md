@@ -137,7 +137,45 @@ This repository contains the following core packages:
 | **Database** | [e.g., PostgreSQL / Redis] |
 | **Tooling** | ESLint, Prettier, Jest |
 
-## 📖 API Documentation
+## � Distributed Locking & Race Condition Prevention
+
+XStreamRoll Processing implements distributed locking to prevent duplicate event processing in multi-worker deployments (issue #338). The system ensures that:
+
+- **Lock acquisition happens before session spawning** - No session processes events without confirmed ownership
+- **Concurrent route() calls are deduplicated** - Multiple workers racing for the same stream share a single lock acquisition attempt
+- **Automatic lock renewal** - Heartbeats maintain ownership while sessions are active
+- **Graceful lock release** - Locks are released when sessions stop or error
+
+### Lock Manager Backends
+
+The system supports two lock manager backends:
+
+- **MemoryLockManager** (default) - In-process locking for single-worker deployments
+- **PostgresLockManager** - Distributed locking via PostgreSQL for multi-worker horizontal scaling
+
+Configure via `LOCK_BACKEND` environment variable:
+```bash
+LOCK_BACKEND=memory  # Default, single-worker
+LOCK_BACKEND=postgres  # Multi-worker with DATABASE_URL
+```
+
+### Observability
+
+The enhanced implementation includes comprehensive metrics and structured logging:
+
+**Metrics (exposed at `/metrics`):**
+- `xstreamroll_lock_acquisitions_total` - Total lock acquisition attempts
+- `xstreamroll_lock_acquisitions_denied` - Locks denied (another worker owns stream)
+- `xstreamroll_lock_renewals_total` - Successful lock renewals
+- `xstreamroll_lock_renewals_failed` - Failed renewals (lock lost)
+- `xstreamroll_lock_releases_total` - Successful lock releases
+- `xstreamroll_active_locks` - Current number of active locks
+- `xstreamroll_concurrent_route_dedupes` - Concurrent route() calls deduplicated
+
+**Structured Logging:**
+All lock operations are logged with detailed context including streamId, workerId, timestamps, and error details for production debugging.
+
+## �📖 API Documentation
 Once the local server is running, you can access the full OpenAPI/Swagger documentation at:
 👉 **`http://localhost:3000/docs`**
 

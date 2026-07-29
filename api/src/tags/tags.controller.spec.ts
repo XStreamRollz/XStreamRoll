@@ -1,3 +1,10 @@
+import { Test, TestingModule } from "@nestjs/testing"
+
+import { StreamOwnershipGuard } from "../common/guards/stream-ownership.guard"
+import { Tag } from "./tag.entity"
+import { StreamTagsController, TagsListController } from "./tags.controller"
+import { TagsService } from "./tags.service"
+
 // Mock the env config before any imports that transitively load it.
 // StreamOwnershipGuard → StreamOwnershipService → config/env → validateEnv()
 // which calls process.exit(1) when DATABASE_URL / STREAM_API_KEY are absent.
@@ -10,12 +17,6 @@ jest.mock("../config/env", () => ({
     STREAM_API_KEY: "test-key",
   },
 }))
-
-import { Test, TestingModule } from "@nestjs/testing"
-import { StreamOwnershipGuard } from "../common/guards/stream-ownership.guard"
-import { StreamTagsController, TagsListController } from "./tags.controller"
-import { TagsService } from "./tags.service"
-import { Tag } from "./tag.entity"
 
 const makeTag = (overrides: Partial<Tag> = {}): Tag => ({
   id: 1,
@@ -70,7 +71,13 @@ describe("TagsListController", () => {
 
   it("returns whatever tagsService.list returns", async () => {
     const tag = makeTag()
-    const payload = { data: [tag], page: 1, limit: 20, total: 1, hasMore: false }
+    const payload = {
+      data: [tag],
+      page: 1,
+      limit: 20,
+      total: 1,
+      hasMore: false,
+    }
     tagsService.list.mockResolvedValue(payload)
 
     const result = await controller.list({})
@@ -81,7 +88,9 @@ describe("TagsListController", () => {
 
 describe("StreamTagsController", () => {
   let controller: StreamTagsController
-  let tagsService: jest.Mocked<Pick<TagsService, "attachToStream" | "detachFromStream">>
+  let tagsService: jest.Mocked<
+    Pick<TagsService, "attachToStream" | "detachFromStream">
+  >
 
   beforeEach(async () => {
     tagsService = {

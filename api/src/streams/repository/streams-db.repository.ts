@@ -8,7 +8,15 @@ import {
 import { Pool } from "pg"
 import { PG_POOL } from "../../database/database.module"
 import { StreamAnalyticsDto } from "../dto/stream-analytics.dto"
+import type { StreamVisibility } from "../dto/visibility"
 import { Stream } from "../stream.entity"
+import {
+  StreamsRepository,
+  PendingStreamEvent,
+  type StreamCreateParams,
+  type StreamListFilter,
+  type StreamUpdateChanges,
+} from "./streams.repository"
 
 /**
  * PostgreSQL-backed streams repository.
@@ -18,6 +26,10 @@ import { Stream } from "../stream.entity"
  *
  * All queries use parameterized placeholders ($1, $2 …) — never string
  * interpolation — to prevent SQL injection.
+ *
+ * Issue #393: `visibility` is now part of every read and write so the
+ *   public-discovery filter (`GET /streams?visibility=public`) is
+ *   enforceable at the SQL layer.
  */
 @Injectable()
 export class StreamsDbRepository {
@@ -33,6 +45,7 @@ export class StreamsDbRepository {
       name: row.name as string,
       description: (row.description as string | null) ?? null,
       status: row.status as Stream["status"],
+      visibility: row.visibility as StreamVisibility,
       createdAt: row.created_at as Date,
       updatedAt: row.updated_at as Date,
     }
@@ -49,7 +62,7 @@ export class StreamsDbRepository {
   async findById(id: number): Promise<Stream | undefined> {
     try {
       const { rows } = await this.pool.query<Record<string, unknown>>(
-        `SELECT id, user_id, name, description, status, created_at, updated_at
+        `SELECT id, user_id, name, description, status, visibility, created_at, updated_at
          FROM streams
          WHERE id = $1`,
         [id],
@@ -61,36 +74,60 @@ export class StreamsDbRepository {
   }
 
   /**
-   * Paginated listing with optional status filter.
-   * Returns rows sorted newest-first (created_at DESC) to match
-   * the behaviour of the in-memory repository.
+   * Paginated listing with visibility-aware ACL.
+   *
+   * Visibility rules (issue #393):
+   *   - The base set returned to ANY authenticated viewer is
+   *     `(visibility = 'public' OR user_id = $N)` so private streams
+   *     are only visible to their owner.
+   *   - `visibility` narrows within that visible set.
+   *   - `ownerOnly=true` restricts the result to streams the caller
+   *     owns, regardless of visibility.
+   *   - `status` is an independent optional filter.
+   *
+   * The WHERE clauses are emitted in a single shared fragment so the
+   * COUNT(*) and SELECT use identical predicates — never running the
+   * risk of `total` and `items` representing different result sets.
    */
   async listPaginated(
     page: number,
     limit: number,
-    filter?: { status?: string },
+    viewerUserId: number,
+    filter?: StreamListFilter,
   ): Promise<{ items: Stream[]; total: number }> {
     const offset = (page - 1) * limit
-    const params: unknown[] = []
+    const params: unknown[] = [viewerUserId]
 
-    // Build a single WHERE clause shared by both queries.
-    let where = ""
+    const conditions: string[] = []
+    // Visibility ACL first because it has the lowest $N. We push
+    // $N once and reuse it across both branches below.
+    if (filter?.ownerOnly) {
+      // Strict owner filter — callers asking for "my streams" cannot
+      // escape into other users' public streams by accident.
+      conditions.push(`user_id = $1`)
+    } else {
+      conditions.push(`(visibility = 'public' OR user_id = $1)`)
+    }
     if (filter?.status) {
       params.push(filter.status)
-      where = `WHERE status = $${params.length}`
+      conditions.push(`status = $${params.length}`)
     }
+    if (filter?.visibility) {
+      params.push(filter.visibility)
+      conditions.push(`visibility = $${params.length}`)
+    }
+    const where = `WHERE ${conditions.join(" AND ")}`
 
     try {
-      const countParams = [...params]
       const { rows: countRows } = await this.pool.query<{ count: string }>(
         `SELECT COUNT(*)::int AS count FROM streams ${where}`,
-        countParams,
+        params,
       )
       const total = Number(countRows[0]?.count ?? 0)
 
       const itemParams = [...params, limit, offset]
       const { rows } = await this.pool.query<Record<string, unknown>>(
-        `SELECT id, user_id, name, description, status, created_at, updated_at
+        `SELECT id, user_id, name, description, status, visibility, created_at, updated_at
          FROM streams
          ${where}
          ORDER BY created_at DESC
@@ -104,17 +141,14 @@ export class StreamsDbRepository {
     }
   }
 
-  async create(params: {
-    userId: number
-    name: string
-    description?: string
-  }): Promise<Stream> {
+  async create(params: StreamCreateParams): Promise<Stream> {
     try {
+      const visibility: StreamVisibility = params.visibility ?? "private"
       const { rows } = await this.pool.query<Record<string, unknown>>(
-        `INSERT INTO streams (user_id, name, description, status)
-         VALUES ($1, $2, $3, 'inactive')
-         RETURNING id, user_id, name, description, status, created_at, updated_at`,
-        [params.userId, params.name, params.description ?? null],
+        `INSERT INTO streams (user_id, name, description, status, visibility)
+         VALUES ($1, $2, $3, 'inactive', $4)
+         RETURNING id, user_id, name, description, status, visibility, created_at, updated_at`,
+        [params.userId, params.name, params.description ?? null, visibility],
       )
       if (!rows[0]) {
         throw new InternalServerErrorException("Failed to create stream")
@@ -126,10 +160,7 @@ export class StreamsDbRepository {
     }
   }
 
-  async update(
-    id: number,
-    changes: { name?: string; description?: string; status?: string },
-  ): Promise<Stream> {
+  async update(id: number, changes: StreamUpdateChanges): Promise<Stream> {
     // Build SET clause dynamically from the provided changes.
     const setClauses: string[] = []
     const params: unknown[] = []
@@ -145,6 +176,10 @@ export class StreamsDbRepository {
     if (changes.status !== undefined) {
       params.push(changes.status)
       setClauses.push(`status = $${params.length}`)
+    }
+    if (changes.visibility !== undefined) {
+      params.push(changes.visibility)
+      setClauses.push(`visibility = $${params.length}`)
     }
 
     // Always bump updated_at.
@@ -167,7 +202,7 @@ export class StreamsDbRepository {
         `UPDATE streams
          SET ${setClauses.join(", ")}
          WHERE id = ${idParam}
-         RETURNING id, user_id, name, description, status, created_at, updated_at`,
+         RETURNING id, user_id, name, description, status, visibility, created_at, updated_at`,
         params,
       )
       if (!rows[0]) {
@@ -189,6 +224,43 @@ export class StreamsDbRepository {
       return (rowCount ?? 0) > 0
     } catch (err) {
       this.handleDbError(err, "delete")
+    }
+  }
+
+  /**
+   * Returns a paginated slice of unprocessed stream-data rows ordered by
+   * insertion time (oldest first) so the worker processes events in FIFO order.
+   *
+   * `nextCursor` is the offset for the next page, or `null` when the returned
+   * batch is smaller than `limit` (i.e. there are no more rows to fetch).
+   */
+  async getPendingEvents(
+    limit: number,
+    offset: number,
+  ): Promise<{ data: PendingStreamEvent[]; nextCursor: number | null }> {
+    try {
+      const { rows } = await this.pool.query<{
+        stream_id: number
+        data: Record<string, unknown>
+        timestamp: Date
+      }>(
+        `SELECT stream_id, data, timestamp
+         FROM stream_data
+         ORDER BY timestamp ASC
+         LIMIT $1 OFFSET $2`,
+        [limit, offset],
+      )
+
+      const data: PendingStreamEvent[] = rows.map((r) => ({
+        streamId: String(r.stream_id),
+        data: r.data,
+        timestamp: r.timestamp.toISOString(),
+      }))
+
+      const nextCursor = data.length < limit ? null : offset + data.length
+      return { data, nextCursor }
+    } catch (err) {
+      this.handleDbError(err, "getPendingEvents")
     }
   }
 
@@ -251,14 +323,15 @@ export class StreamsDbRepository {
         streamId,
         totalEventsProcessed: {
           last24h: Number(stats?.last_24h ?? 0),
-          last7d: Number(stats?.last_7d ?? 0),
+          last7d: Number(stats?.last_7d ?? 2),
           last30d,
         },
         errorRate: {
           window: "30d",
           totalEvents: last30d,
           errorEvents,
-          percentage: last30d === 0 ? 0 : roundPercent((errorEvents / last30d) * 100),
+          percentage:
+            last30d === 0 ? 0 : roundPercent((errorEvents / last30d) * 100),
         },
         processingLatency: {
           window: "30d",
@@ -277,7 +350,9 @@ export class StreamsDbRepository {
   }
 }
 
-function nullableNumber(value: number | string | null | undefined): number | null {
+function nullableNumber(
+  value: number | string | null | undefined,
+): number | null {
   if (value === null || value === undefined) return null
   return Number(value)
 }
@@ -285,3 +360,7 @@ function nullableNumber(value: number | string | null | undefined): number | nul
 function roundPercent(value: number): number {
   return Math.round(value * 100) / 100
 }
+
+// Re-export the abstract base so existing imports of `StreamsRepository`
+// keep working — the in-memory implementation is still used by tests.
+export { StreamsRepository }

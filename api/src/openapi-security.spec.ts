@@ -1,3 +1,13 @@
+import { CACHE_MANAGER } from "@nestjs/cache-manager"
+import { INestApplication } from "@nestjs/common"
+import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger"
+import { Test } from "@nestjs/testing"
+
+import { AdminStatsService } from "./admin/admin-stats.service"
+import { AdminController } from "./admin/admin.controller"
+import { StreamsController } from "./streams/streams.controller"
+import { StreamsService } from "./streams/streams.service"
+
 // Prevent loading guard implementations, whose import chain triggers
 // environment validation (process.exit) at import time.
 jest.mock("./common/guards/stream-ownership.guard", () => ({
@@ -14,16 +24,6 @@ jest.mock("./common/guards/auth.guard", () => ({
     }
   },
 }))
-
-import { CACHE_MANAGER } from "@nestjs/cache-manager"
-import { INestApplication } from "@nestjs/common"
-import { Test } from "@nestjs/testing"
-import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger"
-
-import { AdminController } from "./admin/admin.controller"
-import { AdminStatsService } from "./admin/admin-stats.service"
-import { StreamsController } from "./streams/streams.controller"
-import { StreamsService } from "./streams/streams.service"
 
 type Operation = {
   security?: Array<Record<string, string[]>>
@@ -53,7 +53,10 @@ async function buildOpenApiDoc(): Promise<{ paths: Record<string, PathItem> }> {
   const config = new DocumentBuilder()
     .setTitle("test")
     .setVersion("1.0.0")
-    .addBearerAuth({ type: "http", scheme: "bearer", bearerFormat: "JWT" }, "bearer")
+    .addBearerAuth(
+      { type: "http", scheme: "bearer", bearerFormat: "JWT" },
+      "bearer",
+    )
     .build()
 
   const document = SwaggerModule.createDocument(app, config) as unknown as {

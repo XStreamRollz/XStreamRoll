@@ -30,6 +30,7 @@
 
 import { Client as PgClient } from "pg"
 import { randomUUID } from "crypto"
+import { Logger } from "./logger"
 
 /**
  * Opaque handle returned by {@link LockManager.acquire}. Callers must
@@ -57,6 +58,8 @@ export interface LockManagerOptions {
    */
   ttlMs?: number
   logger?: Pick<Console, "log" | "warn" | "error">
+  /** Structured logger for detailed observability (issue #338). */
+  structuredLogger?: Logger
 }
 
 const DEFAULT_TTL_MS = 30_000
@@ -71,11 +74,17 @@ export abstract class LockManager {
   public readonly ttlMs: number
   protected readonly workerId: string
   protected readonly logger: Pick<Console, "log" | "warn" | "error">
+  protected readonly structuredLogger: Logger
 
   constructor(options: LockManagerOptions) {
     this.workerId = options.workerId
     this.ttlMs = options.ttlMs ?? DEFAULT_TTL_MS
     this.logger = options.logger ?? console
+    this.structuredLogger = options.structuredLogger ?? new Logger({ workerId: options.workerId })
+    this.structuredLogger.info("LockManager initialized", {
+      workerId: this.workerId,
+      ttlMs: this.ttlMs,
+    })
   }
 
   /** One-time setup (schema bootstrap, etc.). Safe to call repeatedly. */
@@ -144,10 +153,19 @@ export class MemoryLockManager extends LockManager {
       existing.token.workerId !== this.workerId
     ) {
       // Foreign worker holds an unexpired lock.
+      this.structuredLogger.debug("Lock acquisition denied - foreign worker owns lock", {
+        streamId,
+        foreignWorkerId: existing.token.workerId,
+        expiresAt: new Date(existing.token.expiresAt).toISOString(),
+      })
       return null
     }
     if (existing) {
       clearTimeout(existing.timer)
+      this.structuredLogger.debug("Re-acquiring existing lock", {
+        streamId,
+        previousOwner: existing.token.workerId,
+      })
     }
     const token: LockToken = {
       streamId,
@@ -159,38 +177,70 @@ export class MemoryLockManager extends LockManager {
     const timer = setTimeout(() => this.evictIfCurrent(streamId, token.token), this.ttlMs)
     if (typeof timer.unref === "function") timer.unref()
     this.locks.set(streamId, { token, timer })
+    this.structuredLogger.debug("Lock acquired in-memory", {
+      streamId,
+      token: token.token,
+      expiresAt: new Date(token.expiresAt).toISOString(),
+    })
     return token
   }
 
   async renew(streamId: string, token: LockToken): Promise<boolean> {
     const entry = this.locks.get(streamId)
-    if (!entry || entry.token.token !== token.token) return false
+    if (!entry || entry.token.token !== token.token) {
+      this.structuredLogger.warn("Lock renewal failed - token mismatch or not found", {
+        streamId,
+        hasEntry: !!entry,
+        tokenMatch: entry?.token.token === token.token,
+      })
+      return false
+    }
     clearTimeout(entry.timer)
     const now = Date.now()
     const renewed: LockToken = { ...token, expiresAt: now + this.ttlMs }
     const timer = setTimeout(() => this.evictIfCurrent(streamId, renewed.token), this.ttlMs)
     if (typeof timer.unref === "function") timer.unref()
     this.locks.set(streamId, { token: renewed, timer })
+    this.structuredLogger.debug("Lock renewed in-memory", {
+      streamId,
+      newExpiresAt: new Date(renewed.expiresAt).toISOString(),
+    })
     return true
   }
 
   async release(streamId: string, token: LockToken): Promise<boolean> {
     const entry = this.locks.get(streamId)
-    if (!entry) return false
-    if (entry.token.token !== token.token) return false
+    if (!entry) {
+      this.structuredLogger.warn("Lock release failed - entry not found", {
+        streamId,
+      })
+      return false
+    }
+    if (entry.token.token !== token.token) {
+      this.structuredLogger.warn("Lock release failed - token mismatch", {
+        streamId,
+        expectedToken: token.token,
+        actualToken: entry.token.token,
+      })
+      return false
+    }
     clearTimeout(entry.timer)
     this.locks.delete(streamId)
+    this.structuredLogger.debug("Lock released in-memory", { streamId })
     return true
   }
 
   async releaseAll(): Promise<void> {
+    const count = this.locks.size
     for (const entry of Array.from(this.locks.values())) {
       clearTimeout(entry.timer)
     }
     this.locks.clear()
+    this.structuredLogger.info("All in-memory locks released", { count })
   }
 
   async close(): Promise<void> {
+    this.structuredLogger.info("Closing MemoryLockManager")
     await this.releaseAll()
   }
 
@@ -302,6 +352,7 @@ export class PostgresLockManager extends LockManager {
   }
 
   async install(): Promise<void> {
+    this.structuredLogger.info("Installing PostgresLockManager schema")
     await this.client.connect()
     await this.client.query(/* sql */ `
       CREATE TABLE IF NOT EXISTS stream_locks (
@@ -315,12 +366,18 @@ export class PostgresLockManager extends LockManager {
       CREATE INDEX IF NOT EXISTS stream_locks_owner_idx
         ON stream_locks (owner_id)
     `)
+    this.structuredLogger.info("PostgresLockManager schema installed successfully")
   }
 
   async acquire(streamId: string): Promise<LockToken | null> {
     const now = Date.now()
     const newToken = randomUUID()
     const expiresAt = new Date(now + this.ttlMs)
+
+    this.structuredLogger.debug("Attempting Postgres lock acquisition", {
+      streamId,
+      workerId: this.workerId,
+    })
 
     // Atomicity note: PostgreSQL serialises any concurrent
     // INSERT/UPDATE on the same primary key through row-level
@@ -362,14 +419,28 @@ export class PostgresLockManager extends LockManager {
     )
 
     if (rows.length === 0) {
+      this.structuredLogger.debug("Postgres lock acquisition denied", {
+        streamId,
+        reason: "another worker owns lock",
+      })
       return null
     }
     const row = rows[0]
     if (row.owner_id !== this.workerId) {
       // Defensive: PostgreSQL would only return a different owner if
       // the WHERE filter expanded somehow. Treat as "lost race".
+      this.structuredLogger.warn("Postgres lock returned unexpected owner", {
+        streamId,
+        expectedOwner: this.workerId,
+        actualOwner: row.owner_id,
+      })
       return null
     }
+    this.structuredLogger.info("Postgres lock acquired", {
+      streamId,
+      token: row.owner_token,
+      expiresAt: row.expires_at.toISOString(),
+    })
     return {
       streamId,
       workerId: this.workerId,
@@ -392,6 +463,17 @@ export class PostgresLockManager extends LockManager {
       `,
       [expiresAt, streamId, this.workerId, token.token],
     )
+    if (rowCount === 1) {
+      this.structuredLogger.debug("Postgres lock renewed", {
+        streamId,
+        newExpiresAt: expiresAt.toISOString(),
+      })
+    } else {
+      this.structuredLogger.warn("Postgres lock renewal failed", {
+        streamId,
+        reason: "lock lost or expired",
+      })
+    }
     return rowCount === 1
   }
 
@@ -405,27 +487,49 @@ export class PostgresLockManager extends LockManager {
       `,
       [streamId, this.workerId, token.token],
     )
+    if (rowCount === 1) {
+      this.structuredLogger.debug("Postgres lock released", { streamId })
+    } else {
+      this.structuredLogger.warn("Postgres lock release failed", {
+        streamId,
+        reason: "lock not found or token mismatch",
+      })
+    }
     return rowCount === 1
   }
 
   async releaseAll(): Promise<void> {
-    await this.client.query(
+    const { rowCount } = await this.client.query(
       /* sql */ `DELETE FROM stream_locks WHERE owner_id = $1`,
       [this.workerId],
     )
+    this.structuredLogger.info("All Postgres locks released", {
+      workerId: this.workerId,
+      count: rowCount,
+    })
   }
 
   async close(): Promise<void> {
+    this.structuredLogger.info("Closing PostgresLockManager")
     try {
       await this.releaseAll()
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      this.structuredLogger.error("releaseAll on shutdown failed", {
+        error: message,
+      })
       this.logger.warn(
         `[${this.workerId}] releaseAll on shutdown failed: ${String(err)}`,
       )
     }
     try {
       await this.client.end()
+      this.structuredLogger.info("Postgres client closed successfully")
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      this.structuredLogger.error("Closing pg client failed", {
+        error: message,
+      })
       this.logger.warn(
         `[${this.workerId}] closing pg client failed: ${String(err)}`,
       )
@@ -455,6 +559,12 @@ export interface CreateLockManagerOptions extends LockManagerOptions {
 export async function createLockManager(
   options: CreateLockManagerOptions,
 ): Promise<LockManager> {
+  const structuredLogger = options.structuredLogger ?? new Logger({ workerId: options.workerId })
+  structuredLogger.info("Creating LockManager", {
+    backend: options.backend,
+    workerId: options.workerId,
+    ttlMs: options.ttlMs,
+  })
   if (options.backend === "postgres") {
     if (!options.databaseUrl) {
       throw new Error(
@@ -465,12 +575,16 @@ export async function createLockManager(
       workerId: options.workerId,
       ttlMs: options.ttlMs,
       logger: options.logger,
+      structuredLogger: options.structuredLogger,
       databaseUrl: options.databaseUrl,
     })
     await pg.install()
     return pg
   }
-  const mem = new MemoryLockManager(options)
+  const mem = new MemoryLockManager({
+    ...options,
+    structuredLogger: options.structuredLogger,
+  })
   await mem.install()
   return mem
 }

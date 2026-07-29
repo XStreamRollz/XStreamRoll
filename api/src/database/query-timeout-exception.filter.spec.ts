@@ -1,4 +1,5 @@
 import { ArgumentsHost } from "@nestjs/common"
+
 import { QueryTimeoutExceptionFilter } from "./query-timeout-exception.filter"
 
 describe("QueryTimeoutExceptionFilter", () => {
@@ -19,9 +20,12 @@ describe("QueryTimeoutExceptionFilter", () => {
     const filter = new QueryTimeoutExceptionFilter({} as never)
     const { host, status, json } = buildHost()
 
-    const error = Object.assign(new Error("canceling statement due to statement timeout"), {
-      code: "57014",
-    })
+    const error = Object.assign(
+      new Error("canceling statement due to statement timeout"),
+      {
+        code: "57014",
+      },
+    )
 
     filter.catch(error, host)
 
@@ -34,10 +38,9 @@ describe("QueryTimeoutExceptionFilter", () => {
 
   it("delegates non-timeout errors to the default handler", () => {
     const filter = new QueryTimeoutExceptionFilter({} as never)
-    const superCatch = jest.spyOn(
-      Object.getPrototypeOf(Object.getPrototypeOf(filter)),
-      "catch",
-    ).mockImplementation(() => undefined)
+    const superCatch = jest
+      .spyOn(Object.getPrototypeOf(Object.getPrototypeOf(filter)), "catch")
+      .mockImplementation(() => undefined)
     const { host, status } = buildHost()
 
     filter.catch(new Error("boom"), host)

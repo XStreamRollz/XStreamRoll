@@ -1,7 +1,5 @@
 "use client"
 
-import * as React from "react"
-import { useRouter } from "next/navigation"
 import {
   AlertCircle,
   Bell,
@@ -10,6 +8,9 @@ import {
   RadioTower,
   Server,
 } from "lucide-react"
+import { useRouter } from "next/navigation"
+import * as React from "react"
+
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -20,7 +21,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
-import { cn } from "@/lib/utils"
 import {
   Notification,
   NotificationsApiError,
@@ -28,6 +28,7 @@ import {
   fetchNotifications,
   markNotificationRead,
 } from "@/lib/api/notifications"
+import { cn } from "@/lib/utils"
 
 /**
  * Navbar bell icon with a dropdown listing the last 10 notifications.
@@ -69,7 +70,10 @@ export function NotificationsDropdown() {
 
     async function probe() {
       try {
-        const page = await fetchNotifications({ limit: 1, signal: controller.signal })
+        const page = await fetchNotifications({
+          limit: 1,
+          signal: controller.signal,
+        })
         if (cancelled) return
         setUnreadCount(page.unreadCount)
       } catch {
@@ -126,7 +130,9 @@ export function NotificationsDropdown() {
       const optimistic: NotificationsPage = {
         ...state.page,
         items: state.page.items.map((n) =>
-          n.id === notification.id ? { ...n, readAt: new Date().toISOString() } : n,
+          n.id === notification.id
+            ? { ...n, readAt: new Date().toISOString() }
+            : n,
         ),
         unreadCount: Math.max(0, state.page.unreadCount - 1),
       }
@@ -177,6 +183,8 @@ export function NotificationsDropdown() {
           {unreadCount > 0 && (
             <Badge
               variant="destructive"
+              role="status"
+              aria-label={`${unreadCount} unread notifications`}
               className="absolute -top-1 -right-1 min-w-5 justify-center rounded-full px-1.5 py-0.5 text-[10px] leading-none"
             >
               {badgeLabel}
@@ -203,7 +211,9 @@ export function NotificationsDropdown() {
                 <AlertCircle className="size-4" />
                 Failed to load
               </span>
-              <span className="text-xs text-muted-foreground">{state.message}</span>
+              <span className="text-xs text-muted-foreground">
+                {state.message}
+              </span>
             </div>
           )}
           {state.kind === "ready" && state.page.items.length === 0 && (
@@ -266,6 +276,7 @@ function NotificationRow({
     <button
       type="button"
       onClick={onSelect}
+      aria-label={`${notification.title}${unread ? ", unread" : ""}`}
       className={cn(
         "flex w-full items-start gap-3 border-b px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-accent focus:bg-accent focus:outline-none",
         unread && "bg-accent/30",

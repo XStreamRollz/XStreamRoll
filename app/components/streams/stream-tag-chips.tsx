@@ -1,9 +1,10 @@
 "use client"
 
 import { X } from "lucide-react"
+
 import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
 import { Tag } from "@/lib/api/tags"
+import { cn } from "@/lib/utils"
 
 export interface StreamTagChipsProps {
   tags: Tag[]
