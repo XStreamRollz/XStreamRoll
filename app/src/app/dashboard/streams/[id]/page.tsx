@@ -1,8 +1,13 @@
-import type { Metadata } from "next"
 import { Suspense } from "react"
+
+import { StreamDetailLive } from "../stream-detail-live"
+
+import type { Metadata } from "next"
+
 import { StreamDetailSkeleton } from "@/components/dashboard/stream-detail-skeleton"
 import { EmbedSnippet } from "@/components/streams/embed-snippet"
-import { StreamDetailLive } from "../stream-detail-live"
+import { LiveStreamStatusBadge } from "@/components/streams/live-stream-status-badge"
+
 
 export const metadata: Metadata = {
   title: "Stream | XStreamRoll",

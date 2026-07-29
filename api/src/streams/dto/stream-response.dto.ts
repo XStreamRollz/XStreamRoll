@@ -1,20 +1,20 @@
-import type { Stream as SharedStream, Tag as SharedTag } from "@xstreamroll/types"
 import { Tag } from "../../tags/tag.entity"
 import { Stream } from "../stream.entity"
+
+import type { Stream as SharedStream, Tag as SharedTag } from "@xstreamroll/types"
 
 /**
  * Maps the internal, DB-shaped {@link Tag} entity to the public API
  * response contract defined in `@xstreamroll/types#Tag`. `id` is
- * serialised to a string so the wire contract stays independent of
- * the Postgres column type, and `createdAt` is emitted as an ISO
- * timestamp string.
+ * returned as a number matching the wire contract, and `createdAt`
+ * is emitted as an ISO timestamp string.
  *
  * See `dto/stream-response.dto.ts` for the corresponding `Stream`
  * mapper.
  */
 export function toTagResponse(tag: Tag): SharedTag {
   return {
-    id: String(tag.id),
+    id: tag.id,
     name: tag.name,
     slug: tag.slug,
     createdAt: tag.createdAt.toISOString(),

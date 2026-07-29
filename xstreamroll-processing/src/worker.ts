@@ -1,19 +1,21 @@
-import http from "http"
 import { randomBytes, randomUUID } from "crypto"
+import http from "http"
+
 import axios from "axios"
+
 import { env } from "./config"
+import { createLockManager, type LockManager } from "./leader-election"
+import { GracefulShutdown, ShutdownReason } from "./lifecycle"
+import { currentCorrelationId, newCorrelationId } from "./logger"
+import { markShuttingDown, setQueueDepth, startMetricsServer } from "./metrics"
 import {
   EventFilter,
   createFilterConfigStore,
   MemoryFilterConfigStore,
   type FilterConfigStore,
 } from "./pipeline"
-import { SessionRegistry } from "./session-registry"
 import { ProcessedStreamEvent, StreamEvent } from "./session"
-import { GracefulShutdown, ShutdownReason } from "./lifecycle"
-import { markShuttingDown, setQueueDepth, startMetricsServer } from "./metrics"
-import { createLockManager, type LockManager } from "./leader-election"
-import { currentCorrelationId, newCorrelationId } from "./logger"
+import { SessionRegistry } from "./session-registry"
 
 const API_URL = env.API_URL
 // Issue #347: Use POD_NAME from Kubernetes environment if available,
@@ -38,16 +40,6 @@ const HIGH_WATERMARK = MAX_CONCURRENT_SESSIONS * MAX_QUEUE_DEPTH
 const LOCK_BACKEND: "memory" | "postgres" =
   (env.LOCK_BACKEND as "memory" | "postgres" | undefined) ?? "memory"
 const LOCK_TTL_MS: number = (env.LOCK_TTL_MS as number | undefined) ?? 30_000
-
-// Issue #351: the EventFilter config store. Defaults to the same
-// in-process `Map` the worker used before the issue so existing
-// behaviour is preserved when EVENT_FILTER_BACKEND is unset. When
-// switched to `redis` the URL falls back to REDIS_URL so workers
-// running in the same cluster as the API can reuse the connection.
-const EVENT_FILTER_BACKEND: "memory" | "redis" =
-  (env.EVENT_FILTER_BACKEND as "memory" | "redis" | undefined) ?? "memory"
-const EVENT_FILTER_REDIS_URL: string | undefined =
-  (env.EVENT_FILTER_REDIS_URL as string | undefined) ?? process.env.REDIS_URL
 
 // Issue #351: the EventFilter config store. Defaults to the same
 // in-process `Map` the worker used before the issue so existing
