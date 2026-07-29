@@ -41,6 +41,19 @@ const LOCK_BACKEND: "memory" | "postgres" =
   (env.LOCK_BACKEND as "memory" | "postgres" | undefined) ?? "memory"
 const LOCK_TTL_MS: number = (env.LOCK_TTL_MS as number | undefined) ?? 30_000
 
+// Issue #342: per-session drain timeout used by drainAll(). When a
+// session's stop() promise hangs, this timeout fires a warning so
+// the shutdown can continue to the next session instead of blocking
+// forever on a single stuck session.
+const SHUTDOWN_TIMEOUT_MS = Math.max(
+  1,
+  Number(process.env.SHUTDOWN_TIMEOUT_MS ?? 15_000),
+)
+const SESSION_DRAIN_TIMEOUT_MS = Math.max(
+  1,
+  Number(process.env.SESSION_DRAIN_TIMEOUT_MS ?? 5_000),
+)
+
 // Issue #351: the EventFilter config store. Defaults to the same
 // in-process `Map` the worker used before the issue so existing
 // behaviour is preserved when EVENT_FILTER_BACKEND is unset. When
@@ -353,12 +366,13 @@ gracefulShutdown.register({
 
 gracefulShutdown.register({
   name: "drain sessions",
+  timeoutMs: SHUTDOWN_TIMEOUT_MS,
   run: async () => {
     // Wait for the in-flight poll cycle to finish before draining
     // sessions so we don't tear state out from under it.
     await pollPromise
     if (!registry) return
-    await registry.drainAll()
+    await registry.drainAll(SESSION_DRAIN_TIMEOUT_MS)
   },
 })
 
@@ -409,6 +423,7 @@ gracefulShutdown.register({
 
 gracefulShutdown.register({
   name: "stop metrics server",
+  timeoutMs: 5_000,
   run: () =>
     new Promise<void>((resolve, reject) => {
       // Flip the readiness flag first so any in-flight probe sees

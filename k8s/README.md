@@ -381,6 +381,97 @@ kubectl -n xstreamroll exec deploy/processing -- wget -q -O - http://localhost:3
 curl -vI https://xstreamroll.example.com/api/health
 ```
 
+## Monitoring (issue #349)
+
+Example Prometheus alerting rules and a Grafana dashboard are shipped in the
+`monitoring/` directory at the repo root. Operators can import these into
+their observability stack to get production-ready alerting and dashboards
+without starting from scratch.
+
+### Prometheus alerting rules
+
+`monitoring/prometheus-rules.yaml` ships Prometheus alerting rules covering:
+
+| Alert                  | Metric(s)                              | Threshold                            |
+| ---------------------- | -------------------------------------- | ------------------------------------ |
+| HighErrorRate          | `http_requests_total` (5xx)           | > 5% of all requests over 5m        |
+| HighAPILatency         | `http_request_duration_seconds` (p99)  | > 1s over 5m                        |
+| DatabasePoolExhaustion | `db_pool_waiting_requests`            | > 0 for 1m                          |
+| WorkerRestart          | `xstreamroll_uptime_seconds` (reset)  | any reset within 5m                 |
+| HighWorkerErrorRate    | `xstreamroll_errors_total`            | > 1 error/s over 5m                 |
+| QueueDepthHigh         | `xstreamroll_queue_depth`             | > 32 000 for 10m                    |
+| LockRenewalFailures    | `xstreamroll_lock_renewals_failed`    | > 0.1/s over 5m                     |
+| WebSocketConnectionDrop| `websocket_active_connections`        | < 50% of historical peak for 10m    |
+
+Every alert ships at `severity: warning` by default so operators can tune
+thresholds before upgrading to `critical`.
+
+#### Installing the alert rules
+
+```bash
+# Validate the rules with promtool (requires promtool in your PATH).
+promtool check rules monitoring/prometheus-rules.yaml
+
+# Apply to a Prometheus operator via a ConfigMap.
+kubectl -n monitoring create configmap xstreamroll-rules \
+  --from-file=monitoring/prometheus-rules.yaml \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# If using kube-prometheus-stack, create a PrometheusRule CR instead.
+kubectl apply -f monitoring/prometheus-rules.yaml
+```
+
+#### Scraping the processing worker from Prometheus
+
+The worker exposes metrics on port `:3002` at `/metrics`. The accompanying
+`k8s/70-network-policies.yaml` already allows any pod in the `xstreamroll`
+namespace to reach that port. If your Prometheus instance runs in a separate
+`monitoring` namespace, add a `namespaceSelector` to the NetworkPolicy:
+
+```yaml
+# In k8s/70-network-policies.yaml, add to the allow-processing-metrics rule:
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+```
+
+Alternatively, annotate the worker pod template so Prometheus discovers it:
+
+```yaml
+# In k8s/40-processing.yaml, under spec.template.metadata:
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "3002"
+    prometheus.io/path: "/metrics/prometheus"
+```
+
+### Grafana dashboard
+
+`monitoring/grafana-dashboard.json` is a ready-to-import dashboard with
+panels covering:
+
+- **API Overview** — request rate by HTTP method, latency histogram (p50/p95/p99)
+- **WebSocket Connections** — active connections, connection rate
+- **Processing Worker** — queue depth, active session locks, messages
+  processed rate, throughput vs errors, uptime
+- **Database Connection Pool** — active/idle/waiting connections
+
+#### Importing the dashboard
+
+1. Open Grafana → Dashboards → Import.
+2. Paste the contents of `monitoring/grafana-dashboard.json` or upload
+   the file directly.
+3. Select your Prometheus data source when prompted.
+4. Save — the dashboard auto-refreshes every 30s.
+
+#### Customising for your deployment
+
+The dashboard uses the `DS_PROMETHEUS` template variable — you can swap
+this in Grafana without editing the JSON. All panels query `sum()`
+aggregations so they work correctly whether you have one worker pod or ten.
+
 ## Release process
 
 Images are published by `.github/workflows/release.yml` and are restricted

@@ -1,7 +1,7 @@
-import { SessionHandlers, StreamEvent, StreamSession } from "./session"
 import { LockManager, LockToken } from "./leader-election"
 import { Logger } from "./logger"
 import * as metrics from "./metrics"
+import { SessionHandlers, StreamEvent, StreamSession } from "./session"
 
 export type RouteResult = "enqueued" | "capacity" | "rejected" | "locked"
 
@@ -298,14 +298,47 @@ export class SessionRegistry {
    * final `releaseAll()` on the lock manager so stragglers (e.g.
    * sessions that errored before publishing) cannot survive a
    * restart.
+   *
+   * @param drainTimeoutMs Per-session drain timeout (issue #342).
+   *   When set, each `session.stop()` is raced against this timeout.
+   *   If a session's stop() hangs, a warning is logged and the next
+   *   session is drained — no individual session can block the
+   *   shutdown sequence. Defaults to no per-session timeout.
    */
-  async drainAll(): Promise<void> {
+  async drainAll(drainTimeoutMs?: number): Promise<void> {
     this.logger.info("Draining all sessions", {
       sessionCount: this.sessions.size,
       lockCount: this.lockTokens.size,
+      drainTimeoutMs: drainTimeoutMs ?? "none",
     })
     const all = Array.from(this.sessions.values())
-    await Promise.all(all.map((s) => s.stop()))
+
+    const drain = async (session: StreamSession): Promise<void> => {
+      const promise = session.stop()
+      if (drainTimeoutMs !== undefined && drainTimeoutMs > 0) {
+        let timedOut = false
+        let timer: ReturnType<typeof setTimeout> | undefined
+        const timeoutPromise = new Promise<void>((resolve) => {
+          timer = setTimeout(() => {
+            timedOut = true
+            this.logger.warn(
+              `Session ${session.streamId} drain timed out after ${drainTimeoutMs}ms — continuing`,
+            )
+            this.options.logger?.warn?.(
+              `[${this.workerId}] session ${session.streamId} drain timed out after ${drainTimeoutMs}ms`,
+            )
+            resolve()
+          }, drainTimeoutMs)
+          if (typeof timer?.unref === "function") timer.unref()
+        })
+        await Promise.race([promise, timeoutPromise])
+        if (!timedOut && timer !== undefined) clearTimeout(timer)
+      } else {
+        await promise
+      }
+    }
+
+    await Promise.all(all.map((s) => drain(s)))
     this.sessions.clear()
     this.lockTokens.clear()
     this.inflightAcquires.clear()

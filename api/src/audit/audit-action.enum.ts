@@ -24,4 +24,8 @@ export enum AuditAction {
   STREAM_DELETE = "stream_delete",
   ROLE_CHANGE = "role_change",
   PROFILE_UPDATE = "profile_update",
+
+  // ── User lifecycle ────────────────────────────────────────────────
+  /** Captured when a user soft-deletes their account (issue #344). */
+  USER_DELETED = "user_deleted",
 }

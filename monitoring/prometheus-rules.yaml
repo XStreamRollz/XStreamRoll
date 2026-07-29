@@ -1,0 +1,153 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Prometheus alerting rules — XStreamRoll (issue #349)
+#
+# These rules target the metrics emitted by:
+#   • api          — http_*, websocket_*, db_pool_*  (port 3001 /metrics)
+#   • processing   — xstreamroll_*                   (port 3002 /metrics)
+#
+# Every alert ships at `severity: warning` by default so operators can
+# tune them before upgrading to `critical` for their environment.
+# Group evaluation interval inherits the Prometheus global default;
+# override with `interval: 30s` per group if your config requires
+# faster evaluation.
+# ──────────────────────────────────────────────────────────────────────────────
+
+groups:
+  # ── API alerts ───────────────────────────────────────────────────
+  - name: xstreamroll-api
+    rules:
+      # High error rate on HTTP endpoints (5xx)
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status_code=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "High HTTP 5xx error rate on API"
+          description: >-
+            The API 5xx error rate is {{ $value | humanizePercentage }}
+            over the last 5 minutes (threshold: 5%). Check the API pod
+            logs (`kubectl -n xstreamroll logs deploy/api`) and verify
+            Postgres connectivity.
+
+      # API request latency p99 > 1s
+      - alert: HighAPILatency
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le, path)
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "API p99 latency exceeds 1s"
+          description: >-
+            The 99th percentile HTTP request duration for path
+            `{{ $labels.path }}` is {{ $value }}s over the last 5 minutes.
+            Investigate slow downstream calls or database queries.
+
+      # Database connection pool exhaustion
+      - alert: DatabasePoolExhaustion
+        expr: |
+          db_pool_waiting_requests > 0
+        for: 1m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "PostgreSQL connection pool has waiting requests"
+          description: >-
+            {{ $value }} requests are queued waiting for a database
+            connection. Consider increasing the pool size or scaling
+            the API horizontally.
+
+  # ── Processing worker alerts ─────────────────────────────────────
+  - name: xstreamroll-processing
+    rules:
+      # Worker restarts (detected via counter reset on the messages counter)
+      - alert: WorkerRestart
+        expr: |
+          resets(xstreamroll_messages_processed_total[5m]) > 0
+        labels:
+          severity: warning
+          component: processing
+        annotations:
+          summary: "Processing worker restarted"
+          description: >-
+            The xstreamroll_messages_processed_total counter reset
+            within the last 5 minutes, indicating a worker pod restarted.
+            Check `kubectl -n xstreamroll describe pod -l app=processing`
+            for events and review the previous pod's logs.
+
+      # High worker error rate
+      - alert: HighWorkerErrorRate
+        expr: |
+          rate(xstreamroll_errors_total[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: processing
+        annotations:
+          summary: "Processing worker error rate is elevated"
+          description: >-
+            The worker is emitting {{ $value | humanize }} errors per second
+            over the last 5 minutes. Check worker logs for dead-letter
+            events and API connectivity.
+
+      # Queue depth approaching high-watermark
+      - alert: QueueDepthHigh
+        expr: |
+          xstreamroll_queue_depth > 32000
+        for: 10m
+        labels:
+          severity: warning
+          component: processing
+        annotations:
+          summary: "Processing worker queue depth is high"
+          description: >-
+            The total queue depth across all sessions is {{ $value }},
+            approaching the default high-watermark (MAX_CONCURRENT_SESSIONS ×
+            MAX_QUEUE_DEPTH = 32 × 1000 = 32000). The worker will start
+            shedding events. Consider scaling horizontally or increasing
+            the poll interval.
+
+      # Lock renewals failing frequently
+      - alert: LockRenewalFailures
+        expr: |
+          rate(xstreamroll_lock_renewals_failed[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: processing
+        annotations:
+          summary: "Lock renewals are failing"
+          description: >-
+            Lock renewal failure rate is {{ $value }} per second.
+            The lock backend (Postgres) may be slow or unreachable.
+            Sessions will lose their locks and other workers may
+            claim them, causing processing gaps.
+
+  # ── WebSocket alerts ─────────────────────────────────────────────
+  - name: xstreamroll-websocket
+    rules:
+      - alert: WebSocketConnectionDrop
+        expr: |
+          (websocket_active_connections / websocket_connections_total) < 0.5
+        for: 10m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "WebSocket active connections dropped significantly"
+          description: >-
+            Active WebSocket connections ({{ $value | humanizePercentage }} of
+            total) have dropped below 50% of historical peak. This may indicate
+            a client-side connectivity issue or a gateways pod restart.

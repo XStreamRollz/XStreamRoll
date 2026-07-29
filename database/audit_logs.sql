@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS audit_logs (
     id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id),
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     action VARCHAR(100) NOT NULL,
     ip VARCHAR(45),
     created_at TIMESTAMPTZ DEFAULT NOW()
