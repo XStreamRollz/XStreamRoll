@@ -1,14 +1,15 @@
 "use client"
 
+import { AlertCircle, Circle, Radio } from "lucide-react"
 import * as React from "react"
-import { Circle, AlertCircle, Radio } from "lucide-react"
+
 import { Badge, type BadgeProps } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 
-export type StreamStatusValue = "active" | "inactive" | "error" | "starting" | "stopping"
+export type StreamStatusValue =
+  "active" | "inactive" | "error" | "starting" | "stopping"
 
-export interface StreamStatusBadgeProps
-  extends Omit<BadgeProps, "variant"> {
+export interface StreamStatusBadgeProps extends Omit<BadgeProps, "variant"> {
   status: StreamStatusValue
   /** Show a leading dot icon. Defaults to true. */
   showIcon?: boolean
@@ -21,7 +22,12 @@ export interface StreamStatusBadgeProps
  */
 const STATUS_PRESENTATION: Record<
   StreamStatusValue,
-  { label: string; variant: BadgeProps["variant"]; dotClass: string; icon: React.ElementType }
+  {
+    label: string
+    variant: BadgeProps["variant"]
+    dotClass: string
+    icon: React.ElementType
+  }
 > = {
   active: {
     label: "Live",
@@ -74,14 +80,27 @@ export function StreamStatusBadge({
   children,
   ...badgeProps
 }: StreamStatusBadgeProps) {
-  const presentation = STATUS_PRESENTATION[status] ?? STATUS_PRESENTATION.inactive
+  const presentation =
+    STATUS_PRESENTATION[status] ?? STATUS_PRESENTATION.inactive
   const Icon = presentation.icon
+
+  // Issue #362: briefly flash the badge whenever `status` changes so a
+  // live WebSocket-driven update (as opposed to the initial render) is
+  // visually noticeable. Purely a CSS animation triggered by React
+  // re-mounting the flash span via `key` — no timers to clean up.
+  const previousStatusRef = React.useRef(status)
+  const changed = previousStatusRef.current !== status
+  React.useEffect(() => {
+    previousStatusRef.current = status
+  }, [status])
 
   return (
     <Badge
+      key={changed ? `${status}-live` : status}
       variant={presentation.variant}
+      role="status"
       aria-label={`Stream status: ${presentation.label}`}
-      className={cn("gap-1.5", className)}
+      className={cn("gap-1.5", changed && "animate-status-live-flash", className)}
       {...badgeProps}
     >
       {showIcon && (
@@ -90,9 +109,11 @@ export function StreamStatusBadge({
             "size-3 shrink-0",
             // The "dot" presentations share styling with the icon
             // class so a coloured Circle gives the live-pulse look.
-            status === "active" || status === "starting" || status === "stopping"
+            status === "active" ||
+              status === "starting" ||
+              status === "stopping"
               ? presentation.dotClass
-              : undefined
+              : undefined,
           )}
           aria-hidden="true"
         />

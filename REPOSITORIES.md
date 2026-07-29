@@ -3,9 +3,10 @@
 This project is organized as a monorepo with 4 main services:
 
 ## 1. Web Frontend (`/app`)
+
 - **Framework**: Next.js 16 with TypeScript
 - **Description**: User-facing web application for the Stellar Streaming platform
-- **Setup**: 
+- **Setup**:
   ```bash
   cd app
   npm install
@@ -13,6 +14,7 @@ This project is organized as a monorepo with 4 main services:
   ```
 
 ## 2. API Backend (`/api`)
+
 - **Framework**: NestJS with TypeScript
 - **Description**: REST API server handling all business logic and data operations
 - **Setup**:
@@ -23,6 +25,7 @@ This project is organized as a monorepo with 4 main services:
   ```
 
 ## 3. Streaming SDK (`/xstreamroll-sdk`)
+
 - **Framework**: TypeScript SDK
 - **Description**: Client library for publishing events and interacting with streams
 - **Setup**:
@@ -33,6 +36,7 @@ This project is organized as a monorepo with 4 main services:
   ```
 
 ## 4. Stream Processing (`/xstreamroll-processing`)
+
 - **Framework**: Node.js with TypeScript
 - **Description**: Dedicated service for processing real-time streaming data
 - **Setup**:
@@ -43,6 +47,7 @@ This project is organized as a monorepo with 4 main services:
   ```
 
 ## 5. Database (`/database`)
+
 - **Type**: PostgreSQL
 - **Description**: SQL schema and migrations for the platform
 - **Setup**: Import `schema.sql` into your PostgreSQL instance

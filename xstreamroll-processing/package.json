@@ -7,6 +7,7 @@
     "start": "node dist/worker.js",
     "dev": "ts-node src/worker.ts",
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "test": "jest",
     "test:cov": "jest --coverage",
     "lint": "eslint --config ../eslint.config.js src __tests__"
@@ -26,6 +27,7 @@
   },
   "dependencies": {
     "axios": "^1.6.0",
+    "ioredis": "^5.11.1",
     "pg": "^8.22.0",
     "zod": "^3.22.4"
   },

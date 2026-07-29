@@ -27,7 +27,10 @@ function resolveApiBase(): string {
 }
 
 export class AdminStatsError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
     super(message)
     this.name = "AdminStatsError"
   }

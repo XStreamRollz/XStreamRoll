@@ -19,8 +19,18 @@ describe("GracefulShutdown", () => {
     const { logger } = makeLogger()
     const gs = new GracefulShutdown({ exit, logger, timeoutMs: 1000 })
 
-    gs.register({ name: "first", run: () => { calls.push("first") } })
-    gs.register({ name: "second", run: () => { calls.push("second") } })
+    gs.register({
+      name: "first",
+      run: () => {
+        calls.push("first")
+      },
+    })
+    gs.register({
+      name: "second",
+      run: () => {
+        calls.push("second")
+      },
+    })
 
     await gs.requestShutdown("SIGTERM")
     expect(calls).toEqual(["first", "second"])
@@ -32,7 +42,12 @@ describe("GracefulShutdown", () => {
     const exit = jest.fn()
     const { logger } = makeLogger()
     const gs = new GracefulShutdown({ exit, logger, timeoutMs: 1000 })
-    gs.register({ name: "h", run: () => { calls.push("h") } })
+    gs.register({
+      name: "h",
+      run: () => {
+        calls.push("h")
+      },
+    })
 
     await Promise.all([
       gs.requestShutdown("SIGINT"),
@@ -47,7 +62,12 @@ describe("GracefulShutdown", () => {
     const exit = jest.fn()
     const { logger } = makeLogger()
     const gs = new GracefulShutdown({ exit, logger, timeoutMs: 1000 })
-    gs.register({ name: "boom", run: () => { throw new Error("nope") } })
+    gs.register({
+      name: "boom",
+      run: () => {
+        throw new Error("nope")
+      },
+    })
     await gs.requestShutdown("manual")
     expect(exit).toHaveBeenCalledWith(1)
   })

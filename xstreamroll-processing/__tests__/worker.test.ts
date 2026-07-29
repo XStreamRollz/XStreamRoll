@@ -3,7 +3,6 @@
  * agent (issue #225: the old code created a brand-new Agent and called
  * destroy() on it — a no-op for the actual connection pool).
  */
-
 import http from "http"
 
 jest.mock("../src/config", () => ({
@@ -19,21 +18,33 @@ jest.mock("../src/config", () => ({
 // Capture the config passed to axios.create so we can assert it
 // includes the shared httpAgent.
 let axiosCreateConfig: Record<string, unknown> | undefined
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let requestInterceptor: ((config: any) => any) | undefined
 jest.mock("axios", () => {
-  const noop = () => Promise.resolve({ data: [] })
+  const noop = () => Promise.resolve({ data: [], headers: {} })
   return {
     __esModule: true,
     default: {
       create: (config: Record<string, unknown>) => {
         axiosCreateConfig = config
-        return { get: noop, post: noop }
+        return {
+          get: noop,
+          post: noop,
+          interceptors: {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            request: { use: (fn: any) => { requestInterceptor = fn } },
+            response: { use: jest.fn() },
+          },
+        }
       },
     },
   }
 })
 
 // Prevent process.exit from terminating the test runner.
-const exitSpy = jest.spyOn(process, "exit").mockImplementation((() => {}) as never)
+const exitSpy = jest
+  .spyOn(process, "exit")
+  .mockImplementation((() => {}) as never)
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { httpAgent, shutdown } = require("../src/worker")
@@ -51,6 +62,13 @@ describe("worker HTTP agent", () => {
 
   it("axios.create is called with the shared httpAgent", () => {
     expect(axiosCreateConfig?.httpAgent).toBe(httpAgent)
+  })
+
+  it("attaches X-Request-Id header to outgoing requests in interceptor", () => {
+    expect(requestInterceptor).toBeDefined()
+    const config = { headers: {} as Record<string, string> }
+    const res = requestInterceptor!(config)
+    expect(res.headers["X-Request-Id"]).toBeDefined()
   })
 })
 

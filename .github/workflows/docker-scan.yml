@@ -1,0 +1,172 @@
+# Docker image vulnerability scanning — Trivy
+#
+# Scans every XStreamRoll Docker image (api, app, processing) for known
+# vulnerabilities, fails the workflow on `CRITICAL` findings, uploads SARIF
+# to GitHub Code Scanning, and re-scans published ghcr.io images weekly so
+# newly disclosed CVEs are detected even between releases.
+#
+# Triggers:
+#  - pull_request / push to main: build the image locally and scan
+#    (filtered to Dockerfile changes so unrelated PRs are skipped)
+#  - schedule (weekly): pull the latest published image from ghcr.io and scan
+#  - workflow_dispatch: on-demand scan of both local and published images
+#
+# Maintenance:
+#  - Suppress triaged false positives in `.trivyignore`
+#  - Update severity thresholds only via PR so the change is reviewable
+#
+# Fork-PR behavior:
+#  - `security-events: write` is restricted on PRs from forks, so SARIF
+#    uploads from external contributors are silently dropped and findings
+#    only appear in the workflow logs of that PR.
+#  - The job still fails on `CRITICAL` for fork PRs, so blocking merge is
+#    not affected — only the visual GitHub Code Scanning alerts are.
+#    To get SARIF alerts from forks too, change `on.pull_request` to
+#    `pull_request_target` and audit the build commands first.
+name: Docker image vulnerability scan
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "**/Dockerfile"
+      - "**/*.dockerignore"
+      - ".trivyignore"
+      - ".github/workflows/docker-scan.yml"
+  push:
+    branches: [main]
+    paths:
+      - "**/Dockerfile"
+      - "**/*.dockerignore"
+      - ".trivyignore"
+      - ".github/workflows/docker-scan.yml"
+  schedule:
+    # Every Monday at 06:00 UTC — re-scan the latest published images
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  # ── Local build + scan ────────────────────────────────────────────────────
+  # Runs on PRs, pushes, and on-demand when a Dockerfile/`.trivyignore`
+  # change is detected. Builds the image locally and scans it with Trivy.
+  scan-local-images:
+    name: Scan local image — ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - context: api
+            image: xstreamroll-api
+          - context: app
+            image: xstreamroll-app
+          - context: xstreamroll-processing
+            image: xstreamroll-processing
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image locally
+        uses: docker/build-push-action@v6
+        # `cache-to` is intentionally omitted: PRs from forks have a
+        # read-only GITHUB_TOKEN and cannot populate the GHA cache. Using
+        # `cache-from` only gives us a warm cache without errors.
+        with:
+          context: ${{ matrix.context }}
+          push: false
+          load: true
+          tags: xstreamroll/local-${{ matrix.image }}:scan
+          cache-from: type=gha
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: xstreamroll/local-${{ matrix.image }}:scan
+          format: "sarif"
+          output: "trivy-${{ matrix.image }}.sarif"
+          severity: "CRITICAL"
+          exit-code: "1"
+          ignore-unfixed: true
+          ignorefile: ".trivyignore"
+          vuln-type: "os,library"
+
+      - name: Upload Trivy scan results to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: "trivy-${{ matrix.image }}.sarif"
+          category: "trivy-${{ matrix.image }}"
+
+      - name: Upload SARIF artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-${{ matrix.image }}-sarif
+          path: trivy-${{ matrix.image }}.sarif
+
+  # ── Scheduled scan of published images ────────────────────────────────────
+  # Re-scans images that have already been published to ghcr.io so that
+  # vulnerabilities disclosed after the initial release are surfaced.
+  scan-published-images:
+    name: Scan published image — ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      packages: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: xstreamroll-api
+          - image: xstreamroll-app
+          - image: xstreamroll-processing
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Trivy scan on published image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:latest
+          format: "sarif"
+          output: "trivy-published-${{ matrix.image }}.sarif"
+          # Report all severities for visibility on already-published images.
+          severity: "CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN"
+          # Don't fail scheduled scans — the goal is to surface findings, not
+          # to gate already-deployed images. Findings still appear in the
+          # GitHub Security tab.
+          exit-code: "0"
+          ignore-unfixed: true
+          ignorefile: ".trivyignore"
+          vuln-type: "os,library"
+
+      - name: Upload Trivy scan results to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: "trivy-published-${{ matrix.image }}.sarif"
+          category: "trivy-published-${{ matrix.image }}"
+
+      - name: Upload SARIF artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-published-${{ matrix.image }}-sarif
+          path: trivy-published-${{ matrix.image }}.sarif

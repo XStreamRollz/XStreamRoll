@@ -1,0 +1,23 @@
+{
+  "name": "@xstreamroll/contract-tests",
+  "version": "1.0.0",
+  "description": "Consumer/provider contract definitions shared between xstreamroll-sdk and api",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/**/*.ts"
+  },
+  "dependencies": {
+    "@xstreamroll/types": "file:../../packages/types",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  }
+}

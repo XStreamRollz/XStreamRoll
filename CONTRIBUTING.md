@@ -14,9 +14,9 @@ If anything below is unclear, please open an issue using one of the [issue templ
    - [Prerequisites](#prerequisites)
    - [Clone & Bootstrap](#clone--bootstrap)
    - [Per-Package Setup](#per-package-setup)
-4. [Branching Strategy](#branching-strategy)
-5. [Commit Message Conventions](#commit-message-conventions)
-6. [Automated Changelog](#automated-changelog)
+4. [Pre-commit Hooks](#pre-commit-hooks)
+5. [Branching Strategy](#branching-strategy)
+6. [Commit Message Conventions](#commit-message-conventions)
 7. [Pull Request Process](#pull-request-process)
 8. [Code Review Expectations](#code-review-expectations)
 9. [Reporting Issues](#reporting-issues)
@@ -31,7 +31,7 @@ By participating in this project you agree to uphold a respectful, inclusive, an
 
 ## Repository Layout
 
-XStreamRoll is a monorepo managed with npm workspaces. The four packages are:
+XStreamRoll is a monorepo managed with npm workspaces:
 
 | Path                       | Stack                          | Description                                           |
 | -------------------------- | ------------------------------ | ----------------------------------------------------- |
@@ -39,6 +39,8 @@ XStreamRoll is a monorepo managed with npm workspaces. The four packages are:
 | `api/`                     | NestJS 10 + TypeScript         | REST + WebSocket backend                              |
 | `xstreamroll-sdk/`         | TypeScript                     | Client SDK for publishing events & calling the API    |
 | `xstreamroll-processing/`  | Node.js + TypeScript           | Stream-processing worker                              |
+| `packages/types/`          | TypeScript                     | `@xstreamroll/types` — shared domain types             |
+| `tests/contracts/`         | TypeScript                     | `@xstreamroll/contract-tests` — api/sdk contract tests |
 | `database/`                | PostgreSQL                     | Schema and migrations                                 |
 
 See [`REPOSITORIES.md`](./REPOSITORIES.md) for a deeper breakdown.
@@ -119,7 +121,7 @@ npm run lint       # eslint
 Environment variables of interest:
 
 - `DATABASE_URL` — PostgreSQL connection string.
-- `JWT_SECRET`   — secret used to sign access tokens.
+- `JWT_SECRET` — secret used to sign access tokens.
 - `STREAM_API_KEY` — API key for stream authentication.
 
 The OpenAPI/Swagger UI is served from `http://localhost:3001/docs` once running.
@@ -145,8 +147,52 @@ npm run start      # boots the worker on :3002
 
 Environment variables of interest:
 
-- `DATABASE_URL`  — PostgreSQL connection string.
+- `DATABASE_URL` — PostgreSQL connection string.
 - `STREAM_QUEUE_URL` — broker URL (Redis / NATS / etc.).
+
+---
+
+## Pre-commit Hooks
+
+This repository uses [Husky](https://typicode.github.io/husky/) and [lint-staged](https://github.com/lint-staged/lint-staged) to run quality checks automatically on every commit and push, catching issues locally before they reach CI.
+
+### Installing the hooks
+
+Husky hooks are installed automatically when you run `npm install` at the root (the `prepare` lifecycle script runs `husky`). If you skipped the root install or cloned the repo without running the bootstrap command, install them manually:
+
+```bash
+npm run prepare
+```
+
+You only need to do this once per clone.
+
+### What the hooks do
+
+| Hook         | Trigger      | Action                                                                                                                                                       |
+| ------------ | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pre-commit` | `git commit` | Runs **ESLint** + **Prettier** on staged files only (via `lint-staged`). The commit is blocked if any lint errors or formatting violations are found.        |
+| `pre-push`   | `git push`   | Runs `tsc --noEmit` in parallel across `api/`, `xstreamroll-sdk/`, and `xstreamroll-processing/`. The push is blocked if TypeScript reports any type errors. |
+
+> **Note:** The `app/` package (Next.js) is excluded from the pre-push type-check because its TypeScript compilation is driven by the Next.js build pipeline. Run `npm run build:app` locally to verify the frontend before raising a PR.
+
+### Skipping hooks in exceptional cases
+
+Use the standard Git escape hatch only when you have a deliberate reason (e.g., a WIP commit you intend to amend before review):
+
+```bash
+git commit --no-verify -m "wip: work in progress"
+```
+
+Do **not** make `--no-verify` a habit — CI will still catch violations, and the feedback loop will be slower.
+
+### Lint-staged configuration
+
+The staged-file rules live in [`.lintstagedrc.json`](./.lintstagedrc.json) at the repo root:
+
+| File pattern                | Commands run                                       |
+| --------------------------- | -------------------------------------------------- |
+| `*.{ts,tsx,js,jsx,mjs,cjs}` | `eslint --max-warnings=0`, then `prettier --write` |
+| `*.{json,md,yml,yaml,css}`  | `prettier --write`                                 |
 
 ---
 
@@ -154,14 +200,14 @@ Environment variables of interest:
 
 We use trunk-based development with short-lived feature branches off `main`.
 
-| Prefix    | Purpose                                        | Example                                |
-| --------- | ---------------------------------------------- | -------------------------------------- |
-| `feat/`   | New user-facing functionality                  | `feat/stream-tags-endpoint`            |
-| `fix/`    | Bug fixes                                      | `fix/websocket-disconnect-leak`        |
-| `chore/`  | Tooling, deps, refactors with no user impact   | `chore/bump-nestjs-10.4`               |
-| `docs/`   | Documentation-only changes                     | `docs/update-contributing-guide`       |
-| `test/`   | Adding or refactoring tests                    | `test/api-validation-suite`            |
-| `ci/`     | CI / GitHub Actions changes                    | `ci/cache-pnpm-store`                  |
+| Prefix   | Purpose                                      | Example                          |
+| -------- | -------------------------------------------- | -------------------------------- |
+| `feat/`  | New user-facing functionality                | `feat/stream-tags-endpoint`      |
+| `fix/`   | Bug fixes                                    | `fix/websocket-disconnect-leak`  |
+| `chore/` | Tooling, deps, refactors with no user impact | `chore/bump-nestjs-10.4`         |
+| `docs/`  | Documentation-only changes                   | `docs/update-contributing-guide` |
+| `test/`  | Adding or refactoring tests                  | `test/api-validation-suite`      |
+| `ci/`    | CI / GitHub Actions changes                  | `ci/cache-pnpm-store`            |
 
 Conventions:
 
@@ -174,12 +220,7 @@ Conventions:
 
 ## Commit Message Conventions
 
-We follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/).
-Every commit message is **automatically validated** by
-[`commitlint`](https://commitlint.js.org/) via a Husky `commit-msg` git hook — invalid
-messages are rejected before they leave your machine.
-
-### Format
+We follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/). Each commit must look like:
 
 ```
 <type>(<scope>): <subject>
@@ -189,34 +230,17 @@ messages are rejected before they leave your machine.
 <footer>
 ```
 
-### Types
+**Allowed types:** `feat`, `fix`, `chore`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `revert`.
 
-| Type | When to use |
-| --------- | ------------------------------------------------ |
-| `feat` | A new user-facing feature |
-| `fix` | A bug fix |
-| `docs` | Documentation-only changes |
-| `style` | Formatting, missing semicolons, no logic change |
-| `refactor` | Code restructuring without feature/fix |
-| `perf` | Performance improvements |
-| `test` | Adding or fixing tests |
-| `build` | Changes to build system or external dependencies |
-| `ci` | CI/CD configuration changes |
-| `chore` | Maintenance tasks with no production impact |
-| `revert` | Reverts a previous commit |
+**Scope** is the affected package or area: `api`, `app`, `sdk`, `processing`, `db`, `ci`, `deps`, etc.
 
-### Scopes
+**Subject rules:**
 
-Use the package or area being changed: `api`, `app`, `sdk`, `processing`, `db`,
-`ci`, `deps`, `devops`, `k8s`, `auth`, `security`, `health`, `repo`, `migration`.
-
-### Subject rules
-
-- Imperative mood, **lowercase**, no trailing period.
-- **≤ 72 characters** (enforced by commitlint).
+- Imperative mood, lowercase, no trailing period.
+- ≤ 72 characters.
 - Reference the issue in the footer with `Refs #<id>` or `Closes #<id>`.
 
-### Examples
+**Examples:**
 
 ```
 feat(api): add GET /tags endpoint with pagination
@@ -235,65 +259,12 @@ Closes #6
 ```
 
 ```
-docs(repo): add conventional commit guide to contributing
+docs(repo): add contributing guide
 
-Closes #388
+Closes #102
 ```
 
-### Breaking changes
-
-Append `!` after the type/scope and add a `BREAKING CHANGE:` footer:
-
-```
-feat(api)!: rename /streams endpoint to /feeds
-
-BREAKING CHANGE: All clients must update their base path from /streams to /feeds.
-```
-
----
-
-## Automated Changelog
-
-The `CHANGELOG.md` is generated automatically from conventional commit messages using
-[`conventional-changelog`](https://github.com/conventional-changelog/conventional-changelog).
-
-### Generating the changelog
-
-```bash
-# Append commits since the last git tag to CHANGELOG.md
-npm run changelog
-
-# First-time setup — generate the full history (already done for v1.0.0)
-npm run changelog:first-release
-```
-
-Run `npm run changelog` before tagging a new release and commit the result:
-
-```bash
-npm run changelog
-git add CHANGELOG.md
-git commit -m "chore(repo): update changelog for vX.Y.Z"
-git tag vX.Y.Z
-git push --follow-tags
-```
-
-### Commit linting (local enforcement)
-
-After running `npm install`, the Husky `commit-msg` hook is installed automatically
-(via the `prepare` script). It runs `commitlint` against every new commit:
-
-```
-✔  feat(api): add stream pagination  ← accepted
-✘  Added stream pagination           ← rejected (no type, uppercase)
-```
-
-If you need to temporarily bypass the hook (e.g., WIP commit on a local branch):
-
-```bash
-git commit --no-verify -m "wip: scratch"
-```
-
-> **Do not** use `--no-verify` on commits that will be pushed to `main`.
+Breaking changes append `!` after the type/scope and include a `BREAKING CHANGE:` footer.
 
 ---
 
@@ -313,7 +284,7 @@ git commit --no-verify -m "wip: scratch"
 3. **Open the PR** using `gh pr create` or the GitHub UI.
    - Title format: `<type>(<scope>): <summary>` (matches Conventional Commits).
    - Link the issue: `Closes #<id>` in the body.
-   - Fill out the PR template — describe the *why*, list the testing performed, attach screenshots for UI changes.
+   - Fill out the PR template — describe the _why_, list the testing performed, attach screenshots for UI changes.
 4. **Required checks** must pass: lint, build, unit tests, and any service-specific E2E suites.
 5. **Request review** from at least one CODEOWNER for each touched package.
 6. **Address review feedback** with fixup commits, then `git rebase -i --autosquash` before merge.
