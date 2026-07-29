@@ -76,7 +76,11 @@ jobs:
           fetch-depth: 0
 
       - name: Run Trivy filesystem scan (text)
+<<<<<<< HEAD
         uses: aquasecurity/trivy-action@0.36.0
+=======
+        uses: aquasecurity/trivy-action@v0.36.0
+>>>>>>> origin/main
         with:
           scan-type: "fs"
           scan-ref: "."
@@ -91,7 +95,11 @@ jobs:
 
       - name: Generate Trivy filesystem scan (sarif)
         if: always()
+<<<<<<< HEAD
         uses: aquasecurity/trivy-action@0.36.0
+=======
+        uses: aquasecurity/trivy-action@v0.36.0
+>>>>>>> origin/main
         with:
           scan-type: "fs"
           scan-ref: "."
@@ -147,7 +155,11 @@ jobs:
           tags: scan-target:${{ matrix.image }}
 
       - name: Run Trivy image scan (text)
+<<<<<<< HEAD
         uses: aquasecurity/trivy-action@0.36.0
+=======
+        uses: aquasecurity/trivy-action@v0.36.0
+>>>>>>> origin/main
         with:
           image-ref: scan-target:${{ matrix.image }}
           format: "table"
@@ -157,7 +169,11 @@ jobs:
 
       - name: Generate Trivy image scan (sarif)
         if: always()
+<<<<<<< HEAD
         uses: aquasecurity/trivy-action@0.36.0
+=======
+        uses: aquasecurity/trivy-action@v0.36.0
+>>>>>>> origin/main
         with:
           image-ref: scan-target:${{ matrix.image }}
           format: "sarif"

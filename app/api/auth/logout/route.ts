@@ -10,14 +10,18 @@ export async function POST(req: NextRequest) {
     accessToken = ""
   }
 
+<<<<<<< HEAD
   await fetch("http://localhost:3001/auth/logout", {
+=======
+  void (await fetch("http://localhost:3001/auth/logout", {
+>>>>>>> origin/main
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
       Cookie: `refresh_token=${req.cookies.get("refresh_token")?.value || ""}`,
     },
-  })
+  }))
 
   const response = NextResponse.json({ success: true })
 

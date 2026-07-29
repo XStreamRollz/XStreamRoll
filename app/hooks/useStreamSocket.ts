@@ -6,10 +6,12 @@ import type { StreamStatus as StreamStatusValue } from "@xstreamroll/types"
 import { ConnectionStatus, StreamEvent } from "../components/StreamViewer/types"
 import {
   createStreamSocket,
+  type CreateStreamSocketOptions,
   subscribeToStream,
   unsubscribeFromStream,
 } from "../lib/websocket"
 
+<<<<<<< HEAD
 /**
  * Wire-shape payload delivered by the stream-event socket gateway
  * (`api/src/gateways/stream-events.ts`). The server may emit either
@@ -45,6 +47,9 @@ interface StreamEventPayload {
 // `slice(-MAX_EVENTS)` on every append, so the most recent MAX_EVENTS
 // entries always remain available while older ones drop off.
 const MAX_EVENTS = 1000
+=======
+const MAX_EVENTS = 100
+>>>>>>> origin/main
 
 // Exponential backoff schedule for reconnection attempts after an
 // unexpected disconnect. See #350.
@@ -84,7 +89,14 @@ export function computeBackoff(
   return Math.min(Math.round(exp), max)
 }
 
+<<<<<<< HEAD
 export const useStreamSocket = (url: string) => {
+=======
+export const useStreamSocket = (
+  url: string,
+  options: CreateStreamSocketOptions = {},
+) => {
+>>>>>>> origin/main
   const socketRef = useRef<Socket | null>(null)
   // AC: safety net inside the hook itself (#350). The consumer should
   // also memoize their `url` prop with useMemo, but if they don't we
@@ -107,6 +119,17 @@ export const useStreamSocket = (url: string) => {
   const [streamStatus, setStreamStatus] = useState<StreamStatusValue | null>(
     null,
   )
+<<<<<<< HEAD
+=======
+
+  // Issue #319 — `options` is destructured into a primitive so it can be
+  // used safely as a useEffect dep without re-running setup every render
+  // (the optional `options` object would be referentially new each
+  // call). Consumers that want to swap tokens mid-lifecycle should
+  // memoise the surrounding options object or accept that changing the
+  // token tears the connection down and rebuilds it (intentional).
+  const token = options?.token
+>>>>>>> origin/main
 
   useEffect(() => {
     // Safe-equality guard: skip when the URL is value-equal to the last
@@ -125,7 +148,11 @@ export const useStreamSocket = (url: string) => {
     }
     attemptRef.current = 0
 
+<<<<<<< HEAD
     const socket = createStreamSocket(url)
+=======
+    const socket = createStreamSocket(url, { token })
+>>>>>>> origin/main
     socketRef.current = socket
 
     setStatus("connecting")
@@ -187,7 +214,11 @@ export const useStreamSocket = (url: string) => {
     // Map server payloads to the local StreamEvent shape
     const mapPayload = (
       eventName: string,
+<<<<<<< HEAD
       payload: StreamEventPayload,
+=======
+      payload: Record<string, unknown>,
+>>>>>>> origin/main
     ): StreamEvent => {
       const streamId = payload?.streamId ?? payload?.id ?? ""
       const ts =
@@ -221,6 +252,7 @@ export const useStreamSocket = (url: string) => {
     // Only update `streamStatus` for events about the stream this hook
     // instance is scoped to. `events` (the raw log) still records
     // everything the socket delivers, unfiltered, as before.
+<<<<<<< HEAD
     const matchesTarget = (payload: StreamEventPayload) =>
       targetStreamId === null ||
       String(payload?.streamId ?? payload?.id ?? "") === targetStreamId
@@ -251,6 +283,25 @@ export const useStreamSocket = (url: string) => {
     }
     const onError = (payload: StreamEventPayload) => {
       appendEvent(mapPayload("stream:error", payload))
+=======
+    const matchesTarget = (payload: Record<string, unknown>) =>
+      targetStreamId === null ||
+      String(payload?.streamId ?? payload?.id ?? "") === targetStreamId
+
+    const onStarted = (payload: Record<string, unknown>) => {
+      const ev = mapPayload("stream:started", payload)
+      setEvents((prev) => [ev, ...prev].slice(0, MAX_EVENTS))
+      if (matchesTarget(payload)) setStreamStatus("active")
+    }
+    const onStopped = (payload: Record<string, unknown>) => {
+      const ev = mapPayload("stream:stopped", payload)
+      setEvents((prev) => [ev, ...prev].slice(0, MAX_EVENTS))
+      if (matchesTarget(payload)) setStreamStatus("inactive")
+    }
+    const onError = (payload: Record<string, unknown>) => {
+      const ev = mapPayload("stream:error", payload)
+      setEvents((prev) => [ev, ...prev].slice(0, MAX_EVENTS))
+>>>>>>> origin/main
       if (matchesTarget(payload)) setStreamStatus("error")
     }
 
@@ -300,7 +351,7 @@ export const useStreamSocket = (url: string) => {
       // Do not disconnect the shared socket here — it's shared across
       // consumers. We only remove listeners to avoid duplicates.
     }
-  }, [url])
+  }, [url, token])
 
   // AC safety net (#350): memoize the returned object so a parent that
   // re-renders for unrelated reasons doesn't force every consumer to

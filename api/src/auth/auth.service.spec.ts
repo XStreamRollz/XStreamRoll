@@ -71,9 +71,11 @@ function makeService(
     refreshJwt as unknown as JwtService,
     accessJwt as unknown as JwtService,
     users as unknown as UsersRepository,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- PasswordResetService is typed separately via the mock interface
     passwordReset as unknown as any,
     tokenDenylist as unknown as TokenDenylistService,
-    { log: jest.fn() } as any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Logger mock only needs `log`
+    { log: jest.fn() } as any,
   )
 }
 
@@ -107,7 +109,13 @@ describe("AuthService", () => {
     users = mockUsersRepository()
     passwordReset = mockPasswordResetService()
     tokenDenylist = { revoke: jest.fn() }
-    service = makeService(accessJwt, refreshJwt, users, passwordReset, tokenDenylist)
+    service = makeService(
+      accessJwt,
+      refreshJwt,
+      users,
+      passwordReset,
+      tokenDenylist,
+    )
     jest.clearAllMocks()
   })
 
@@ -130,7 +138,11 @@ describe("AuthService", () => {
       refreshJwt.sign.mockReturnValue("refresh.token.here")
       ;(bcrypt.hash as jest.Mock).mockResolvedValue("$2b$10$hashed")
 
-      const result = await service.register(dto, { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- partial request stub for test
+      const result = await service.register(dto, {
+        ip: "127.0.0.1",
+        headers: { "user-agent": "test" },
+      } as any)
 
       expect(users.findByEmail).toHaveBeenCalledWith(dto.email)
       expect(users.findByUsername).toHaveBeenCalledWith(dto.username)
@@ -165,7 +177,13 @@ describe("AuthService", () => {
     it("throws ConflictException when the email is already taken", async () => {
       users.findByEmail.mockResolvedValue(dummyUser({ email: dto.email }))
 
-      await expect(service.register(dto, { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any)).rejects.toThrow(ConflictException)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- partial request stub for test
+      await expect(
+        service.register(dto, {
+          ip: "127.0.0.1",
+          headers: { "user-agent": "test" },
+        } as any),
+      ).rejects.toThrow(ConflictException)
       expect(users.create).not.toHaveBeenCalled()
     })
 
@@ -175,7 +193,13 @@ describe("AuthService", () => {
         dummyUser({ username: dto.username }),
       )
 
-      await expect(service.register(dto, { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any)).rejects.toThrow(ConflictException)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- partial request stub for test
+      await expect(
+        service.register(dto, {
+          ip: "127.0.0.1",
+          headers: { "user-agent": "test" },
+        } as any),
+      ).rejects.toThrow(ConflictException)
       expect(users.create).not.toHaveBeenCalled()
     })
 
@@ -187,7 +211,11 @@ describe("AuthService", () => {
       refreshJwt.sign.mockReturnValue("refresh")
       ;(bcrypt.hash as jest.Mock).mockResolvedValue("$2b$10$hashed")
 
-      await service.register(dto, { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- partial request stub for test
+      await service.register(dto, {
+        ip: "127.0.0.1",
+        headers: { "user-agent": "test" },
+      } as any)
 
       expect(bcrypt.hash).toHaveBeenCalledWith(dto.password, 12)
       const [storedUsername, storedEmail, storedHash] =
@@ -201,11 +229,14 @@ describe("AuthService", () => {
       users.findByEmail.mockResolvedValue(dummyUser({ email: "dup@x.com" }))
 
       await expect(
-        service.register({
-          username: "dupuser",
-          email: "dup@x.com",
-          password: "someOtherPassword",
-        }, { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any),
+        service.register(
+          {
+            username: "dupuser",
+            email: "dup@x.com",
+            password: "someOtherPassword",
+          },
+          { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any,
+        ), // eslint-disable-line @typescript-eslint/no-explicit-any
       ).rejects.toThrow(ConflictException)
     })
   })
@@ -235,7 +266,10 @@ describe("AuthService", () => {
 
       await service.resetPassword(dto)
 
-      expect(passwordReset.resetPassword).toHaveBeenCalledWith(dto.token, dto.password)
+      expect(passwordReset.resetPassword).toHaveBeenCalledWith(
+        dto.token,
+        dto.password,
+      )
     })
   })
 
@@ -251,7 +285,11 @@ describe("AuthService", () => {
       accessJwt.sign.mockReturnValue("jwt.token.here")
       refreshJwt.sign.mockReturnValue("refresh.token.here")
 
-      const result = await service.login(dto, { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- partial request stub for test
+      const result = await service.login(dto, {
+        ip: "127.0.0.1",
+        headers: { "user-agent": "test" },
+      } as any)
 
       expect(users.findByEmail).toHaveBeenCalledWith(dto.email)
       expect(bcrypt.compare).toHaveBeenCalledWith(
@@ -284,7 +322,13 @@ describe("AuthService", () => {
     it("throws UnauthorizedException when the email is not found", async () => {
       users.findByEmail.mockResolvedValue(null)
 
-      await expect(service.login(dto, { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any)).rejects.toThrow(UnauthorizedException)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- partial request stub for test
+      await expect(
+        service.login(dto, {
+          ip: "127.0.0.1",
+          headers: { "user-agent": "test" },
+        } as any),
+      ).rejects.toThrow(UnauthorizedException)
       expect(accessJwt.sign).not.toHaveBeenCalled()
     })
 
@@ -294,7 +338,11 @@ describe("AuthService", () => {
       ;(bcrypt.compare as jest.Mock).mockResolvedValue(false)
 
       await expect(
-        service.login({ email: dto.email, password: "wrongPassword" }, { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- partial request stub for test
+        service.login({ email: dto.email, password: "wrongPassword" }, {
+          ip: "127.0.0.1",
+          headers: { "user-agent": "test" },
+        } as any),
       ).rejects.toThrow(UnauthorizedException)
 
       expect(accessJwt.sign).not.toHaveBeenCalled()
@@ -304,7 +352,11 @@ describe("AuthService", () => {
       // Missing email scenario
       users.findByEmail.mockResolvedValueOnce(null)
       const e1 = await service
-        .login({ email: "no@user.com", password: "any" }, { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- partial request stub for test
+        .login({ email: "no@user.com", password: "any" }, {
+          ip: "127.0.0.1",
+          headers: { "user-agent": "test" },
+        } as any)
         .catch((e) => e)
       expect(e1).toBeInstanceOf(UnauthorizedException)
 
@@ -312,7 +364,11 @@ describe("AuthService", () => {
       users.findByEmail.mockResolvedValueOnce(dummyUser({ email: dto.email }))
       ;(bcrypt.compare as jest.Mock).mockResolvedValueOnce(false)
       const e2 = await service
-        .login({ email: dto.email, password: "bad" }, { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- partial request stub for test
+        .login({ email: dto.email, password: "bad" }, {
+          ip: "127.0.0.1",
+          headers: { "user-agent": "test" },
+        } as any)
         .catch((e) => e)
       expect(e2).toBeInstanceOf(UnauthorizedException)
 
@@ -326,7 +382,11 @@ describe("AuthService", () => {
       accessJwt.sign.mockReturnValue("token")
       refreshJwt.sign.mockReturnValue("refresh")
 
-      await service.login(dto, { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- partial request stub for test
+      await service.login(dto, {
+        ip: "127.0.0.1",
+        headers: { "user-agent": "test" },
+      } as any)
 
       expect(bcrypt.compare).toHaveBeenCalledWith(
         dto.password,
@@ -356,8 +416,12 @@ describe("AuthService", () => {
 
     it("revokes the current access token when valid", async () => {
       accessJwt.verifyAsync.mockResolvedValue({ sub: 1 })
-      accessJwt.decode.mockReturnValue({ exp: Math.floor(Date.now() / 1000) + 300 })
-      refreshJwt.decode.mockReturnValue({ exp: Math.floor(Date.now() / 1000) + 300 })
+      accessJwt.decode.mockReturnValue({
+        exp: Math.floor(Date.now() / 1000) + 300,
+      })
+      refreshJwt.decode.mockReturnValue({
+        exp: Math.floor(Date.now() / 1000) + 300,
+      })
 
       await service.logout(`Bearer ${token}`, refreshToken)
 
@@ -376,7 +440,9 @@ describe("AuthService", () => {
 
     it("revokes only the access token when no refresh token is provided", async () => {
       accessJwt.verifyAsync.mockResolvedValue({ sub: 1 })
-      accessJwt.decode.mockReturnValue({ exp: Math.floor(Date.now() / 1000) + 300 })
+      accessJwt.decode.mockReturnValue({
+        exp: Math.floor(Date.now() / 1000) + 300,
+      })
 
       await service.logout(`Bearer ${token}`)
 
@@ -388,26 +454,30 @@ describe("AuthService", () => {
     })
 
     it("throws UnauthorizedException when the authorization header is missing", async () => {
-      await expect(service.logout("", refreshToken)).rejects.toThrow(UnauthorizedException)
+      await expect(service.logout("", refreshToken)).rejects.toThrow(
+        UnauthorizedException,
+      )
       expect(tokenDenylist.revoke).not.toHaveBeenCalled()
     })
 
     it("throws UnauthorizedException when the token is invalid", async () => {
       accessJwt.verifyAsync.mockRejectedValue(new Error("invalid token"))
 
-      await expect(service.logout(`Bearer ${token}`, refreshToken)).rejects.toThrow(
-        UnauthorizedException,
-      )
+      await expect(
+        service.logout(`Bearer ${token}`, refreshToken),
+      ).rejects.toThrow(UnauthorizedException)
       expect(tokenDenylist.revoke).not.toHaveBeenCalled()
     })
 
     it("throws UnauthorizedException when the token has already expired", async () => {
       accessJwt.verifyAsync.mockResolvedValue({ sub: 1 })
-      accessJwt.decode.mockReturnValue({ exp: Math.floor(Date.now() / 1000) - 10 })
+      accessJwt.decode.mockReturnValue({
+        exp: Math.floor(Date.now() / 1000) - 10,
+      })
 
-      await expect(service.logout(`Bearer ${token}`, refreshToken)).rejects.toThrow(
-        UnauthorizedException,
-      )
+      await expect(
+        service.logout(`Bearer ${token}`, refreshToken),
+      ).rejects.toThrow(UnauthorizedException)
       expect(tokenDenylist.revoke).not.toHaveBeenCalled()
     })
   })
@@ -424,6 +494,7 @@ describe("AuthService", () => {
       accessJwt.sign.mockReturnValue("new.access.token")
       refreshJwt.sign.mockReturnValue("new.refresh.token")
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- partial request stub for test
       const req = { cookies: { refresh_token: refreshToken } } as any
       const result = await service.refresh(req)
 
@@ -434,6 +505,7 @@ describe("AuthService", () => {
     })
 
     it("throws UnauthorizedException when refresh token is missing", async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- partial request stub for test
       const req = { cookies: {} } as any
       await expect(service.refresh(req)).rejects.toThrow(UnauthorizedException)
     })
@@ -441,6 +513,7 @@ describe("AuthService", () => {
     it("throws UnauthorizedException when refresh token is invalid", async () => {
       refreshJwt.verifyAsync.mockRejectedValue(new Error("invalid"))
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- partial request stub for test
       const req = { cookies: { refresh_token: refreshToken } } as any
       await expect(service.refresh(req)).rejects.toThrow(UnauthorizedException)
     })
@@ -450,6 +523,7 @@ describe("AuthService", () => {
       refreshJwt.decode.mockReturnValue({ sub: 999 })
       users.findById.mockResolvedValue(null)
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- partial request stub for test
       const req = { cookies: { refresh_token: refreshToken } } as any
       await expect(service.refresh(req)).rejects.toThrow(UnauthorizedException)
     })

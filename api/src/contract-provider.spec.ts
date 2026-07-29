@@ -33,6 +33,7 @@ import { TokenDenylistService } from "./auth/token-denylist.service"
 import { User, UsersRepository } from "./auth/users.repository"
 import createJwtConfig, { createRefreshJwtConfig } from "./config/jwt.config"
 import { AuthGuard } from "./common/guards/auth.guard"
+import { JwtExtractorService } from "./common/guards/jwt-extractor.service"
 import { StreamOwnershipGuard } from "./common/guards/stream-ownership.guard"
 import { StreamOwnershipService } from "./common/guards/stream-ownership.service"
 import { StreamsRepository } from "./streams/repository/streams.repository"
@@ -118,6 +119,7 @@ describe("Contract provider verification (api)", () => {
           useValue: { dispatchStreamEvent: async () => undefined },
         },
         AuthGuard,
+        JwtExtractorService,
         StreamOwnershipGuard,
         { provide: StreamOwnershipService, useValue: streamOwnershipService },
         { provide: TokenDenylistService, useValue: tokenDenylistService },

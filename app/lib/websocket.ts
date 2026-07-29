@@ -7,6 +7,21 @@ import { io, type Socket } from "socket.io-client"
  * `unsubscribeFromStream` and the inline ack callback in
  * `socket.emit(..., callback)` share a single source of truth — any
  * shape change here automatically propagates.
+ *
+ * Issue #319 — the JWT used to authenticate the WebSocket stream is no
+ * longer read from a `?token=` query-string parameter. Reverse proxies
+ * (nginx, Cloudflare, etc.) log the full URL — including the query —
+ * to access logs, so any JWT carried in `?token=...` was being
+ * persisted in plaintext.
+ *
+ * Callers must now supply the token explicitly via
+ * `createStreamSocket(url, { token })`, which forwards it through the
+ * socket.io handshake `auth` payload (`io(url, { auth: { token } })`).
+ * The Authorization header path remains available on the server.
+ *
+ * As defense-in-depth we additionally strip any stray `?token=` from
+ * the outbound URL — even if a wrongly-configured caller slips one in,
+ * it never reaches nginx or any downstream log collector.
  */
 type AckResponse = { ok: boolean; room?: string; error?: string } | null
 
@@ -20,7 +35,19 @@ function toHttpUrl(raw: string): string {
   return raw
 }
 
-export const createStreamSocket = (rawUrl: string): Socket => {
+export interface CreateStreamSocketOptions {
+  /**
+   * JWT used to authenticate the WebSocket stream. Forwarded to the
+   * server via the socket.io handshake `auth` payload (NOT via the
+   * URL — see file-level JSDoc, Issue #319).
+   */
+  token?: string
+}
+
+export const createStreamSocket = (
+  rawUrl: string,
+  options: CreateStreamSocketOptions = {},
+): Socket => {
   const httpUrl = toHttpUrl(rawUrl)
 
   let urlObj: URL
@@ -37,8 +64,13 @@ export const createStreamSocket = (rawUrl: string): Socket => {
       ? urlObj.pathname
       : "/streams"
 
+
+  // Issue #319 — strip any `?token=` from the URL entirely so it can't
+  // end up in an access log even if a caller mistakenly appended one.
+  urlObj.searchParams.delete("token")
+
   const base = `${urlObj.origin}${namespace}`
-  const token = urlObj.searchParams.get("token") ?? undefined
+  const token = options.token
 
   const cacheKey = `${base}|${token ?? ""}`
   const existing = socketCache.get(cacheKey)
@@ -71,13 +103,17 @@ export const subscribeToStream = async (
   }
 
   return await new Promise((resolve) => {
-    socket.emit("stream:subscribe", { streamId }, (res: AckResponse) => {
-      if (res && res.ok) {
-        counts.set(room, 1)
-        roomCounts.set(socket, counts)
-      }
-      resolve(res)
-    })
+    socket.emit(
+      "stream:subscribe",
+      { streamId },
+      (res: AckResponse) => {
+        if (res && res.ok) {
+          counts.set(room, 1)
+          roomCounts.set(socket, counts)
+        }
+        resolve(res)
+      },
+    )
   })
 }
 
@@ -96,10 +132,14 @@ export const unsubscribeFromStream = async (
   }
 
   return await new Promise((resolve) => {
-    socket.emit("stream:unsubscribe", { streamId }, (res: AckResponse) => {
-      counts.delete(room)
-      roomCounts.set(socket, counts)
-      resolve(res)
-    })
+    socket.emit(
+      "stream:unsubscribe",
+      { streamId },
+      (res: AckResponse) => {
+        counts.delete(room)
+        roomCounts.set(socket, counts)
+        resolve(res)
+      },
+    )
   })
 }
