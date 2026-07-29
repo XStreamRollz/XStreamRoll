@@ -1,4 +1,4 @@
-import { io, type Socket } from 'socket.io-client'
+import { io, type Socket } from "socket.io-client"
 
 /**
  * Issue #319 — the JWT used to authenticate the WebSocket stream is no
@@ -22,8 +22,8 @@ const roomCounts = new WeakMap<Socket, Map<string, number>>()
 
 function toHttpUrl(raw: string): string {
   // Convert ws/wss to http/https so socket.io-client can parse namespace
-  if (raw.startsWith('ws://')) return raw.replace(/^ws:\/\//, 'http://')
-  if (raw.startsWith('wss://')) return raw.replace(/^wss:\/\//, 'https://')
+  if (raw.startsWith("ws://")) return raw.replace(/^ws:\/\//, "http://")
+  if (raw.startsWith("wss://")) return raw.replace(/^wss:\/\//, "https://")
   return raw
 }
 
@@ -52,24 +52,24 @@ export const createStreamSocket = (
 
   // Determine namespace: prefer existing /streams path if present, otherwise use /streams
   const namespace =
-    urlObj.pathname && urlObj.pathname.startsWith('/streams')
+    urlObj.pathname && urlObj.pathname.startsWith("/streams")
       ? urlObj.pathname
-      : '/streams'
+      : "/streams"
 
   // Issue #319 — strip any `?token=` from the URL entirely so it can't
   // end up in an access log even if a caller mistakenly appended one.
-  urlObj.searchParams.delete('token')
+  urlObj.searchParams.delete("token")
 
   const base = `${urlObj.origin}${namespace}`
   const token = options.token
 
-  const cacheKey = `${base}|${token ?? ''}`
+  const cacheKey = `${base}|${token ?? ""}`
   const existing = socketCache.get(cacheKey)
   if (existing) return existing
 
   const socket = io(base, {
     auth: token ? { token } : undefined,
-    transports: ['websocket'],
+    transports: ["websocket"],
     withCredentials: true,
   })
 
@@ -94,13 +94,17 @@ export const subscribeToStream = async (
   }
 
   return await new Promise((resolve) => {
-    socket.emit('stream:subscribe', { streamId }, (res: any) => {
-      if (res && res.ok) {
-        counts.set(room, 1)
-        roomCounts.set(socket, counts)
-      }
-      resolve(res)
-    })
+    socket.emit(
+      "stream:subscribe",
+      { streamId },
+      (res: { ok: boolean; room?: string; error?: string } | null) => {
+        if (res && res.ok) {
+          counts.set(room, 1)
+          roomCounts.set(socket, counts)
+        }
+        resolve(res)
+      },
+    )
   })
 }
 
@@ -119,10 +123,14 @@ export const unsubscribeFromStream = async (
   }
 
   return await new Promise((resolve) => {
-    socket.emit('stream:unsubscribe', { streamId }, (res: any) => {
-      counts.delete(room)
-      roomCounts.set(socket, counts)
-      resolve(res)
-    })
+    socket.emit(
+      "stream:unsubscribe",
+      { streamId },
+      (res: { ok: boolean; room?: string; error?: string } | null) => {
+        counts.delete(room)
+        roomCounts.set(socket, counts)
+        resolve(res)
+      },
+    )
   })
 }

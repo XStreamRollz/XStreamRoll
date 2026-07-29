@@ -1,29 +1,26 @@
-'use client';
+"use client"
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Socket } from 'socket.io-client';
-import type { StreamStatus as StreamStatusValue } from '@xstreamroll/types';
-import {
-  ConnectionStatus,
-  StreamEvent,
-} from '../components/StreamViewer/types';
+import { useEffect, useMemo, useRef, useState } from "react"
+import type { Socket } from "socket.io-client"
+import type { StreamStatus as StreamStatusValue } from "@xstreamroll/types"
+import { ConnectionStatus, StreamEvent } from "../components/StreamViewer/types"
 import {
   createStreamSocket,
   type CreateStreamSocketOptions,
   subscribeToStream,
   unsubscribeFromStream,
-} from '../lib/websocket';
+} from "../lib/websocket"
 
-const MAX_EVENTS = 100;
+const MAX_EVENTS = 100
 
 // Exponential backoff schedule for reconnection attempts after an
 // unexpected disconnect. See #350.
-const BACKOFF_INITIAL_MS = 1_000;
-const BACKOFF_MAX_MS = 30_000;
+const BACKOFF_INITIAL_MS = 1_000
+const BACKOFF_MAX_MS = 30_000
 
 function toHttp(raw: string) {
-  if (raw.startsWith('ws://')) return raw.replace(/^ws:\/\//, 'http://')
-  if (raw.startsWith('wss://')) return raw.replace(/^wss:\/\//, 'https://')
+  if (raw.startsWith("ws://")) return raw.replace(/^ws:\/\//, "http://")
+  if (raw.startsWith("wss://")) return raw.replace(/^wss:\/\//, "https://")
   return raw
 }
 
@@ -58,21 +55,18 @@ export const useStreamSocket = (
   url: string,
   options: CreateStreamSocketOptions = {},
 ) => {
-  const socketRef = useRef<Socket | null>(null);
+  const socketRef = useRef<Socket | null>(null)
   // AC: safety net inside the hook itself (#350). The consumer should
   // also memoize their `url` prop with useMemo, but if they don't we
   // can still avoid redundant set-up when the URL string is value-equal
   // to the one we just processed.
-  const lastSetupUrlRef = useRef<string | null>(null);
-  const attemptRef = useRef(0);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
+  const lastSetupUrlRef = useRef<string | null>(null)
+  const attemptRef = useRef(0)
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const [status, setStatus] =
-    useState<ConnectionStatus>('connecting');
+  const [status, setStatus] = useState<ConnectionStatus>("connecting")
 
-  const [events, setEvents] = useState<StreamEvent[]>([]);
+  const [events, setEvents] = useState<StreamEvent[]>([])
 
   // Live lifecycle status of the stream this hook auto-subscribed to
   // (parsed from `url` — see below). `null` until the first
@@ -82,7 +76,7 @@ export const useStreamSocket = (
   // non-null (#362).
   const [streamStatus, setStreamStatus] = useState<StreamStatusValue | null>(
     null,
-  );
+  )
 
   // Issue #319 — `options` is destructured into a primitive so it can be
   // used safely as a useEffect dep without re-running setup every render
@@ -109,11 +103,11 @@ export const useStreamSocket = (
     }
     attemptRef.current = 0
 
-    const socket = createStreamSocket(url, { token });
-    socketRef.current = socket;
+    const socket = createStreamSocket(url, { token })
+    socketRef.current = socket
 
-    setStatus('connecting');
-    setStreamStatus(null);
+    setStatus("connecting")
+    setStreamStatus(null)
 
     // Resolve which stream room this hook instance cares about, from
     // either the URL path (/streams/:id) or a `streamId`/`id` query
@@ -127,7 +121,8 @@ export const useStreamSocket = (
       const parsed = new URL(toHttp(url))
       const match = parsed.pathname.match(/\/streams\/(?<id>[^\/]+)/)
       const idFromPath = match?.groups?.id
-      const idFromQuery = parsed.searchParams.get('streamId') ?? parsed.searchParams.get('id')
+      const idFromQuery =
+        parsed.searchParams.get("streamId") ?? parsed.searchParams.get("id")
       targetStreamId = idFromPath ?? idFromQuery ?? null
     } catch {
       // ignore malformed URL
@@ -137,18 +132,18 @@ export const useStreamSocket = (
       // Reset backoff so the next unexpected disconnect starts at the
       // initial delay again.
       attemptRef.current = 0
-      setStatus('connected')
-    };
-    const handleConnectError = () => setStatus('error');
+      setStatus("connected")
+    }
+    const handleConnectError = () => setStatus("error")
     const handleDisconnect = (reason: string) => {
-      setStatus('disconnected');
+      setStatus("disconnected")
       // `io client disconnect` is raised by our own intentional
       // socket.disconnect() call; don't auto-reconnect in that case.
       // Same goes for `io server disconnect` when the server actively
       // kicked us — we don't want to keep hammering.
       if (
-        reason === 'io client disconnect' ||
-        reason === 'io server disconnect'
+        reason === "io client disconnect" ||
+        reason === "io server disconnect"
       ) {
         return
       }
@@ -162,29 +157,35 @@ export const useStreamSocket = (
         // no-op. Otherwise it kicks off a fresh attempt. Honors the
         // exponential schedule declared in #350.
         if (!socket.connected) {
-          socket.connect();
+          socket.connect()
         }
       }, delay)
-    };
+    }
 
     // Map server payloads to the local StreamEvent shape
-    const mapPayload = (eventName: string, payload: any): StreamEvent => {
-      const streamId = payload?.streamId ?? payload?.id ?? ''
+    const mapPayload = (
+      eventName: string,
+      payload: Record<string, unknown>,
+    ): StreamEvent => {
+      const streamId = payload?.streamId ?? payload?.id ?? ""
       const ts =
-        payload?.startedAt ?? payload?.stoppedAt ?? payload?.occurredAt ?? new Date().toISOString()
+        payload?.startedAt ??
+        payload?.stoppedAt ??
+        payload?.occurredAt ??
+        new Date().toISOString()
       const id = `${eventName}:${String(streamId)}:${Date.now()}`
       let type = eventName
       let message = JSON.stringify(payload)
 
-      if (eventName === 'stream:started') {
-        type = 'started'
-        message = `Stream ${streamId} started by ${payload?.userId ?? 'unknown'}`
-      } else if (eventName === 'stream:stopped') {
-        type = 'stopped'
-        message = `Stream ${streamId} stopped${payload?.reason ? `: ${payload.reason}` : ''}`
-      } else if (eventName === 'stream:error') {
-        type = 'error'
-        message = `${payload?.code ?? 'ERROR'}: ${payload?.message ?? 'unknown'}`
+      if (eventName === "stream:started") {
+        type = "started"
+        message = `Stream ${streamId} started by ${payload?.userId ?? "unknown"}`
+      } else if (eventName === "stream:stopped") {
+        type = "stopped"
+        message = `Stream ${streamId} stopped${payload?.reason ? `: ${payload.reason}` : ""}`
+      } else if (eventName === "stream:error") {
+        type = "error"
+        message = `${payload?.code ?? "ERROR"}: ${payload?.message ?? "unknown"}`
       }
 
       return {
@@ -198,33 +199,33 @@ export const useStreamSocket = (
     // Only update `streamStatus` for events about the stream this hook
     // instance is scoped to. `events` (the raw log) still records
     // everything the socket delivers, unfiltered, as before.
-    const matchesTarget = (payload: any) =>
+    const matchesTarget = (payload: Record<string, unknown>) =>
       targetStreamId === null ||
-      String(payload?.streamId ?? payload?.id ?? '') === targetStreamId
+      String(payload?.streamId ?? payload?.id ?? "") === targetStreamId
 
-    const onStarted = (payload: any) => {
-      const ev = mapPayload('stream:started', payload)
+    const onStarted = (payload: Record<string, unknown>) => {
+      const ev = mapPayload("stream:started", payload)
       setEvents((prev) => [ev, ...prev].slice(0, MAX_EVENTS))
-      if (matchesTarget(payload)) setStreamStatus('active')
+      if (matchesTarget(payload)) setStreamStatus("active")
     }
-    const onStopped = (payload: any) => {
-      const ev = mapPayload('stream:stopped', payload)
+    const onStopped = (payload: Record<string, unknown>) => {
+      const ev = mapPayload("stream:stopped", payload)
       setEvents((prev) => [ev, ...prev].slice(0, MAX_EVENTS))
-      if (matchesTarget(payload)) setStreamStatus('inactive')
+      if (matchesTarget(payload)) setStreamStatus("inactive")
     }
-    const onError = (payload: any) => {
-      const ev = mapPayload('stream:error', payload)
+    const onError = (payload: Record<string, unknown>) => {
+      const ev = mapPayload("stream:error", payload)
       setEvents((prev) => [ev, ...prev].slice(0, MAX_EVENTS))
-      if (matchesTarget(payload)) setStreamStatus('error')
+      if (matchesTarget(payload)) setStreamStatus("error")
     }
 
-    socket.on('connect', handleConnect)
-    socket.on('connect_error', handleConnectError)
-    socket.on('disconnect', handleDisconnect)
+    socket.on("connect", handleConnect)
+    socket.on("connect_error", handleConnectError)
+    socket.on("disconnect", handleDisconnect)
 
-    socket.on('stream:started', onStarted)
-    socket.on('stream:stopped', onStopped)
-    socket.on('stream:error', onError)
+    socket.on("stream:started", onStarted)
+    socket.on("stream:stopped", onStopped)
+    socket.on("stream:error", onError)
 
     // Auto-subscribe to the stream room resolved above, if any.
     let subscribedStreamId: string | null = null
@@ -247,16 +248,18 @@ export const useStreamSocket = (
       lastSetupUrlRef.current = null
       socketRef.current = null
 
-      socket.off('connect', handleConnect)
-      socket.off('connect_error', handleConnectError)
-      socket.off('disconnect', handleDisconnect)
+      socket.off("connect", handleConnect)
+      socket.off("connect_error", handleConnectError)
+      socket.off("disconnect", handleDisconnect)
 
-      socket.off('stream:started', onStarted)
-      socket.off('stream:stopped', onStopped)
-      socket.off('stream:error', onError)
+      socket.off("stream:started", onStarted)
+      socket.off("stream:stopped", onStopped)
+      socket.off("stream:error", onError)
 
       if (subscribedStreamId) {
-        void unsubscribeFromStream(socket, subscribedStreamId).catch(() => undefined)
+        void unsubscribeFromStream(socket, subscribedStreamId).catch(
+          () => undefined,
+        )
       }
 
       // Do not disconnect the shared socket here — it's shared across

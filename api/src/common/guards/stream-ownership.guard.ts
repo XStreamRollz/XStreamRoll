@@ -3,49 +3,39 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
-  UnauthorizedException,
 } from "@nestjs/common"
-import { JwtService } from "@nestjs/jwt"
 import type { Request } from "express"
-import { TokenDenylistService } from "../../auth/token-denylist.service"
+import { AuthGuard } from "./auth.guard"
 import { StreamOwnershipService } from "./stream-ownership.service"
 
 /**
  * Guard that ensures the requesting user owns the stream referenced by
- * the `:id` URL parameter. Authentication is performed by validating the
- * JWT from the Authorization header and rejecting revoked tokens.
+ * the `:id` URL parameter.  Authentication is delegated to
+ * {@link AuthGuard} so that every security fix applied there
+ * (denylist checks, password-change invalidation, etc.) automatically
+ * applies to ownership-gated routes as well.
  */
 @Injectable()
 export class StreamOwnershipGuard implements CanActivate {
   constructor(
+    private readonly authGuard: AuthGuard,
     private readonly ownership: StreamOwnershipService,
-    private readonly jwtService: JwtService,
-    private readonly tokenDenylistService: TokenDenylistService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    // Delegate the full JWT authentication pipeline to AuthGuard.
+    // It will throw UnauthorizedException on any auth failure.
+    await this.authGuard.canActivate(context)
+
     const req = context.switchToHttp().getRequest<Request>()
-    const token = this.extractBearerToken(req.header("authorization") ?? "")
+    const userId = (req as Request & { auth?: { userId: number } }).auth?.userId
 
-    const payload = await this.verifyToken(token)
-
-    // Denylist lookup is keyed on the verified token's `jti` (a short UUID),
-    // giving an O(1) cache lookup without hashing or storing the full token.
-    // Tokens issued before the `jti` claim existed are skipped here and
-    // expire naturally.
-    const jti = payload.jti
-    if (typeof jti === "string" && jti.length > 0) {
-      if (await this.tokenDenylistService.isRevoked(jti)) {
-        throw new UnauthorizedException("access token has been revoked")
-      }
+    if (userId === undefined) {
+      throw new ForbiddenException("authentication required")
     }
 
-    const userId = Number(payload.sub)
-    if (!Number.isInteger(userId) || userId <= 0) {
-      throw new UnauthorizedException("invalid access token")
-    }
-
-    const rawStreamId = req.params?.id
+    const rawStreamId = (req as Request & { params?: { id?: string } }).params
+      ?.id
     const streamId = Number(rawStreamId)
     if (!Number.isInteger(streamId) || streamId <= 0) {
       throw new ForbiddenException("invalid stream id")
@@ -58,30 +48,6 @@ export class StreamOwnershipGuard implements CanActivate {
       )
     }
 
-    ;(req as Request & { auth?: { userId: number } }).auth = { userId }
     return true
-  }
-
-  private async verifyToken(
-    token: string,
-  ): Promise<{ sub: number | string; jti?: string }> {
-    try {
-      return (await this.jwtService.verifyAsync(token)) as {
-        sub: number | string
-        jti?: string
-      }
-    } catch {
-      throw new UnauthorizedException("invalid or expired access token")
-    }
-  }
-
-  private extractBearerToken(header: string): string {
-    const match = header.trim().match(/^Bearer\s+(.+)$/i)
-    if (!match) {
-      throw new UnauthorizedException(
-        "Authorization header must contain a Bearer token",
-      )
-    }
-    return match[1]
   }
 }

@@ -3,6 +3,11 @@ import { JwtService } from "@nestjs/jwt"
 import { StreamsGateway, resolveCorsOrigins } from "./streams.gateway"
 import { NOTIFICATION_EVENTS, STREAM_EVENTS } from "./stream-events"
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// NestJS gateway tests require socket mocks cast as any to satisfy the
+// Socket type from socket.io, which has dozens of internal fields that
+// are irrelevant for unit tests.
+
 type FakeHandshake = {
   auth?: Record<string, unknown>
   headers?: Record<string, string>
@@ -99,7 +104,9 @@ describe("resolveCorsOrigins", () => {
     const origEnv = process.env.NODE_ENV
     process.env.NODE_ENV = "production"
     const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {})
-    const exitSpy = jest.spyOn(process, "exit").mockImplementation((() => {}) as never)
+    const exitSpy = jest
+      .spyOn(process, "exit")
+      .mockImplementation((() => {}) as never)
 
     resolveCorsOrigins("invalid-url")
 
