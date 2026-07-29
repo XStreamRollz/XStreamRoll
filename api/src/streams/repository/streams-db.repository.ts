@@ -12,6 +12,7 @@ import type { StreamVisibility } from "../dto/visibility"
 import { Stream } from "../stream.entity"
 import {
   StreamsRepository,
+  PendingStreamEvent,
   type StreamCreateParams,
   type StreamListFilter,
   type StreamUpdateChanges,

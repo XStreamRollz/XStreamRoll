@@ -10,6 +10,7 @@ import type {
   StreamUpdateChanges,
   StreamCreateParams,
 } from "./repository/streams.repository"
+import { PendingStreamEvent } from "./repository/streams.repository"
 import { STREAM_EVENTS } from "../gateways/stream-events"
 import { TagsService } from "../tags/tags.service"
 import { WebhooksService } from "../webhooks/webhooks.service"
