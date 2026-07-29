@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -11,6 +12,7 @@ import {
 } from "@nestjs/common"
 import { Throttle } from "@nestjs/throttler"
 import {
+  ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -85,6 +87,27 @@ export class UsersController {
     return this.usersService.changePassword(
       userId,
       dto,
+      req.header("authorization") ?? "",
+    )
+  }
+
+  @Delete("me")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
+  @ApiOperation({
+    summary: "Delete user account",
+    description:
+      "Soft-deletes the authenticated user's account. " +
+      "Sets a deleted_at timestamp, revokes the current token, and " +
+      "prevents future authentication. Compliant with GDPR right-to-erasure.",
+  })
+  @ApiNoContentResponse({
+    description: "Account deleted successfully.",
+  })
+  async deleteUser(@Req() req: Request): Promise<void> {
+    const { userId } = (req as Request & { auth: { userId: number } }).auth
+    return this.usersService.deleteUser(
+      userId,
       req.header("authorization") ?? "",
     )
   }

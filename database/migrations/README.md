@@ -86,6 +86,7 @@ psql -d "$DATABASE_URL" -f database/migrations/2026051501_add_stream_tags.down.s
 | `2026072501_add_composite_stream_events_index.up.sql` | `idx_stream_events_stream_id_created_at_desc` — composite index for the `WHERE stream_id = ? ORDER BY created_at DESC` query pattern |
 | `2026072801_alter_timestamp_to_timestamptz.up.sql`    | Converts all `TIMESTAMP` columns to `TIMESTAMPTZ` across every table; rewrites `DEFAULT CURRENT_TIMESTAMP` → `DEFAULT NOW()`         |
 | `2026080501_add_stream_visibility.up.sql`             | `streams.visibility` (`public` \| `private`, default `private`), CHECK constraint, supporting index                                  |
+| `2026082001_add_user_soft_delete.up.sql`               | `users.deleted_at`, `idx_users_deleted_at`, `audit_logs.user_id` FK changed to `ON DELETE SET NULL`                                 |
 
 > **Note on `2026061001` / `2026061002`:** both migrations add the same
 > `users.password_hash` column. `2026061001_add_password_hash` is the

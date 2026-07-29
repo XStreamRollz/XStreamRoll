@@ -9,6 +9,7 @@ export interface User {
   password_hash: string
   created_at: Date
   password_changed_at?: Date
+  deleted_at?: Date | null
 }
 
 /**
@@ -23,7 +24,7 @@ export class UsersRepository {
 
   async findByEmail(email: string): Promise<User | null> {
     const { rows } = await this.pool.query(
-      "SELECT id, username, email, password_hash, created_at, password_changed_at FROM users WHERE email = $1",
+      "SELECT id, username, email, password_hash, created_at, password_changed_at FROM users WHERE email = $1 AND deleted_at IS NULL",
       [email],
     )
     return rows[0] ?? null
@@ -31,7 +32,7 @@ export class UsersRepository {
 
   async findByUsername(username: string): Promise<User | null> {
     const { rows } = await this.pool.query(
-      "SELECT id, username, email, password_hash, created_at, password_changed_at FROM users WHERE username = $1",
+      "SELECT id, username, email, password_hash, created_at, password_changed_at FROM users WHERE username = $1 AND deleted_at IS NULL",
       [username],
     )
     return rows[0] ?? null
@@ -39,7 +40,7 @@ export class UsersRepository {
 
   async findById(id: number): Promise<User | null> {
     const { rows } = await this.pool.query(
-      "SELECT id, username, email, password_hash, created_at, password_changed_at FROM users WHERE id = $1",
+      "SELECT id, username, email, password_hash, created_at, password_changed_at FROM users WHERE id = $1 AND deleted_at IS NULL",
       [id],
     )
     return rows[0] ?? null
@@ -84,7 +85,7 @@ export class UsersRepository {
     const { rows } = await this.pool.query(
       `UPDATE users
        SET ${sets.join(", ")}
-       WHERE id = $${idx}
+       WHERE id = $${idx} AND deleted_at IS NULL
        RETURNING id, username, email, password_hash, created_at, password_changed_at`,
       values,
     )
@@ -100,10 +101,26 @@ export class UsersRepository {
       `UPDATE users
        SET password_hash = $1,
            password_changed_at = $2
-       WHERE id = $3
+       WHERE id = $3 AND deleted_at IS NULL
        RETURNING id, username, email, password_hash, created_at, password_changed_at`,
       [passwordHash, passwordChangedAt, id],
     )
     return rows[0]
+  }
+
+  /**
+   * Soft-delete a user by setting `deleted_at` to the current timestamp.
+   * Returns the updated user row, or null if the user was not found or
+   * was already deleted.
+   */
+  async softDelete(id: number): Promise<User | null> {
+    const { rows } = await this.pool.query(
+      `UPDATE users
+       SET deleted_at = NOW()
+       WHERE id = $1 AND deleted_at IS NULL
+       RETURNING id, username, email, password_hash, created_at, password_changed_at, deleted_at`,
+      [id],
+    )
+    return rows[0] ?? null
   }
 }
