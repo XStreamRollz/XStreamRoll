@@ -41,7 +41,8 @@ jobs:
     strategy:
       matrix:
         include:
-          - context: api
+          - context: .
+            dockerfile: api/Dockerfile
             image: xstreamroll-api
           - context: app
             image: xstreamroll-app

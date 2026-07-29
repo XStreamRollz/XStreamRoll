@@ -43,7 +43,8 @@ services:
 
   api:
     build:
-      context: ./api
+      context: .
+      dockerfile: api/Dockerfile
     ports:
       - "3001:3001"
     environment:

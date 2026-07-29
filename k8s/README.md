@@ -363,6 +363,147 @@ kubectl -n xstreamroll create configmap postgres-init \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 
+## Monitoring (issue #349)
+
+Prometheus alerting rules and a Grafana dashboard ship with the project
+in the `monitoring/` directory at the repo root. Operators deploying the
+kube-prometheus-stack (or any Prometheus+Grafana setup) can import these
+definitions to get production-ready observability out of the box.
+
+### Prometheus alerting rules
+
+`monitoring/prometheus-rules.yaml` defines alert rules for:
+
+| Alert                      | Severity | Trigger                                              |
+| -------------------------- | -------- | ---------------------------------------------------- |
+| `HighErrorRate`            | critical | 5xx error rate > 5 % for 5 min                       |
+| `HighLatency`              | warning  | API p99 latency > 1 s for 5 min                      |
+| `WebSocketConnectionsZero` | warning  | No active WebSocket connections for 5 min            |
+| `DatabasePoolSaturation`   | warning  | Waiting requests > idle connections for 2 min        |
+| `WorkerRestarts`           | warning  | Worker uptime counter reset (crashed)                |
+| `HighQueueDepth`           | warning  | Worker queue > 200 for 10 min                        |
+| `CriticalQueueDepth`       | critical | Worker queue > 500 for 5 min (events being dropped)  |
+| `WorkerHighErrorRate`      | warning  | Worker errors > 10/s for 5 min                       |
+| `LockRenewalFailures`      | warning  | Lock renewals failing (duplicate processing risk)    |
+
+#### Validating the rules
+
+```bash
+# Requires promtool (ships with Prometheus).
+promtool check rules monitoring/prometheus-rules.yaml
+# Expected: SUCCESS: ... rules found, 0 invalid
+```
+
+This validation runs in CI (`validate-monitoring-rules` job in
+`.github/workflows/ci.yml`) so every PR keeps the rules in-sync.
+
+#### Installing the rules
+
+**kube-prometheus-stack (recommended):**
+
+```bash
+# Create the PrometheusRule resource in the monitoring namespace.
+kubectl -n monitoring apply -f monitoring/prometheus-rules.yaml
+```
+
+**Standalone Prometheus:**
+
+Add the rules file to your Prometheus config's `rule_files:` section and
+reload:
+
+```yaml
+rule_files:
+  - /etc/prometheus/rules/xstreamroll/*.yaml
+```
+
+```bash
+curl -X POST http://localhost:9090/-/reload
+```
+
+### Grafana dashboard
+
+`monitoring/grafana-dashboard.json` is a pre-built dashboard covering:
+
+| Section              | Panels                                                      |
+| -------------------- | ----------------------------------------------------------- |
+| API Overview         | Request rate by path, latency percentiles (p50/p90/p99)     |
+|                      | Error rate gauge, active WebSocket connections, DB pool     |
+| Processing Worker    | Queue depth, throughput (messages vs errors), worker status |
+|                      | Lock activity (acquired/denied), active locks               |
+| Database             | Connection pool (active / idle / waiting)                   |
+
+#### Importing the dashboard
+
+> **Note on data source UID:** The dashboard assumes the Prometheus data
+> source UID is `prometheus`. If your Grafana instance uses a different
+> UID (check under **Connections → Data Sources**), update all
+> `"datasource": { "type": "prometheus", "uid": "..." }` references in
+> the JSON before importing, or use Grafana's **Dashboards → Import →
+> Change UID** feature.
+
+**Via Grafana UI:**
+
+1. Navigate to **Dashboards → New → Import**.
+2. Upload `monitoring/grafana-dashboard.json` or paste its contents.
+3. Select the Prometheus data source.
+4. Click **Import**.
+
+**Via ConfigMap (GitOps):**
+
+```bash
+kubectl -n monitoring create configmap grafana-dashboard-xstreamroll \
+  --from-file=monitoring/grafana-dashboard.json \
+  -o yaml --dry-run=client | kubectl apply -f -
+
+# Label so the Grafana sidecar picks it up.
+kubectl -n monitoring label configmap grafana-dashboard-xstreamroll \
+  grafana_dashboard=1 --overwrite
+```
+
+### Prometheus scrape configuration
+
+The API exposes metrics at `:3001/metrics` and the processing worker at
+`:3002/metrics`. Add the following scrape targets to your Prometheus
+configuration:
+
+```yaml
+scrape_configs:
+  - job_name: xstreamroll-api
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - xstreamroll
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        action: keep
+        regex: api
+      - source_labels: [__meta_kubernetes_pod_container_port_number]
+        action: keep
+        regex: "3001"
+
+  - job_name: xstreamroll-processing
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - xstreamroll
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        action: keep
+        regex: processing
+      - source_labels: [__meta_kubernetes_pod_container_port_number]
+        action: keep
+        regex: "3002"
+```
+
+> **NetworkPolicy note:** The processing worker metrics port (`3002`)
+> is reachable from any pod in the `xstreamroll` namespace per
+> `k8s/70-network-policies.yaml`. Prometheus deployments outside the
+> `xstreamroll` namespace (e.g., in a separate `monitoring` namespace)
+> need an additional ingress rule — see the [Known
+> limitations](#known-limitations) section above.
+
 ## Verifying the rollout
 
 ```bash

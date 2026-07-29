@@ -123,7 +123,8 @@ jobs:
       matrix:
         include:
           - image: api
-            context: api
+            context: .
+            dockerfile: api/Dockerfile
           - image: app
             context: app
           - image: processing

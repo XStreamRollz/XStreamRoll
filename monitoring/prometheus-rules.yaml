@@ -1,0 +1,211 @@
+# XStreamRoll Prometheus Alerting Rules
+# Issue #349 — Observability: alerting rules for production operators.
+#
+# Validated with: promtool check rules monitoring/prometheus-rules.yaml
+#
+# Every alert includes:
+#   • `severity` label — `critical` (page someone now), `warning` (page during
+#     business hours), or `info` (audit only).
+#   • `runbook_url` annotation — points into the project docs so the on-call
+#     engineer can follow step-by-step debugging instructions without hunting
+#     through READMEs.
+#   • Conservative `for` windows so alerts fire on sustained conditions, not
+#     transient spikes.
+
+groups:
+  # ── API alerts ────────────────────────────────────────────────────
+  - name: xstreamroll-api
+    rules:
+      # High 5xx error rate. 5 % of requests returning server-side errors
+      # over a 5-minute window means the application is failing to handle
+      # a significant fraction of traffic.
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status_code=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High API error rate ({{ $value | humanizePercentage }})"
+          description: >
+            The 5xx error rate is {{ $value | humanizePercentage }} over the
+            last 5 minutes. Check API logs (`kubectl logs -l app=api`) and
+            database connectivity (`/health` readiness probe).
+          runbook_url: "https://github.com/XStreamRollz/XStreamRoll/blob/main/docs/runbooks/api-high-error-rate.md"
+
+      # P99 latency > 1 s. The 99th-percentile request duration exceeding
+      # 1 second indicates degraded user experience.
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API p99 latency > 1 s ({{ $value }}s)"
+          description: >
+            The 99th-percentile HTTP request duration is {{ $value }} seconds.
+            Check for slow database queries, upstream dependency timeouts, or
+            CPU throttling on the API pods.
+          runbook_url: "https://github.com/XStreamRollz/XStreamRoll/blob/main/docs/runbooks/api-high-latency.md"
+
+      # WebSocket connections drop to zero. Zero active WebSocket
+      # connections for 5 minutes means the real-time pipeline is broken.
+      - alert: WebSocketConnectionsZero
+        expr: websocket_active_connections == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No active WebSocket connections"
+          description: >
+            The WebSocket connection gauge has been zero for 5 minutes.
+            Verify that clients can reach the API and that the gateway
+            is proxying WebSocket upgrades correctly.
+          runbook_url: "https://github.com/XStreamRollz/XStreamRoll/blob/main/docs/runbooks/websocket-zero-connections.md"
+
+      # Database connection pool saturation. When the number of waiting
+      # requests exceeds the number of idle connections, clients are
+      # queuing for database access and will experience latency.
+      - alert: DatabasePoolSaturation
+        expr: db_pool_waiting_requests > db_pool_idle_connections
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Database connection pool saturated"
+          description: >
+            {{ $value }} requests are waiting for a database connection
+            while only {{ with query "db_pool_idle_connections" }}{{ . | first
+            | value }}{{ end }} connections are idle. Consider increasing
+            the pool size or scaling the database.
+          runbook_url: "https://github.com/XStreamRollz/XStreamRoll/blob/main/docs/runbooks/db-pool-saturation.md"
+
+  # ── Processing worker alerts ──────────────────────────────────────
+  - name: xstreamroll-processing
+    rules:
+      # Worker restarts. The `xstreamroll_uptime_seconds` gauge resets to
+      # zero on every restart. A drop signals a crash or OOM kill.
+      - alert: WorkerRestarts
+        expr: |
+          (
+            xstreamroll_uptime_seconds
+            -
+            xstreamroll_uptime_seconds offset 2m
+          ) < 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Processing worker restarted (instance {{ $labels.instance }})"
+          description: >
+            The processing worker uptime dropped in the last 2 minutes,
+            indicating a restart. Check the worker logs for crash details:
+            `kubectl logs -l app=processing --previous`.
+          runbook_url: "https://github.com/XStreamRollz/XStreamRoll/blob/main/docs/runbooks/worker-restarts.md"
+
+      # High queue depth. Sustained queue depth above 80 % of the
+      # configured MAX_QUEUE_DEPTH means the worker is falling behind
+      # on event processing.
+      #
+      # TUNING: The 200 / 500 thresholds assume the default
+      # MAX_QUEUE_DEPTH and HIGH_WATERMARK values. Operators who
+      # change these via environment variables should adjust the
+      # alert thresholds to match.
+      - alert: HighQueueDepth
+        expr: xstreamroll_queue_depth > 200
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Processing worker queue depth elevated ({{ $value }})"
+          description: >
+            The worker queue depth is {{ $value }} — above the warning
+            threshold of 200 events. If sustained, consider scaling out
+            the processing worker or checking for slow session processing.
+          runbook_url: "https://github.com/XStreamRollz/XStreamRoll/blob/main/docs/runbooks/worker-high-queue.md"
+
+      # Critical queue depth (imminent back-pressure). When queue depth
+      # exceeds 500 events the worker will begin dropping events at the
+      # high-watermark.
+      #
+      # TUNING: As with HighQueueDepth above, adjust this threshold to
+      # match your deployment's MAX_QUEUE_DEPTH configuration.
+      - alert: CriticalQueueDepth
+        expr: xstreamroll_queue_depth > 500
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Processing worker queue depth critical ({{ $value }})"
+          description: >
+            The worker queue depth is {{ $value }} — approaching the
+            high-watermark where events will be dropped. Scale out
+            immediately or investigate the processing pipeline for
+            bottlenecks.
+          runbook_url: "https://github.com/XStreamRollz/XStreamRoll/blob/main/docs/runbooks/worker-high-queue.md"
+
+      # High error rate on the processing worker. Worker errors include
+      # API polling failures, lock acquisition denials, and session
+      # processing exceptions.
+      - alert: WorkerHighErrorRate
+        expr: |
+          rate(xstreamroll_errors_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Processing worker error rate elevated ({{ $value }} errors/s)"
+          description: >
+            The worker is logging {{ $value }} errors per second over the
+            last 5 minutes. Check worker logs for recurring failures and
+            verify the API is healthy.
+          runbook_url: "https://github.com/XStreamRollz/XStreamRoll/blob/main/docs/runbooks/worker-high-error-rate.md"
+
+      # Lock renewal failures (lock loss). The worker is losing locks
+      # it previously held, which can cause duplicate session processing
+      # and wasted work.
+      - alert: LockRenewalFailures
+        expr: rate(xstreamroll_lock_renewals_failed[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Worker lock renewals failing ({{ $value }} failures/s)"
+          description: >
+            Lock renewals are failing at {{ $value }} per second. This
+            suggests a connectivity issue between the worker and the lock
+            backend (Postgres/Redis). Failed renewals cause re-processing
+            of events.
+          runbook_url: "https://github.com/XStreamRollz/XStreamRoll/blob/main/docs/runbooks/worker-lock-failures.md"
+
+  # ── Recording rules (pre-computed aggregates for dashboards) ──────
+  - name: xstreamroll-recording
+    rules:
+      # Per-path request rate for the dashboard timeseries panels.
+      - record: job:http_requests_per_second:rate5m
+        expr: rate(http_requests_total[5m])
+
+      # Per-path error rate for the dashboard error panel.
+      - record: job:http_errors_per_second:rate5m
+        expr: rate(http_requests_total{status_code=~"5.."}[5m])
+
+      # P50 / P90 / P99 latency aggregates.
+      - record: job:http_request_duration_seconds:p50
+        expr: histogram_quantile(0.50,
+          sum(rate(http_request_duration_seconds_bucket[5m])) by (le, path))
+
+      - record: job:http_request_duration_seconds:p90
+        expr: histogram_quantile(0.90,
+          sum(rate(http_request_duration_seconds_bucket[5m])) by (le, path))
+
+      - record: job:http_request_duration_seconds:p99
+        expr: histogram_quantile(0.99,
+          sum(rate(http_request_duration_seconds_bucket[5m])) by (le, path))
