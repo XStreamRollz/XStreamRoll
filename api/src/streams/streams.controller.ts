@@ -24,6 +24,7 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiQuery,
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger"
@@ -57,6 +58,47 @@ export class StreamsController {
     private readonly streamsService: StreamsService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
+
+  /**
+   * Paginated list of pending (unprocessed) stream events for the
+   * processing worker.
+   *
+   * The worker fetches batches by advancing `cursor` until `nextCursor`
+   * is `null`, which signals that there are no more events to process.
+   *
+   * This endpoint is intentionally unauthenticated so the worker can
+   * poll without managing JWT tokens. In production this route should
+   * be firewalled to the internal service network.
+   */
+  @Get("pending")
+  @ApiOperation({
+    summary: "List pending stream events (paginated)",
+    description:
+      "Returns a paginated batch of unprocessed stream events. " +
+      "Intended for internal use by the processing worker only. " +
+      "Advance `cursor` by the returned `nextCursor` value until it is null.",
+  })
+  @ApiQuery({
+    name: "limit",
+    required: false,
+    type: Number,
+    description: "Batch size (default 100, max 1000)",
+  })
+  @ApiQuery({
+    name: "cursor",
+    required: false,
+    type: Number,
+    description: "Offset cursor (default 0)",
+  })
+  @ApiOkResponse({ description: "Paginated list of pending stream events." })
+  async getPending(
+    @Query("limit") limitStr?: string,
+    @Query("cursor") cursorStr?: string,
+  ) {
+    const limit = Math.min(Math.max(1, Number(limitStr ?? 100)), 1000)
+    const offset = Math.max(0, Number(cursorStr ?? 0))
+    return this.streamsService.getPendingEvents(limit, offset)
+  }
 
   /**
    * Create a new stream. The authenticated user becomes the owner.

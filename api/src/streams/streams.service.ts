@@ -8,7 +8,10 @@ import { STREAM_EVENTS } from "../gateways/stream-events"
 import { TagsService } from "../tags/tags.service"
 import { WebhooksService } from "../webhooks/webhooks.service"
 import { StreamAnalyticsDto } from "./dto/stream-analytics.dto"
-import { StreamsRepository } from "./repository/streams.repository"
+import {
+  StreamsRepository,
+  PendingStreamEvent,
+} from "./repository/streams.repository"
 import { Stream } from "./stream.entity"
 
 export interface PagedStreams extends PaginatedResult<Stream> {
@@ -63,11 +66,7 @@ export class StreamsService {
     limit: number,
     filter?: { status?: string },
   ): Promise<PagedStreams> {
-    const { items, total } = await this.repo.listPaginated(
-      page,
-      limit,
-      filter,
-    )
+    const { items, total } = await this.repo.listPaginated(page, limit, filter)
     const tagsByStream = await this.tagsService.listForStreamIds(
       items.map((s) => s.id),
     )
@@ -146,6 +145,21 @@ export class StreamsService {
     if (!exists) {
       throw new NotFoundException(`stream ${id} not found`)
     }
+  }
+
+  /**
+   * Returns a paginated batch of unprocessed stream events for the worker.
+   *
+   * @param limit  - Maximum number of events to return (controlled by
+   *                 the worker's `POLL_BATCH_SIZE` env var, default 100).
+   * @param offset - Cursor / offset for the next page.  The worker
+   *                 advances this by `limit` until `nextCursor` is `null`.
+   */
+  async getPendingEvents(
+    limit: number,
+    offset: number,
+  ): Promise<{ data: PendingStreamEvent[]; nextCursor: number | null }> {
+    return this.repo.getPendingEvents(limit, offset)
   }
 
   async getAnalytics(id: number): Promise<StreamAnalyticsDto> {

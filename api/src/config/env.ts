@@ -2,12 +2,29 @@ import { z } from "zod"
 
 const envSchema = z.object({
   PORT: z.string().default("3001"),
-  NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  NODE_ENV: z
+    .enum(["development", "production", "test"])
+    .default("development"),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   // JWT_SECRET is required in production and test, but optional in development
   JWT_SECRET: z.string().optional(),
   STREAM_API_KEY: z.string().min(1, "STREAM_API_KEY is required"),
   DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
+  // Issue #313: Swagger UI is disabled in production by default.
+  // Set SWAGGER_ENABLED=true to force-enable it (e.g. for staging).
+  SWAGGER_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+  // Issue #328: Connection pool tuning
+  DB_POOL_MAX: z.coerce.number().int().positive().default(20),
+  DB_POOL_MIN: z.coerce.number().int().min(0).default(2),
+  DB_POOL_IDLE_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
+  DB_POOL_CONNECTION_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(5000),
 })
 
 export type Env = z.infer<typeof envSchema>
@@ -23,7 +40,9 @@ export function validateEnv(): Env {
   }
   // Enforce JWT secret presence for non-development environments
   if (result.data.NODE_ENV !== "development" && !result.data.JWT_SECRET) {
-    console.error("Environment validation failed:\n  - JWT_SECRET: JWT_SECRET is required in non-development environments")
+    console.error(
+      "Environment validation failed:\n  - JWT_SECRET: JWT_SECRET is required in non-development environments",
+    )
     process.exit(1)
   }
 

@@ -31,6 +31,13 @@ export interface SessionRegistryOptions {
    * backpressure (issue #339).
    */
   maxQueueDepth?: number
+  /**
+   * Maximum number of times a single event publish will be retried
+   * before it is dead-lettered (issue #343). Uses exponential
+   * back-off (100ms * 2^attempt, capped at 5 s). Defaults to 3.
+   * Set to 0 to disable retries (fail-fast mode).
+   */
+  maxPublishRetries?: number
 }
 
 /**
@@ -65,14 +72,21 @@ export class SessionRegistry {
    * one registered here. Entries are removed as soon as the acquire
    * settles.
    */
-  private readonly inflightAcquires = new Map<string, Promise<LockToken | null>>()
+  private readonly inflightAcquires = new Map<
+    string,
+    Promise<LockToken | null>
+  >()
   private readonly handlers: SessionHandlers
   private readonly workerId: string
   private readonly options: SessionRegistryOptions
   private readonly heartbeatMs: number
   private readonly logger: Logger
 
-  constructor(workerId: string, handlers: SessionHandlers, options: SessionRegistryOptions) {
+  constructor(
+    workerId: string,
+    handlers: SessionHandlers,
+    options: SessionRegistryOptions,
+  ) {
     if (!options.lockManager) {
       throw new Error("SessionRegistry requires a LockManager (issue #216)")
     }
@@ -115,7 +129,9 @@ export class SessionRegistry {
   async route(event: StreamEvent): Promise<RouteResult> {
     const existing = this.sessions.get(event.streamId)
     if (existing) {
-      this.logger.debug("Routing to existing session", { streamId: event.streamId })
+      this.logger.debug("Routing to existing session", {
+        streamId: event.streamId,
+      })
       return existing.enqueue(event) ? "enqueued" : "rejected"
     }
 
@@ -141,7 +157,9 @@ export class SessionRegistry {
     // backend.
     let token: LockToken | null
     try {
-      this.logger.debug("Attempting lock acquisition", { streamId: event.streamId })
+      this.logger.debug("Attempting lock acquisition", {
+        streamId: event.streamId,
+      })
       token = await this.acquireDeduplicated(event.streamId)
     } catch (err) {
       // Lock backend blew up. Re-throw so the worker can decide
@@ -176,21 +194,26 @@ export class SessionRegistry {
     // duplicate token so we don't leak a second claim.
     const raced = this.sessions.get(event.streamId)
     if (raced) {
-      this.logger.debug("Concurrent route race detected, reusing existing session", {
-        streamId: event.streamId,
-      })
+      this.logger.debug(
+        "Concurrent route race detected, reusing existing session",
+        {
+          streamId: event.streamId,
+        },
+      )
       metrics.incrementConcurrentRouteDedupes()
       if (this.lockTokens.get(event.streamId)?.token !== token.token) {
-        void this.options.lockManager.release(event.streamId, token).catch((err) => {
-          const message = err instanceof Error ? err.message : String(err)
-          this.logger.warn("Failed to release duplicate lock", {
-            streamId: event.streamId,
-            error: message,
+        void this.options.lockManager
+          .release(event.streamId, token)
+          .catch((err) => {
+            const message = err instanceof Error ? err.message : String(err)
+            this.logger.warn("Failed to release duplicate lock", {
+              streamId: event.streamId,
+              error: message,
+            })
+            this.options.logger?.warn?.(
+              `[${this.workerId}] failed to release duplicate lock for ${event.streamId}: ${message}`,
+            )
           })
-          this.options.logger?.warn?.(
-            `[${this.workerId}] failed to release duplicate lock for ${event.streamId}: ${message}`,
-          )
-        })
       }
       return raced.enqueue(event) ? "enqueued" : "rejected"
     }
@@ -227,11 +250,9 @@ export class SessionRegistry {
       return pending
     }
 
-    const promise = this.options.lockManager
-      .acquire(streamId)
-      .finally(() => {
-        this.inflightAcquires.delete(streamId)
-      })
+    const promise = this.options.lockManager.acquire(streamId).finally(() => {
+      this.inflightAcquires.delete(streamId)
+    })
     this.inflightAcquires.set(streamId, promise)
     return promise
   }
@@ -308,7 +329,13 @@ export class SessionRegistry {
 
   private spawn(streamId: string): StreamSession {
     this.logger.debug("Spawning new session", { streamId })
-    const session = new StreamSession(streamId, this.workerId, this.handlers, this.options.maxQueueDepth)
+    const session = new StreamSession(
+      streamId,
+      this.workerId,
+      this.handlers,
+      this.options.maxQueueDepth,
+      this.options.maxPublishRetries,
+    )
     this.sessions.set(streamId, session)
     // EventEmitter throws synchronously when an `"error"` event is
     // emitted without a listener. `StreamSession.fail()` always
@@ -377,7 +404,10 @@ export class SessionRegistry {
       const current = this.lockTokens.get(streamId)
       if (!current || current.token !== token.token) return
       try {
-        const stillOurs = await this.options.lockManager.renew(streamId, current)
+        const stillOurs = await this.options.lockManager.renew(
+          streamId,
+          current,
+        )
         if (!stillOurs) {
           // Lost the lock to another worker — drop our session so
           // they can pick up where we left off. We deliberately do
