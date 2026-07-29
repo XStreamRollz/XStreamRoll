@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from "@nestjs/swagger"
 import { Type } from "class-transformer"
 import { IsInt, IsOptional, Max, Min } from "class-validator"
+import type { PaginatedResponse } from "@xstreamroll/types"
 
 export class PaginationQueryDto {
   @ApiPropertyOptional({
@@ -27,9 +28,8 @@ export class PaginationQueryDto {
   limit?: number = 20
 }
 
-export interface PaginatedResult<T> {
-  total: number
-  page: number
-  limit: number
-  data: T[]
-}
+/**
+ * Alias kept for readability at call sites within the API — structurally
+ * identical to the shared `PaginatedResponse<T>` wire contract.
+ */
+export type PaginatedResult<T> = PaginatedResponse<T>

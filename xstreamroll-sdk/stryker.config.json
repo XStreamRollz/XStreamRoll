@@ -1,0 +1,24 @@
+{
+  "$schema": "https://stryker-mutator.io/schema/stryker.schema.json",
+  "_comment_": "Stryker mutation testing config for the @stellar/streaming-sdk workspace (#389). Run with `npm run test:mutation`. Kept opt-in (not in CI) so the default workflow stays green while we expand coverage.",
+  "packageManager": "npm",
+  "mutate": [
+    "src/retry.ts",
+    "src/http.ts",
+    "src/webhooks.ts"
+  ],
+  "testRunner": "jest",
+  "jest": {
+    "projectType": "custom",
+    "configFile": "jest.config.mutation.cjs",
+    "configArgument": "jest --config jest.config.mutation.cjs --roots __tests__"
+  },
+  "checkers": ["typescript"],
+  "tsconfigFile": "tsconfig.json",
+  "reporters": ["html", "clear-text", "progress"],
+  "htmlReporter": { "filename": "reports/mutation/mutation.html" },
+  "clearTextReporter": { "filename": "reports/mutation/mutation.txt" },
+  "timeoutMS": 60000,
+  "concurrency": 2,
+  "thresholds": { "high": 80, "low": 60, "break": 50 }
+}

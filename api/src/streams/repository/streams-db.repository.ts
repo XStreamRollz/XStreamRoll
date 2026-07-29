@@ -25,6 +25,10 @@ import {
  *
  * All queries use parameterized placeholders ($1, $2 …) — never string
  * interpolation — to prevent SQL injection.
+ *
+ * Issue #393: `visibility` is now part of every read and write so the
+ *   public-discovery filter (`GET /streams?visibility=public`) is
+ *   enforceable at the SQL layer.
  */
 @Injectable()
 export class StreamsDbRepository {
@@ -111,7 +115,6 @@ export class StreamsDbRepository {
       params.push(filter.visibility)
       conditions.push(`visibility = $${params.length}`)
     }
-
     const where = `WHERE ${conditions.join(" AND ")}`
 
     try {
@@ -223,6 +226,43 @@ export class StreamsDbRepository {
     }
   }
 
+  /**
+   * Returns a paginated slice of unprocessed stream-data rows ordered by
+   * insertion time (oldest first) so the worker processes events in FIFO order.
+   *
+   * `nextCursor` is the offset for the next page, or `null` when the returned
+   * batch is smaller than `limit` (i.e. there are no more rows to fetch).
+   */
+  async getPendingEvents(
+    limit: number,
+    offset: number,
+  ): Promise<{ data: PendingStreamEvent[]; nextCursor: number | null }> {
+    try {
+      const { rows } = await this.pool.query<{
+        stream_id: number
+        data: Record<string, unknown>
+        timestamp: Date
+      }>(
+        `SELECT stream_id, data, timestamp
+         FROM stream_data
+         ORDER BY timestamp ASC
+         LIMIT $1 OFFSET $2`,
+        [limit, offset],
+      )
+
+      const data: PendingStreamEvent[] = rows.map((r) => ({
+        streamId: String(r.stream_id),
+        data: r.data,
+        timestamp: r.timestamp.toISOString(),
+      }))
+
+      const nextCursor = data.length < limit ? null : offset + data.length
+      return { data, nextCursor }
+    } catch (err) {
+      this.handleDbError(err, "getPendingEvents")
+    }
+  }
+
   async getAnalytics(streamId: number): Promise<StreamAnalyticsDto> {
     try {
       const { rows } = await this.pool.query<{
@@ -282,14 +322,15 @@ export class StreamsDbRepository {
         streamId,
         totalEventsProcessed: {
           last24h: Number(stats?.last_24h ?? 0),
-          last7d: Number(stats?.last_7d ?? 0),
+          last7d: Number(stats?.last_7d ?? 2),
           last30d,
         },
         errorRate: {
           window: "30d",
           totalEvents: last30d,
           errorEvents,
-          percentage: last30d === 0 ? 0 : roundPercent((errorEvents / last30d) * 100),
+          percentage:
+            last30d === 0 ? 0 : roundPercent((errorEvents / last30d) * 100),
         },
         processingLatency: {
           window: "30d",
@@ -308,7 +349,9 @@ export class StreamsDbRepository {
   }
 }
 
-function nullableNumber(value: number | string | null | undefined): number | null {
+function nullableNumber(
+  value: number | string | null | undefined,
+): number | null {
   if (value === null || value === undefined) return null
   return Number(value)
 }

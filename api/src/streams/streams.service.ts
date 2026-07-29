@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common"
+import type { StreamEventRecord } from "@xstreamroll/types"
 import { PaginatedResult } from "../common/dto/pagination.dto"
 import type {
   StreamListFilter,
@@ -10,6 +11,7 @@ import type {
   StreamCreateParams,
 } from "./repository/streams.repository"
 import { STREAM_EVENTS } from "../gateways/stream-events"
+import { TagsService } from "../tags/tags.service"
 import { WebhooksService } from "../webhooks/webhooks.service"
 import { StreamsRepository } from "./repository/streams.repository"
 import { StreamAnalyticsDto } from "./dto/stream-analytics.dto"
@@ -32,6 +34,7 @@ export class StreamsService {
   constructor(
     private readonly repo: StreamsRepository,
     private readonly webhooksService: WebhooksService,
+    private readonly tagsService: TagsService,
   ) {}
 
   async create(params: StreamCreateParams): Promise<Stream> {
@@ -52,6 +55,9 @@ export class StreamsService {
    * the caller's own streams regardless of visibility (useful for a
    * "my streams" tab). Pass {@link StreamListFilter.visibility} to
    * narrow the visible-to-caller set further.
+   *
+   * Also batches tags inline (issue #330) so the dashboard can render
+   * tag chips without a second HTTP call per row.
    */
   async list(
     page: number,
@@ -68,8 +74,15 @@ export class StreamsService {
       viewerUserId,
       filter,
     )
+    const tagsByStream = await this.tagsService.listForStreamIds(
+      items.map((s) => s.id),
+    )
+    const data: Stream[] = items.map((s) => ({
+      ...s,
+      tags: tagsByStream.get(s.id) ?? [],
+    }))
     return {
-      data: items,
+      data,
       page,
       limit,
       total,
@@ -139,9 +152,59 @@ export class StreamsService {
     }
   }
 
+  /**
+   * Returns a paginated batch of unprocessed stream events for the worker.
+   *
+   * @param limit  - Maximum number of events to return (controlled by
+   *                 the worker's `POLL_BATCH_SIZE` env var, default 100).
+   * @param offset - Cursor / offset for the next page.  The worker
+   *                 advances this by `limit` until `nextCursor` is `null`.
+   */
+  async getPendingEvents(
+    limit: number,
+    offset: number,
+  ): Promise<{ data: PendingStreamEvent[]; nextCursor: number | null }> {
+    return this.repo.getPendingEvents(limit, offset)
+  }
+
   async getAnalytics(id: number): Promise<StreamAnalyticsDto> {
     await this.findById(id)
     return this.repo.getAnalytics(id)
+  }
+
+  // ── Stream event replay (#396) ───────────────────────────────────────────
+
+  /**
+   * Returns the most recent events for a stream, paginated. The
+   * single-stream read is owner-only via the upstream
+   * `StreamOwnershipGuard`; visibility on this endpoint is not
+   * affected by `Stream.visibility` because event payloads are
+   * private regardless of metadata visibility.
+   */
+  async listEvents(
+    id: number,
+    page: number,
+    limit: number,
+  ): Promise<{
+    data: StreamEventRecord[]
+    page: number
+    limit: number
+    total: number
+    hasMore: boolean
+  }> {
+    await this.findById(id)
+    const { items, total } = await this.repo.listEventsForStream(
+      id,
+      page,
+      limit,
+    )
+    return {
+      data: items,
+      page,
+      limit,
+      total,
+      hasMore: page * limit < total,
+    }
   }
 
   /**

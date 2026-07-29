@@ -49,6 +49,8 @@ export default function LoginPage() {
       <form
         onSubmit={handleSubmit(onSubmit)}
         className="w-full max-w-md space-y-4 rounded border p-6"
+        noValidate
+        aria-label="Login form"
       >
         <h1 className="text-2xl font-bold">Login</h1>
 
@@ -63,6 +65,7 @@ export default function LoginPage() {
             aria-invalid={errors.email ? 'true' : 'false'}
             aria-describedby={errors.email ? 'email-error' : undefined}
             className="w-full border p-2"
+            autoComplete="email"
           />
           {errors.email && (
             <p id="email-error" role="alert" aria-live="assertive" className="text-red-500">
@@ -83,6 +86,7 @@ export default function LoginPage() {
             aria-invalid={errors.password ? 'true' : 'false'}
             aria-describedby={errors.password ? 'password-error' : undefined}
             className="w-full border p-2"
+            autoComplete="current-password"
           />
           {errors.password && (
             <p id="password-error" role="alert" aria-live="assertive" className="text-red-500">
@@ -96,7 +100,7 @@ export default function LoginPage() {
           className="w-full bg-black p-2 text-white disabled:opacity-50"
           aria-disabled={isSubmitting || isValidating || !isValid}
         >
-          Login
+          {isSubmitting ? 'Logging in…' : 'Login'}
         </button>
       </form>
     </main>

@@ -29,6 +29,7 @@ low-level `HttpClient` are built on the platform-global `fetch`.
    - [Retries](#retries)
    - [Error model](#error-model)
 8. [Pagination](#pagination)
+   * [Walking every page (`paginateAll`)](#walking-every-page-paginateall)
 9. [Types](#types)
 10. [Browser usage](#browser-usage)
 11. [Testing helpers](#testing-helpers)
@@ -136,6 +137,7 @@ The full URL presets are:
 | `development` | `http://localhost:3001`               |
 | `staging`     | `https://staging-api.xstreamroll.io`  |
 | `production`  | `https://api.xstreamroll.io`          |
+
 
 ---
 
@@ -351,6 +353,36 @@ interface PaginatedResponse<T> {
 > const hasMore = page * limit < total
 > ```
 
+### Walking every page (`paginateAll`)
+
+List endpoints often require callers to drive the cursor by hand —
+re-computing `page`, incrementing until `total` is collected. The SDK
+exposes a small async iterator helper that does that loop for you and
+yields each item exactly once across the entire result set:
+
+```ts
+import { StreamingClient } from "@stellar/streaming-sdk"
+
+const client = new StreamingClient({ env: "production" })
+
+// Iterate every public stream, page by page, as an async iterable.
+for await (const stream of client.paginateAll<Stream>("/streams", {
+  visibility: "public",
+  limit: 100,
+})) {
+  console.log("got stream", stream.id)
+}
+
+// Or collect the full list synchronously once the iterator drained.
+const allStreams = await client.paginateAll("/streams").toArray()
+```
+
+`paginateAll` exposes an async iterator (use `for await … of`) and the
+standard `AsyncIterable` helpers — `.toArray()`, `.map(fn)`,
+`.filter(fn)`. It stops when the `page * limit` envelope reaches
+`total`, so it works even if the server omits the (legacy) `hasMore`
+flag from the response.
+
 ---
 
 ## Types
@@ -376,9 +408,22 @@ matching server-side enforcement landed via database migration
 
 ## Browser usage
 
-The SDK works in the browser out of the box: both layers use the
-platform `fetch`. No polyfills are required for evergreen browsers
-or Node ≥ 18.
+The SDK ships both a **CJS** build (`dist/index.js`) and an **ESM**
+build (`dist-esm/index.js`) and exposes them through the standard
+`"exports"` field in `package.json`. Tree-shaking bundlers (`Vite`,
+`Webpack 5+`, `Rollup`, `esbuild`, `Turbopack`) automatically pick the
+ESM bundle; older bundlers and Node `require()` resolve to the CJS
+build. No polyfills are required for evergreen browsers — the SDK
+uses the native `fetch` and `crypto.subtle` APIs that have shipped in
+every evergreen browser for several years.
+
+```ts
+import { StreamingClient } from "@stellar/streaming-sdk"
+
+const client = new StreamingClient({
+  baseUrl: "https://api.my-deployment.example.com",
+})
+```
 
 For SSR environments (Next.js, Remix, etc.) avoid constructing the
 client at module scope; lazy-construct it inside the request handler
@@ -403,6 +448,13 @@ For retry timing in tests, inject a custom `sleep`:
 
 ```ts
 new HttpClient("http://x", { sleep: async () => {} })
+```
+
+For mutation testing — to detect undertested code paths masked by
+high line coverage — the SDK ships a Stryker config:
+
+```bash
+npm run test:mutation --workspace=xstreamroll-sdk
 ```
 
 ---
@@ -456,6 +508,8 @@ bumping a stack.
 
 ---
 
+
+
 ## Publishing
 
 Publishing is done by the maintainers via the `release.yml` workflow
@@ -467,5 +521,5 @@ Publishing is done by the maintainers via the `release.yml` workflow
 4. Once merged and CI is green, push the matching tag:
    `git tag sdk/vX.Y.Z && git push origin sdk/vX.Y.Z`.
 
-The release workflow builds the package and publishes it to the
-configured registry.
+The release workflow builds the package (CJS + ESM) and publishes it
+to the configured registry.
