@@ -25,6 +25,8 @@ const MAX_CONCURRENT_SESSIONS = Math.max(
 const MAX_QUEUE_DEPTH = Math.max(1, Number(env.MAX_QUEUE_DEPTH))
 const POLL_BATCH_SIZE: number =
   (env.POLL_BATCH_SIZE as number | undefined) ?? 100
+const MAX_PUBLISH_RETRIES: number =
+  (env.PROCESSING_PUBLISH_MAX_RETRIES as number | undefined) ?? 3
 const HIGH_WATERMARK = MAX_CONCURRENT_SESSIONS * MAX_QUEUE_DEPTH
 // `env.LOCK_BACKEND` may be missing in hand-rolled test mocks; fall
 // back to the safe default so we don't crash on import.
@@ -306,6 +308,7 @@ async function start(): Promise<void> {
     {
       maxConcurrentSessions: MAX_CONCURRENT_SESSIONS,
       maxQueueDepth: MAX_QUEUE_DEPTH,
+      maxPublishRetries: MAX_PUBLISH_RETRIES,
       lockManager,
     },
   )

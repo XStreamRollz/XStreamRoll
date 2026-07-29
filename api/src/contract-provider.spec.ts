@@ -33,6 +33,7 @@ import { TokenDenylistService } from "./auth/token-denylist.service"
 import { User, UsersRepository } from "./auth/users.repository"
 import createJwtConfig, { createRefreshJwtConfig } from "./config/jwt.config"
 import { AuthGuard } from "./common/guards/auth.guard"
+import { JwtExtractorService } from "./common/guards/jwt-extractor.service"
 import { StreamOwnershipGuard } from "./common/guards/stream-ownership.guard"
 import { StreamOwnershipService } from "./common/guards/stream-ownership.service"
 import { StreamsRepository } from "./streams/repository/streams.repository"
@@ -59,7 +60,11 @@ class InMemoryUsersRepository {
     return this.byId.get(id) ?? null
   }
 
-  async create(username: string, email: string, passwordHash: string): Promise<User> {
+  async create(
+    username: string,
+    email: string,
+    passwordHash: string,
+  ): Promise<User> {
     const user: User = {
       id: this.nextId++,
       username,
@@ -105,8 +110,12 @@ describe("Contract provider verification (api)", () => {
       providers: [
         StreamsService,
         { provide: StreamsRepository, useValue: streamsRepository },
-        { provide: WebhooksService, useValue: { dispatchStreamEvent: async () => undefined } },
+        {
+          provide: WebhooksService,
+          useValue: { dispatchStreamEvent: async () => undefined },
+        },
         AuthGuard,
+        JwtExtractorService,
         StreamOwnershipGuard,
         { provide: StreamOwnershipService, useValue: streamOwnershipService },
         { provide: TokenDenylistService, useValue: tokenDenylistService },
@@ -172,7 +181,8 @@ describe("Contract provider verification (api)", () => {
   function resolveContractPath(contract: Contract): string {
     const pathParams = { ...contract.request.pathParams }
     for (const [key, value] of Object.entries(pathParams)) {
-      if (value === PLACEHOLDER.EXISTING_STREAM_ID) pathParams[key] = existingStreamId
+      if (value === PLACEHOLDER.EXISTING_STREAM_ID)
+        pathParams[key] = existingStreamId
       if (value === PLACEHOLDER.MISSING_STREAM_ID) pathParams[key] = "999999"
     }
     return resolvePath({ ...contract.request, pathParams })
@@ -180,7 +190,9 @@ describe("Contract provider verification (api)", () => {
 
   async function execute(contract: Contract) {
     const path = resolveContractPath(contract)
-    let req = request(app.getHttpServer())[contract.request.method.toLowerCase() as "get"](path)
+    let req = request(app.getHttpServer())[
+      contract.request.method.toLowerCase() as "get"
+    ](path)
     if (contract.request.authenticated) {
       req = req.set("Authorization", `Bearer ${accessToken}`)
     }

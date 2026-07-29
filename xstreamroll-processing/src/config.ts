@@ -44,6 +44,17 @@ const envSchema = z.object({
     .transform((s) => Number(s))
     .pipe(z.number().int().positive()),
   /**
+   * Maximum number of times a single event publish will be retried
+   * before it is dead-lettered (issue #343).
+   * Uses exponential back-off: 100ms * 2^attempt, capped at 5 s.
+   * Set to 0 to disable retries (fail-fast / legacy behaviour).
+   */
+  PROCESSING_PUBLISH_MAX_RETRIES: z
+    .string()
+    .default("3")
+    .transform((s) => Number(s))
+    .pipe(z.number().int().min(0)),
+  /**
    * Backend for the per-stream {@link EventFilter} config store
    * (issue #351). `memory` keeps every config in-process and matches
    * the pre-#351 behaviour — appropriate for the test suite and

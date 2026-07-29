@@ -22,8 +22,8 @@ import { AuditService } from "../audit/audit.service"
 
 describe("Auth Rate Limiting (Integration)", () => {
   let app: INestApplication
-  let authService: AuthService
-  let usersRepository: UsersRepository
+  let _authService: AuthService
+  let _usersRepository: UsersRepository
 
   const mockAuthService = {
     register: jest.fn(),
@@ -92,12 +92,16 @@ describe("Auth Rate Limiting (Integration)", () => {
       ],
     }).compile()
 
-    app = moduleFixture.createNestApplication(); const expressApp = app.getHttpAdapter().getInstance(); if (expressApp && typeof expressApp.set === "function") { expressApp.set("trust proxy", true); }
+    app = moduleFixture.createNestApplication()
+    const expressApp = app.getHttpAdapter().getInstance()
+    if (expressApp && typeof expressApp.set === "function") {
+      expressApp.set("trust proxy", true)
+    }
     app.useGlobalPipes(new ValidationPipe())
     await app.init()
 
-    authService = moduleFixture.get<AuthService>(AuthService)
-    usersRepository = moduleFixture.get<UsersRepository>(UsersRepository)
+    _authService = moduleFixture.get<AuthService>(AuthService)
+    _usersRepository = moduleFixture.get<UsersRepository>(UsersRepository)
   })
 
   afterEach(async () => {
