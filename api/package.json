@@ -11,9 +11,9 @@
     "test": "jest",
     "test:cov": "jest --coverage",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
-    "migrate": "node-pg-migrate -m ../database/migrations --migration-file-language sql up",
-    "migrate:down": "node-pg-migrate -m ../database/migrations --migration-file-language sql down 1",
-    "migrate:redo": "node-pg-migrate -m ../database/migrations --migration-file-language sql redo",
+    "migrate": "node-pg-migrate -m ../database/migrations up",
+    "migrate:down": "node-pg-migrate -m ../database/migrations down 1",
+    "migrate:redo": "node-pg-migrate -m ../database/migrations redo",
     "migrate:create": "node-pg-migrate -m ../database/migrations --migration-file-language sql create"
   },
   "dependencies": {
