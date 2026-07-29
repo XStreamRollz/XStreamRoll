@@ -40,8 +40,7 @@
     "changelog": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -s",
     "changelog:first-release": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -s --first-release",
     "generate:sdk": "npm run build --workspace=api && npm run generate:types --workspace=xstreamroll-sdk",
-    "generate:sdk:check": "npm run generate:sdk && git diff --exit-code xstreamroll-sdk/src/generated/schema.d.ts",
-    "prepare": "husky"
+    "generate:sdk:check": "npm run generate:sdk && git diff --exit-code xstreamroll-sdk/src/generated/schema.d.ts"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.6.1",
@@ -59,7 +58,7 @@
     "concurrently": "^8.2.2",
     "conventional-changelog-cli": "^5.0.0",
     "conventional-changelog-conventionalcommits": "^8.0.0",
-    "eslint": "^8.57.1",
+    "eslint": "^8.57.0",
     "eslint-import-resolver-node": "^0.3.9",
     "eslint-plugin-import": "^2.31.0",
     "fast-check": "^4.9.0",
