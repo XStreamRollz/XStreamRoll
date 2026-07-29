@@ -1,142 +1,128 @@
-# Dependabot configuration for the XStreamRoll monorepo (issue #368).
+# Dependabot configuration — XStreamRoll
 #
-# The XStreamRoll monorepo consists of one root workspace plus four
-# sibling packages (app, api, xstreamroll-sdk, xstreamroll-processing).
-# Each one has its own package.json and is updated independently, so
-# we register an entry per workspace. GitHub Actions versioning is
-# tracked separately so Renovate-style bumping of `aquasecurity/trivy-action`
-# and friends is captured too.
+# Configures routine dependency update PRs for every `package.json` in the
+# XStreamRoll monorepo (root + 4 workspaces). Each workspace gets its own
+# entry so PRs are batched per component and labeled accordingly.
 #
-# Schedule: every Monday morning. PRs are limited per ecosystem so a
-# dependency with a long release history cannot overwhelm the queue.
-# Production-only and development-only dependencies are grouped so the
-# PR list stays scannable.
+# Security-advisory handling (separate from this file):
+#   GitHub-native Dependabot Security Updates runs *outside* this config.
+#   It is controlled by the repository toggle under
+#     Settings → Code security and analysis → "Dependabot security updates".
+#   When that toggle is on, security advisories create near-real-time PRs
+#   that bypass the weekly schedule below. The auto-merge workflow
+#   (`.github/workflows/dependabot-auto-merge.yml`) merges the resulting
+#   `security-update` PRs once CI is green.
+#
+# Routine-version handling (this file):
+#   - weekly version-update PRs (Mondays 09:00 UTC), grouped per package family
+#   - patch updates that pass CI are auto-merged as squash commits
+#   - minor / major updates require manual review
 
 version: 2
 
 updates:
-  # ─── Root workspace (lint, format, sdk helpers) ────────────────────
+  # ── Root workspace ────────────────────────────────────────────────────────
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
-      time: "06:00"
-      timezone: "UTC"
-    open-pull-requests-limit: 5
+      time: "09:00"
+    open-pull-requests-limit: 10
     groups:
-      npm-prod-minor-patch:
-        dependency-type: "production"
-        update-types: ["minor", "patch"]
-      npm-dev-minor-patch:
+      nestjs:
+        patterns: ["@nestjs/*"]
+      opentelemetry:
+        patterns: ["@opentelemetry/*"]
+      dev-dependencies:
         dependency-type: "development"
-        update-types: ["minor", "patch"]
-    labels:
-      - "dependencies"
-      - "automated"
-    commit-message:
-      prefix: "chore(deps)"
-      include-scope: true
-
-  # ─── Next.js frontend ──────────────────────────────────────────────
-  - package-ecosystem: "npm"
-    directory: "/app"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "UTC"
-    open-pull-requests-limit: 5
-    groups:
-      app-prod-minor-patch:
+      production-dependencies:
         dependency-type: "production"
-        update-types: ["minor", "patch"]
     labels:
       - "dependencies"
-      - "automated"
-      - "app"
-    commit-message:
-      prefix: "chore(deps-app)"
+      - "ci"
 
-  # ─── NestJS API ────────────────────────────────────────────────────
+  # ── API (NestJS) ──────────────────────────────────────────────────────────
   - package-ecosystem: "npm"
     directory: "/api"
     schedule:
       interval: "weekly"
       day: "monday"
-      time: "06:00"
-      timezone: "UTC"
-    open-pull-requests-limit: 5
+      time: "09:00"
+    open-pull-requests-limit: 10
     groups:
-      api-prod-minor-patch:
-        dependency-type: "production"
-        update-types: ["minor", "patch"]
-      api-dev-minor-patch:
+      nestjs:
+        patterns: ["@nestjs/*"]
+      opentelemetry:
+        patterns: ["@opentelemetry/*"]
+      dev-dependencies:
         dependency-type: "development"
-        update-types: ["minor", "patch"]
+      production-dependencies:
+        dependency-type: "production"
     labels:
       - "dependencies"
-      - "automated"
-      - "api"
-    commit-message:
-      prefix: "chore(deps-api)"
+      - "ci"
+      - "area:api"
 
-  # ─── Public TypeScript SDK ─────────────────────────────────────────
+  # ── App (Next.js) ─────────────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/app"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    groups:
+      react:
+        patterns:
+          - "react"
+          - "react-*"
+          - "next"
+      radix:
+        patterns: ["@radix-ui/*"]
+      dev-dependencies:
+        dependency-type: "development"
+      production-dependencies:
+        dependency-type: "production"
+    labels:
+      - "dependencies"
+      - "ci"
+      - "area:app"
+
+  # ── SDK ───────────────────────────────────────────────────────────────────
   - package-ecosystem: "npm"
     directory: "/xstreamroll-sdk"
     schedule:
       interval: "weekly"
       day: "monday"
-      time: "06:00"
-      timezone: "UTC"
-    open-pull-requests-limit: 3
+      time: "09:00"
+    open-pull-requests-limit: 5
     groups:
-      sdk-prod-minor-patch:
+      dev-dependencies:
+        dependency-type: "development"
+      production-dependencies:
         dependency-type: "production"
-        update-types: ["minor", "patch"]
     labels:
       - "dependencies"
-      - "automated"
-      - "sdk"
-    commit-message:
-      prefix: "chore(deps-sdk)"
+      - "ci"
+      - "area:sdk"
 
-  # ─── Stream-processing worker ──────────────────────────────────────
+  # ── Worker (processing) ───────────────────────────────────────────────────
   - package-ecosystem: "npm"
     directory: "/xstreamroll-processing"
     schedule:
       interval: "weekly"
       day: "monday"
-      time: "06:00"
-      timezone: "UTC"
-    open-pull-requests-limit: 3
+      time: "09:00"
+    open-pull-requests-limit: 5
     groups:
-      processing-prod-minor-patch:
+      opentelemetry:
+        patterns: ["@opentelemetry/*"]
+      dev-dependencies:
+        dependency-type: "development"
+      production-dependencies:
         dependency-type: "production"
-        update-types: ["minor", "patch"]
     labels:
       - "dependencies"
-      - "automated"
-      - "processing"
-    commit-message:
-      prefix: "chore(deps-processing)"
-
-  # ─── GitHub Actions ────────────────────────────────────────────────
-  # Renovate's GitHub Actions updater is the gold standard;
-  # Dependabot's `github-actions` ecosystem gives us equivalent
-  # coverage for actions/checkout, docker/build-push-action, etc.
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "UTC"
-    open-pull-requests-limit: 3
-    labels:
-      - "dependencies"
-      - "automated"
       - "ci"
-    commit-message:
-      prefix: "chore(ci)"
-      include-scope: true
+      - "area:processing"
