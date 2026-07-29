@@ -37,6 +37,7 @@ describe("Database Integration Tests", () => {
       expect(columns).toContain("email")
       expect(columns).toContain("password_hash")
       expect(columns).toContain("created_at")
+      expect(columns).toContain("deleted_at")
     })
 
     it("has the streams table with foreign key to users", async () => {

@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
@@ -9,6 +10,7 @@ import { SafeUser, toSafeUser } from "../auth/auth.service"
 import { TokenDenylistService } from "../auth/token-denylist.service"
 import { User, UsersRepository } from "../auth/users.repository"
 import { AuditService } from "../audit/audit.service"
+import { AuditAction } from "../audit/audit-action.enum"
 import { ChangePasswordDto } from "./dto/change-password.dto"
 import { UpdateProfileDto } from "./dto/update-profile.dto"
 
@@ -107,6 +109,36 @@ export class UsersService {
       user: toSafeUser(updated),
       accessToken: this.signToken(updated),
     }
+  }
+
+  /**
+   * Soft-delete the authenticated user (GDPR-compliant account deletion).
+   * Sets `deleted_at` on the user row and revokes the current token so
+   * the session is immediately invalidated.
+   */
+  async deleteUser(
+    userId: number,
+    authorizationHeader: string,
+  ): Promise<void> {
+    const user = await this.usersRepository.findById(userId)
+    if (!user) {
+      throw new NotFoundException("user not found")
+    }
+
+    const deleted = await this.usersRepository.softDelete(userId)
+    if (!deleted) {
+      throw new NotFoundException("user not found or already deleted")
+    }
+
+    const token = this.extractBearerToken(authorizationHeader)
+    await this.tokenDenylistService.revoke(token, 3600)
+
+    await this.auditService.log(
+      userId,
+      AuditAction.USER_DELETE,
+      { email: user.email },
+      "system",
+    )
   }
 
   private signToken(user: User): string {
