@@ -62,6 +62,26 @@ const envSchema = z.object({
     .url()
     .optional()
     .or(z.literal("").transform(() => undefined)),
+  /**
+   * Global hard deadline (ms) for the entire shutdown sequence (issue #342).
+   * When a registered hook exceeds its per-step timeout a warning is logged
+   * and shutdown continues to the next step. Defaults to 15000 (15s).
+   */
+  SHUTDOWN_TIMEOUT_MS: z
+    .string()
+    .default("15000")
+    .transform((s) => Number(s))
+    .pipe(z.number().int().positive()),
+  /**
+   * Per-session drain deadline (ms) enforced by SessionRegistry.drainAll()
+   * (issue #342). When a session's stop() hangs, the timeout fires a warning
+   * and the next session is drained. Defaults to 5000 (5s).
+   */
+  SESSION_DRAIN_TIMEOUT_MS: z
+    .string()
+    .default("5000")
+    .transform((s) => Number(s))
+    .pipe(z.number().int().positive()),
 })
 
 export type Env = z.infer<typeof envSchema>

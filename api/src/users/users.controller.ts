@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -9,17 +10,21 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common"
-import { Throttle } from "@nestjs/throttler"
 import {
+  ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
 } from "@nestjs/swagger"
-import type { Request } from "express"
-import { AuthGuard } from "../common/guards/auth.guard"
+import { Throttle } from "@nestjs/throttler"
+
+
 import { ChangePasswordDto } from "./dto/change-password.dto"
 import { UpdateProfileDto } from "./dto/update-profile.dto"
 import { ProfileResponse, UsersService } from "./users.service"
+import { AuthGuard } from "../common/guards/auth.guard"
+
+import type { Request } from "express"
 
 @ApiTags("users")
 @UseGuards(AuthGuard)
@@ -87,5 +92,40 @@ export class UsersController {
       dto,
       req.header("authorization") ?? "",
     )
+  }
+
+  @Delete("me")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
+  @ApiOperation({
+    summary: "Delete user account",
+    description:
+      "Soft-deletes the authenticated user's account. " +
+      "Sets deleted_at on the user row and revokes the current token. " +
+      "Audit logs and other historical data are preserved with the " +
+      "user_id set to NULL.",
+  })
+  @ApiNoContentResponse({
+    description: "Account soft-deleted successfully.",
+  })
+  async deleteAccount(@Req() req: Request): Promise<void> {
+    const { userId } = (req as Request & { auth: { userId: number } }).auth
+    const ip = this.extractClientIp(req)
+    await this.usersService.deleteAccount(
+      userId,
+      req.header("authorization") ?? "",
+      ip,
+    )
+  }
+
+  private extractClientIp(req: Request): string {
+    const xForwardedFor = req.headers["x-forwarded-for"]
+    if (typeof xForwardedFor === "string") {
+      return xForwardedFor.split(",")[0].trim()
+    }
+    if (Array.isArray(xForwardedFor)) {
+      return xForwardedFor[0]
+    }
+    return req.ip ?? "unknown"
   }
 }

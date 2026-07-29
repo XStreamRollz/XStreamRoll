@@ -25,6 +25,14 @@ export interface ShutdownHook {
   name: string
   /** Cleanup routine. Throw to abort the shutdown with a non-zero exit. */
   run: (reason: ShutdownReason) => Promise<void> | void
+  /**
+   * Per-step timeout in milliseconds (issue #342).
+   * When set, the hook is raced against this timeout and a
+   * warning is logged if it is exceeded — shutdown continues
+   * with the next step. Falls back to the global timeout when
+   * omitted.
+   */
+  timeoutMs?: number
 }
 
 export interface ShutdownOptions {
@@ -37,6 +45,52 @@ export interface ShutdownOptions {
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000
+
+/**
+ * Run `promise` with a timeout. If the timeout fires first, log
+ * a warning and return — the underlying promise is intentionally
+ * allowed to continue (it will be abandoned when the process
+ * exits). If the promise rejects, the rejection is propagated
+ * so the caller can log the actual error.
+ */
+async function raceTimeout(
+  promise: Promise<void>,
+  timeoutMs: number,
+  stepName: string,
+  logger: Pick<Console, "log" | "warn" | "error">,
+): Promise<boolean> {
+  // Returns true if the promise resolved before the timeout,
+  // false if the timeout fired.
+
+  if (timeoutMs <= 0) {
+    // No timeout; just await normally.
+    await promise
+    return true
+  }
+
+  // eslint-disable-next-line prefer-const
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let timedOut = false
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(() => {
+      timedOut = true
+      resolve()
+    }, timeoutMs)
+    if (typeof timer?.unref === "function") timer.unref()
+  })
+
+  await Promise.race([promise, timeout])
+
+  if (timer !== undefined) clearTimeout(timer)
+
+  if (timedOut) {
+    logger.warn(
+      `[shutdown] ${stepName} timed out after ${timeoutMs}ms — continuing`,
+    )
+    return false
+  }
+  return true
+}
 
 /**
  * Singleton-style coordinator. Register hooks during startup, call
@@ -114,9 +168,25 @@ export class GracefulShutdown {
 
     let hadError = false
     for (const hook of this.hooks) {
+      const stepTimeout = hook.timeoutMs ?? this.timeoutMs
+
       try {
-        await hook.run(reason)
-        this.logger.log(`[shutdown] ${hook.name} ✓`)
+        const runPromise = (async (): Promise<void> => {
+          await hook.run(reason)
+        })()
+
+        const ok = await raceTimeout(
+          runPromise,
+          stepTimeout,
+          hook.name,
+          this.logger,
+        )
+
+        if (ok) {
+          this.logger.log(`[shutdown] ${hook.name} ✓`)
+        } else {
+          hadError = true
+        }
       } catch (err) {
         hadError = true
         const message = err instanceof Error ? err.message : String(err)

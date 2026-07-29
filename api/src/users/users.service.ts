@@ -1,14 +1,17 @@
 import {
   ConflictException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 import * as bcrypt from "bcrypt"
+
+import { AuditAction } from "../audit/audit-action.enum"
+import { AuditService } from "../audit/audit.service"
 import { SafeUser, toSafeUser } from "../auth/auth.service"
 import { TokenDenylistService } from "../auth/token-denylist.service"
 import { User, UsersRepository } from "../auth/users.repository"
-import { AuditService } from "../audit/audit.service"
 import { ChangePasswordDto } from "./dto/change-password.dto"
 import { UpdateProfileDto } from "./dto/update-profile.dto"
 
@@ -117,6 +120,37 @@ export class UsersService {
       passwordChangedAt:
         user.password_changed_at?.getTime() ?? user.created_at.getTime(),
     })
+  }
+
+  /**
+   * Soft-delete the authenticated user's account (issue #344).
+   * Revokes their current token and logs the deletion to the audit trail.
+   */
+  async deleteAccount(
+    userId: number,
+    authorizationHeader: string,
+    ip: string,
+  ): Promise<void> {
+    const user = await this.usersRepository.findById(userId)
+    if (!user) {
+      throw new UnauthorizedException("user not found")
+    }
+
+    const deleted = await this.usersRepository.softDelete(userId)
+    if (!deleted) {
+      throw new NotFoundException("user not found")
+    }
+
+    // Revoke the current access token so it cannot be reused
+    const token = this.extractBearerToken(authorizationHeader)
+    await this.tokenDenylistService.revoke(token, 3600)
+
+    await this.auditService.log(
+      userId,
+      AuditAction.USER_DELETED,
+      { email: user.email, username: user.username },
+      ip,
+    )
   }
 
   private extractBearerToken(header: string): string {
