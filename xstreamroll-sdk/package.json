@@ -3,19 +3,49 @@
   "version": "1.0.0",
   "description": "Stellar Streaming SDK for TypeScript",
   "main": "dist/index.js",
+  "module": "dist-esm/index.js",
+  "browser": "dist-esm/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist-esm/index.js",
+      "require": "./dist/index.js",
+      "browser": "./dist-esm/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "dist-esm",
+    "README.md"
+  ],
+  "sideEffects": false,
   "scripts": {
-    "build": "tsc",
+    "build": "npm run build:cjs && npm run build:esm",
+    "build:cjs": "tsc -p tsconfig.json",
+    "build:esm": "tsc -p tsconfig.esm.json",
+    "typecheck": "tsc --noEmit",
     "dev": "tsc --watch",
     "lint": "eslint src/**/*.ts",
     "test": "jest",
-    "test:cov": "jest --coverage"
+    "test:cov": "jest --coverage",
+    "test:mutation": "stryker run --configFile stryker.config.json",
+    "prepublishOnly": "npm run build && npm run test:mutation",
+    "generate:types": "./scripts/generate-types.sh",
+    "docs:api": "typedoc --options typedoc.json"
   },
   "jest": {
     "preset": "ts-jest",
     "testEnvironment": "node",
     "testMatch": [
       "**/__tests__/**/*.test.ts"
+    ],
+    "transformIgnorePatterns": [
+      "/node_modules/",
+      "/dist/",
+      "/dist-esm/"
     ],
     "coverageDirectory": "coverage",
     "coverageReporters": [
@@ -24,14 +54,20 @@
     ]
   },
   "dependencies": {
-    "axios": "^1.6.0"
+    "@xstreamroll/types": "file:../packages/types"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "^8.7.1",
+    "@stryker-mutator/jest-runner": "^8.7.1",
+    "@stryker-mutator/typescript-checker": "^8.7.1",
     "@types/jest": "^29.5.14",
     "@types/node": "^20.10.0",
+    "@xstreamroll/contract-tests": "file:../tests/contracts",
     "jest": "^29.7.0",
     "nock": "^14.0.15",
+    "openapi-typescript": "^7.13.0",
     "ts-jest": "^29.2.5",
+    "typedoc": "^0.25.13",
     "typescript": "^5.3.0"
   }
 }

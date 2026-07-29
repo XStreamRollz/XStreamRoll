@@ -17,7 +17,6 @@
  * callers don't have to thread it through every function signature;
  * the `withCorrelation` helper scopes an id to a callback tree.
  */
-
 import { AsyncLocalStorage } from "async_hooks"
 
 export type LogLevel = "debug" | "info" | "warn" | "error"
@@ -112,18 +111,30 @@ export class Logger {
     }
   }
 
-  debug(msg: string, fields?: LogFields): void { this.emit("debug", msg, fields) }
-  info(msg: string, fields?: LogFields): void  { this.emit("info", msg, fields) }
-  warn(msg: string, fields?: LogFields): void  { this.emit("warn", msg, fields) }
-  error(msg: string, fields?: LogFields): void { this.emit("error", msg, fields) }
+  debug(msg: string, fields?: LogFields): void {
+    this.emit("debug", msg, fields)
+  }
+  info(msg: string, fields?: LogFields): void {
+    this.emit("info", msg, fields)
+  }
+  warn(msg: string, fields?: LogFields): void {
+    this.emit("warn", msg, fields)
+  }
+  error(msg: string, fields?: LogFields): void {
+    this.emit("error", msg, fields)
+  }
 
   /** Create a child logger with extra default fields merged in. */
   child(defaults: LogFields): Logger {
     return {
-      debug: (m: string, f?: LogFields) => this.debug(m, { ...defaults, ...(f ?? {}) }),
-      info:  (m: string, f?: LogFields) => this.info(m,  { ...defaults, ...(f ?? {}) }),
-      warn:  (m: string, f?: LogFields) => this.warn(m,  { ...defaults, ...(f ?? {}) }),
-      error: (m: string, f?: LogFields) => this.error(m, { ...defaults, ...(f ?? {}) }),
+      debug: (m: string, f?: LogFields) =>
+        this.debug(m, { ...defaults, ...(f ?? {}) }),
+      info: (m: string, f?: LogFields) =>
+        this.info(m, { ...defaults, ...(f ?? {}) }),
+      warn: (m: string, f?: LogFields) =>
+        this.warn(m, { ...defaults, ...(f ?? {}) }),
+      error: (m: string, f?: LogFields) =>
+        this.error(m, { ...defaults, ...(f ?? {}) }),
     } as unknown as Logger
   }
 }

@@ -1,7 +1,15 @@
 "use client"
 
+import {
+  Activity,
+  AlertCircle,
+  RadioTower,
+  Users,
+  Waypoints,
+} from "lucide-react"
 import { useEffect, useRef, useState } from "react"
-import { Activity, AlertCircle, RadioTower, Users, Waypoints } from "lucide-react"
+
+import { Badge } from "@/components/ui/badge"
 import {
   Card,
   CardContent,
@@ -9,7 +17,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   AdminStats,
@@ -22,7 +29,12 @@ const REFRESH_INTERVAL_MS = 60_000
 type FetchState =
   | { kind: "loading" }
   | { kind: "ready"; data: AdminStats; loadedAt: Date }
-  | { kind: "error"; message: string; lastData?: AdminStats; lastLoadedAt?: Date }
+  | {
+      kind: "error"
+      message: string
+      lastData?: AdminStats
+      lastLoadedAt?: Date
+    }
 
 export function AdminDashboard() {
   const [state, setState] = useState<FetchState>({ kind: "loading" })
@@ -128,16 +140,24 @@ export function AdminDashboard() {
 
 function RefreshStatus({ state }: { state: FetchState }) {
   if (state.kind === "loading") {
-    return <Badge variant="secondary">loading…</Badge>
+    return (
+      <Badge variant="secondary" role="status" aria-label="Loading stats">
+        loading…
+      </Badge>
+    )
   }
   if (state.kind === "ready") {
     return (
-      <Badge variant="outline">
+      <Badge variant="outline" role="status" aria-label={`Stats updated at ${state.loadedAt.toLocaleTimeString()}`}>
         updated {state.loadedAt.toLocaleTimeString()}
       </Badge>
     )
   }
-  return <Badge variant="destructive">stale</Badge>
+  return (
+    <Badge variant="destructive" role="status" aria-label="Stats stale">
+      stale
+    </Badge>
+  )
 }
 
 function StatCard({

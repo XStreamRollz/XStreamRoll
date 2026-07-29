@@ -13,8 +13,13 @@ export interface Tag {
   createdAt: string
 }
 
+/**
+ * Paginated tags response. Mirrors the wire shape from the API's
+ * `TagsService.list`, which uses `data` (matching
+ * {@link PaginatedResponse}) — not `items`.
+ */
 export interface PagedTags {
-  items: Tag[]
+  data: Tag[]
   page: number
   limit: number
   total: number
@@ -31,7 +36,10 @@ function apiBase(): string {
 }
 
 export class TagsApiError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
     super(message)
     this.name = "TagsApiError"
   }
@@ -74,7 +82,9 @@ export async function attachTagToStream(
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json",
-      ...(init.userId !== undefined ? { "X-User-Id": String(init.userId) } : {}),
+      ...(init.userId !== undefined
+        ? { "X-User-Id": String(init.userId) }
+        : {}),
     },
     body: JSON.stringify({ name }),
     signal: init.signal,
@@ -92,7 +102,9 @@ export async function detachTagFromStream(
     method: "DELETE",
     headers: {
       Accept: "application/json",
-      ...(init.userId !== undefined ? { "X-User-Id": String(init.userId) } : {}),
+      ...(init.userId !== undefined
+        ? { "X-User-Id": String(init.userId) }
+        : {}),
     },
     signal: init.signal,
   })

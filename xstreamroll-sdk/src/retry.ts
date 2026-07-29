@@ -73,7 +73,8 @@ export async function withRetry<T>(
         throw err
       }
       const expo = baseDelay * 2 ** (attempt - 1)
-      const delay = Math.min(maxDelay, expo) + Math.floor(Math.random() * jitter)
+      const delay =
+        Math.min(maxDelay, expo) + Math.floor(Math.random() * jitter)
       options.onRetry?.(err, attempt, delay)
       await sleep(delay)
     }

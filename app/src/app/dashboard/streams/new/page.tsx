@@ -1,10 +1,11 @@
 "use client"
 
-import * as React from "react"
-import { useRouter } from "next/navigation"
-import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
+import { useRouter } from "next/navigation"
+import * as React from "react"
+import { useForm } from "react-hook-form"
 import { z } from "zod"
+
 import { Button } from "@/components/ui/button"
 import {
   Form,
@@ -15,7 +16,6 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
   SelectContent,
@@ -23,11 +23,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 
 const streamSchema = z.object({
-  name: z.string().min(1, "Name is required").max(100, "Name must be 100 characters or less"),
-  description: z.string().max(500, "Description must be 500 characters or less").optional(),
-  visibility: z.enum(["public", "private"], { required_error: "Visibility is required" }),
+  name: z
+    .string()
+    .min(1, "Name is required")
+    .max(100, "Name must be 100 characters or less"),
+  description: z
+    .string()
+    .max(500, "Description must be 500 characters or less")
+    .optional(),
+  visibility: z.enum(["public", "private"], {
+    required_error: "Visibility is required",
+  }),
 })
 
 type StreamFormValues = z.infer<typeof streamSchema>
@@ -68,14 +77,20 @@ export default function NewStreamPage() {
   return (
     <main className="container mx-auto max-w-lg px-4 py-10">
       <header className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">Create a new stream</h1>
+        <h1 className="text-2xl font-bold tracking-tight">
+          Create a new stream
+        </h1>
         <p className="text-sm text-muted-foreground mt-1">
           Fill in the details below to set up your stream.
         </p>
       </header>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" noValidate>
+        <form
+          onSubmit={form.handleSubmit(onSubmit)}
+          className="space-y-6"
+          noValidate
+        >
           <FormField
             control={form.control}
             name="name"
@@ -114,7 +129,10 @@ export default function NewStreamPage() {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Visibility</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select
+                  onValueChange={field.onChange}
+                  defaultValue={field.value}
+                >
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Select visibility" />

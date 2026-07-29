@@ -17,7 +17,8 @@
  * declarative.
  */
 
-export type ShutdownReason = "SIGINT" | "SIGTERM" | "uncaughtException" | "unhandledRejection" | "manual"
+export type ShutdownReason =
+  "SIGINT" | "SIGTERM" | "uncaughtException" | "unhandledRejection" | "manual"
 
 export interface ShutdownHook {
   /** Human-readable name for logging. */
@@ -96,7 +97,9 @@ export class GracefulShutdown {
   async requestShutdown(reason: ShutdownReason): Promise<void> {
     if (this.state !== "idle") return
     this.state = "shutting-down"
-    this.logger.log(`[shutdown] starting (reason=${reason}, hooks=${this.hooks.length})`)
+    this.logger.log(
+      `[shutdown] starting (reason=${reason}, hooks=${this.hooks.length})`,
+    )
 
     // Hard deadline. If a hook hangs we still want to exit.
     const timer = setTimeout(() => {

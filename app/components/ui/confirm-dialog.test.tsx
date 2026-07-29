@@ -1,6 +1,7 @@
-import * as React from "react"
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import * as React from "react"
+
 import { ConfirmDialog } from "./confirm-dialog"
 
 describe("ConfirmDialog", () => {
@@ -11,7 +12,7 @@ describe("ConfirmDialog", () => {
         description="This is permanent."
         onConfirm={() => {}}
         trigger={<button>Open</button>}
-      />
+      />,
     )
     expect(screen.queryByText("Delete stream")).not.toBeInTheDocument()
   })
@@ -24,7 +25,7 @@ describe("ConfirmDialog", () => {
         description="This is permanent."
         onConfirm={() => {}}
         trigger={<button>Open</button>}
-      />
+      />,
     )
     await user.click(screen.getByText("Open"))
     expect(screen.getByText("Delete stream")).toBeInTheDocument()
@@ -41,7 +42,7 @@ describe("ConfirmDialog", () => {
         confirmLabel="Delete"
         onConfirm={onConfirm}
         trigger={<button>Open</button>}
-      />
+      />,
     )
     await user.click(screen.getByText("Open"))
     await user.click(screen.getByText("Delete"))
@@ -58,7 +59,7 @@ describe("ConfirmDialog", () => {
         cancelLabel="Keep editing"
         onConfirm={() => {}}
         trigger={<button>Open</button>}
-      />
+      />,
     )
     await user.click(screen.getByText("Open"))
     expect(screen.getByText("Discard")).toBeInTheDocument()

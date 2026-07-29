@@ -10,7 +10,7 @@ Provide a short description of the changes in this PR and the motivation/why.
 
 Link any related issues. Use `Closes #<id>` to close issues automatically.
 
-Closes: 
+Closes:
 
 ## Type of change
 

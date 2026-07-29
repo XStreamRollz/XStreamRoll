@@ -1,11 +1,17 @@
+import "./tracing" // Must be the first import — OTEL patches modules before they load
 import { ValidationPipe } from "@nestjs/common"
-import { NestFactory } from "@nestjs/core"
+import { HttpAdapterHost, NestFactory } from "@nestjs/core"
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger"
 import compression from "compression"
 import helmet from "helmet"
+import * as cookieParser from "cookie-parser"
 import { AppModule } from "./app.module"
 import { SanitizeStringsPipe } from "./common/sanitization/sanitize-strings.pipe"
 import { ThrottlerExceptionFilter } from "./throttler-exception.filter"
+import { QueryTimeoutExceptionFilter } from "./database/query-timeout-exception.filter"
+import { resolveCorsOrigins } from "./gateways/streams.gateway"
+import { validateJwtSecret } from "./config/jwt-secret-validator"
+import { env } from "./config/env"
 
 // Bypass compression when the response is smaller than this. Anything
 // under ~1 KB doesn't benefit from gzip and the per-request CPU cost
@@ -13,6 +19,12 @@ import { ThrottlerExceptionFilter } from "./throttler-exception.filter"
 const COMPRESSION_THRESHOLD_BYTES = 1024
 
 async function bootstrap() {
+  // Issue #318: reject weak JWT secrets with a non-zero exit before the
+  // HTTP server binds. Production crashes outright; development/test
+  // only warn so existing in-process fixtures ("test-secret") keep
+  // working.
+  validateJwtSecret()
+
   const app = await NestFactory.create(AppModule)
 
   // Issue #89: Apply Helmet middleware globally for secure HTTP headers
@@ -30,9 +42,11 @@ async function bootstrap() {
     }),
   )
 
+  app.use(cookieParser.default())
+
   // Issue #88: Configure CORS with trusted origin from env, credentials support, and preflight
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+    origin: resolveCorsOrigins(),
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -62,36 +76,49 @@ async function bootstrap() {
     }),
   )
 
-  app.useGlobalFilters(new ThrottlerExceptionFilter())
+  const { httpAdapter } = app.get(HttpAdapterHost)
+  app.useGlobalFilters(
+    new ThrottlerExceptionFilter(),
+    new QueryTimeoutExceptionFilter(httpAdapter),
+  )
 
-  // Swagger / OpenAPI documentation served at /docs.
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle("XStreamRoll API")
-    .setDescription(
-      "REST and WebSocket API for the XStreamRoll streaming platform.",
-    )
-    .setVersion("1.0.0")
-    .addBearerAuth(
-      {
-        type: "http",
-        scheme: "bearer",
-        bearerFormat: "JWT",
-        description: "Enter a JWT access token issued by /auth/login.",
-      },
-      "bearer",
-    )
-    .addTag("health", "Liveness and readiness probes")
-    .addTag("streams", "Stream lifecycle CRUD")
-    .build()
+  // Issue #313: Swagger UI is only mounted when not in production or when
+  // explicitly enabled via SWAGGER_ENABLED=true. In production, exposing the
+  // full API schema including all endpoints and auth mechanisms is a security
+  // risk — it serves as an enumeration aid for attackers.
+  const isSwaggerEnabled = env.NODE_ENV !== "production" || env.SWAGGER_ENABLED
 
-  const document = SwaggerModule.createDocument(app, swaggerConfig)
-  SwaggerModule.setup("docs", app, document, {
-    swaggerOptions: { persistAuthorization: true },
-  })
+  if (isSwaggerEnabled) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle("XStreamRoll API")
+      .setDescription(
+        "REST and WebSocket API for the XStreamRoll streaming platform.",
+      )
+      .setVersion("1.0.0")
+      .addBearerAuth(
+        {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT",
+          description: "Enter a JWT access token issued by /auth/login.",
+        },
+        "bearer",
+      )
+      .addTag("health", "Liveness and readiness probes")
+      .addTag("streams", "Stream lifecycle CRUD")
+      .build()
+
+    const document = SwaggerModule.createDocument(app, swaggerConfig)
+    SwaggerModule.setup("docs", app, document, {
+      swaggerOptions: { persistAuthorization: true },
+    })
+  }
 
   await app.listen(3001)
   console.log("API running on http://localhost:3001")
-  console.log("Swagger UI available at http://localhost:3001/docs")
+  if (isSwaggerEnabled) {
+    console.log("Swagger UI available at http://localhost:3001/docs")
+  }
 }
 
 bootstrap()

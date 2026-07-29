@@ -1,6 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing"
-import { DatabaseModule, PG_POOL } from "./database.module"
 import { Pool } from "pg"
+
+import { DatabaseModule, PG_POOL } from "./database.module"
 
 describe("DatabaseModule", () => {
   let module: TestingModule

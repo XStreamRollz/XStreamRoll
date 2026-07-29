@@ -1,12 +1,6 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  Injectable,
-  UnauthorizedException,
-} from "@nestjs/common"
-import { JwtService } from "@nestjs/jwt"
+import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common"
 import type { Request } from "express"
-import { TokenDenylistService } from "../../auth/token-denylist.service"
+import { JwtExtractorService } from "./jwt-extractor.service"
 
 /**
  * Auth guard that validates a JWT access token from the Authorization header
@@ -17,46 +11,20 @@ import { TokenDenylistService } from "../../auth/token-denylist.service"
  */
 @Injectable()
 export class AuthGuard implements CanActivate {
-  constructor(
-    private readonly jwtService: JwtService,
-    private readonly tokenDenylistService: TokenDenylistService,
-  ) {}
+  constructor(private readonly jwtExtractor: JwtExtractorService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<Request>()
-    const token = this.extractBearerToken(req.header("authorization") ?? "")
+    const userId = await this.jwtExtractor.authenticate(
+      req.header("authorization"),
+    )
 
-    if (await this.tokenDenylistService.isRevoked(token)) {
-      throw new UnauthorizedException("access token has been revoked")
+    const authenticatedReq = req as Request & {
+      auth?: { userId: number }
+      user?: { sub: number; roles: string[] }
     }
-
-    const payload = await this.verifyToken(token)
-    const userId = Number(payload.sub)
-    if (!Number.isInteger(userId) || userId <= 0) {
-      throw new UnauthorizedException("invalid access token")
-    }
-
-    ;(req as Request & { auth?: { userId: number } }).auth = { userId }
+    authenticatedReq.auth = { userId }
+    authenticatedReq.user = { sub: userId, roles: [] }
     return true
-  }
-
-  private async verifyToken(token: string): Promise<{ sub: number | string }> {
-    try {
-      return (await this.jwtService.verifyAsync(token)) as {
-        sub: number | string
-      }
-    } catch {
-      throw new UnauthorizedException("invalid or expired access token")
-    }
-  }
-
-  private extractBearerToken(header: string): string {
-    const match = header.trim().match(/^Bearer\s+(.+)$/i)
-    if (!match) {
-      throw new UnauthorizedException(
-        "Authorization header must contain a Bearer token",
-      )
-    }
-    return match[1]
   }
 }

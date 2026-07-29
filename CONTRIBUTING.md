@@ -31,15 +31,17 @@ By participating in this project you agree to uphold a respectful, inclusive, an
 
 ## Repository Layout
 
-XStreamRoll is a monorepo managed with npm workspaces. The four packages are:
+XStreamRoll is a monorepo managed with npm workspaces:
 
-| Path                      | Stack                   | Description                                        |
-| ------------------------- | ----------------------- | -------------------------------------------------- |
-| `app/`                    | Next.js 16 + TypeScript | User-facing web frontend                           |
-| `api/`                    | NestJS 10 + TypeScript  | REST + WebSocket backend                           |
-| `xstreamroll-sdk/`        | TypeScript              | Client SDK for publishing events & calling the API |
-| `xstreamroll-processing/` | Node.js + TypeScript    | Stream-processing worker                           |
-| `database/`               | PostgreSQL              | Schema and migrations                              |
+| Path                       | Stack                          | Description                                           |
+| -------------------------- | ------------------------------ | ----------------------------------------------------- |
+| `app/`                     | Next.js 16 + TypeScript        | User-facing web frontend                              |
+| `api/`                     | NestJS 10 + TypeScript         | REST + WebSocket backend                              |
+| `xstreamroll-sdk/`         | TypeScript                     | Client SDK for publishing events & calling the API    |
+| `xstreamroll-processing/`  | Node.js + TypeScript           | Stream-processing worker                              |
+| `packages/types/`          | TypeScript                     | `@xstreamroll/types` — shared domain types             |
+| `tests/contracts/`         | TypeScript                     | `@xstreamroll/contract-tests` — api/sdk contract tests |
+| `database/`                | PostgreSQL                     | Schema and migrations                                 |
 
 See [`REPOSITORIES.md`](./REPOSITORIES.md) for a deeper breakdown.
 

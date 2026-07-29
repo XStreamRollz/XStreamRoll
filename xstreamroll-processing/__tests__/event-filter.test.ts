@@ -30,7 +30,9 @@ describe("EventFilter", () => {
   it("treats non-string event types as pass-through", () => {
     const f = new EventFilter()
     f.setConfig("s1", { blockedEventTypes: ["x"] })
-    expect(f.allow({ streamId: "s1", data: { type: 42 }, timestamp: "" })).toBe(true)
+    expect(f.allow({ streamId: "s1", data: { type: 42 }, timestamp: "" })).toBe(
+      true,
+    )
   })
 
   it("defensively copies the blocked types array", () => {
