@@ -2,7 +2,9 @@ import { z } from "zod"
 
 const envSchema = z.object({
   API_URL: z.string().url().default("http://localhost:3001"),
-  NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  NODE_ENV: z
+    .enum(["development", "production", "test"])
+    .default("development"),
   POLL_INTERVAL_MS: z.string().default("5000"),
   /**
    * Backend for the distributed stream-lock manager (issue #216).
@@ -30,6 +32,28 @@ const envSchema = z.object({
     .default("1000")
     .transform((s) => Number(s))
     .pipe(z.number().int().positive()),
+  /**
+   * Maximum number of pending events fetched per polling batch (issue #337).
+   * The worker fetches in pages of this size and keeps fetching until the
+   * response batch is smaller than the limit (meaning no more rows exist).
+   * Increasing this trades memory pressure for fewer HTTP round-trips.
+   */
+  POLL_BATCH_SIZE: z
+    .string()
+    .default("100")
+    .transform((s) => Number(s))
+    .pipe(z.number().int().positive()),
+  /**
+   * Maximum number of times a single event publish will be retried
+   * before it is dead-lettered (issue #343).
+   * Uses exponential back-off: 100ms * 2^attempt, capped at 5 s.
+   * Set to 0 to disable retries (fail-fast / legacy behaviour).
+   */
+  PROCESSING_PUBLISH_MAX_RETRIES: z
+    .string()
+    .default("3")
+    .transform((s) => Number(s))
+    .pipe(z.number().int().min(0)),
   /**
    * Backend for the per-stream {@link EventFilter} config store
    * (issue #351). `memory` keeps every config in-process and matches

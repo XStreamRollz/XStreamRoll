@@ -7,14 +7,15 @@ import {
 import { Observable, tap } from "rxjs"
 import { Request } from "express"
 import { AuditService } from "./audit.service"
+import { AuditAction } from "./audit-action.enum"
 
-const SENSITIVE_ACTIONS: Record<string, string> = {
-  "POST /auth/login": "login",
-  "POST /auth/password": "password_change",
-  "DELETE /streams": "stream_delete",
-  "PATCH /users/role": "role_change",
-  "PATCH /users/me": "profile_update",
-  "POST /users/me/change-password": "password_change",
+const SENSITIVE_ACTIONS: Record<string, AuditAction> = {
+  "POST /auth/login": AuditAction.LOGIN,
+  "POST /auth/password": AuditAction.PASSWORD_CHANGE,
+  "DELETE /streams": AuditAction.STREAM_DELETE,
+  "PATCH /users/role": AuditAction.ROLE_CHANGE,
+  "PATCH /users/me": AuditAction.PROFILE_UPDATE,
+  "POST /users/me/change-password": AuditAction.PASSWORD_CHANGE,
 }
 
 @Injectable()
@@ -34,7 +35,10 @@ export class AuditInterceptor implements NestInterceptor {
     const userId = (req as Request & { user?: { id: number } }).user?.id ?? null
 
     return next.handle().pipe(
-      tap(() => this.auditService.log(userId, action, ip)),
+      // metadata is empty here because the interceptor doesn't have access to
+      // the request body post-processing. Callers that need richer metadata
+      // (e.g. AuthService) call auditService.log() directly.
+      tap(() => this.auditService.log(userId, action, {}, ip)),
     )
   }
 }

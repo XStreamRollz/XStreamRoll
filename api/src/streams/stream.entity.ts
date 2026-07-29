@@ -1,4 +1,4 @@
-import type { StreamStatus } from "@xstreamroll/types"
+import type { StreamStatus, StreamVisibility } from "@xstreamroll/types"
 import type { Tag } from "../tags/tag.entity"
 
 /**
@@ -19,6 +19,11 @@ import type { Tag } from "../tags/tag.entity"
  * needs to render tag chips (issue #330). Endpoints that fetch a
  * single stream (create / update / findOne) leave the field undefined;
  * callers that want the tags there should hit `GET /streams/:id/tags`.
+ *
+ * `visibility` is always populated (defaults to `"private"` on
+ * creation — issue #393). It is orthogonal to `status`: a stream can
+ * simultaneously be `"inactive"` and `"public"` (intentional, so that
+ * dashboards can preview an offline stream).
  */
 export interface Stream {
   id: number
@@ -26,6 +31,7 @@ export interface Stream {
   name: string
   description: string | null
   status: StreamStatus
+  visibility: StreamVisibility
   createdAt: Date
   updatedAt: Date
   /** See StreamsService.list for how this is populated. */

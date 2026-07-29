@@ -23,6 +23,7 @@ dependencies on Node-only APIs.
    * [Retries](#retries)
    * [Error model](#error-model)
 8. [Pagination](#pagination)
+   * [Walking every page (`paginateAll`)](#walking-every-page-paginateall)
 9. [Types](#types)
 10. [Browser usage](#browser-usage)
 11. [Testing helpers](#testing-helpers)
@@ -44,10 +45,13 @@ pnpm add @stellar/streaming-sdk
 yarn add @stellar/streaming-sdk
 ```
 
-The SDK targets ES2020 and has zero runtime dependencies beyond
-`axios` (the `client.ts` convenience class) and the browser/node built-in
-`fetch` (the `http.ts` interceptor-aware client). `ts-jest` and `jest`
-are the only dev dependencies needed to run the test suite.
+The SDK targets ES2020 and has **no runtime dependencies** — both
+`client.ts` and `http.ts` are built on the standard `fetch` API and the
+browser/node-built-in `crypto.subtle` (used for webhook signature
+verification). `ts-jest` and `jest` are the only dev dependencies needed
+to run the test suite. Bundlers (`webpack`, `Rollup`, `esbuild`, `Vite`)
+pick the ESM build via the `exports` field in `package.json`; the CJS
+build is kept for Node `require()` consumers.
 
 ---
 
@@ -63,7 +67,7 @@ const client = new StreamingClient({
 // 1. Log in
 const { accessToken, refreshToken } = await client.login(
   "alice@example.com",
-  "super-secret-password"
+  "super-secret-password",
 )
 
 // 2. Create a stream
@@ -105,11 +109,16 @@ Resolution order: `baseUrl` → `env` → `apiUrl` → `development`.
 
 The full URL presets are:
 
-| Env           | Base URL                          |
-| ------------- | --------------------------------- |
-| `development` | `http://localhost:3001`            |
-| `staging`     | `https://staging-api.xstreamroll.io` |
-| `production`  | `https://api.xstreamroll.io`      |
+| Env           | Base URL                              |
+| ------------- | ------------------------------------- |
+| `development` | `http://localhost:3001`               |
+| `staging`     | `https://staging-api.xstreamroll.io`  |
+| `production`  | `https://api.xstreamroll.io`          |
+
+> The presets above are the **defaults** baked into the SDK at build
+> time. If you self-host the API, pass an explicit `baseUrl` rather
+> than relying on a preset — see [Browser usage](#browser-usage) for an
+> example.
 
 ---
 
@@ -175,8 +184,12 @@ await client.publishEvent({
 "viewer:joined" | "viewer:left" | "data"`. The client auto-fills
 `clientId` and a `timestamp` (ISO 8601) before posting.
 
-> WebSocket subscription is in the roadmap but is not yet exposed in
-> this version; track issue #34 for progress.
+> The SDK supports HTTP event publishing today. Server-sent
+> WebSocket fan-out for the `app/` dashboard is on the immediate
+> roadmap and will be exposed as a new transport-laundering
+> helper on the client; this README intentionally does not link
+> an issue number for that work because the implementation choice
+> is still being finalized.
 
 ---
 
@@ -275,6 +288,36 @@ interface PaginatedResponse<T> {
 `PaginationParams` lets you pass `{ page, limit }`; the API enforces a
 max page size of 100.
 
+### Walking every page (`paginateAll`)
+
+List endpoints often require callers to drive the cursor by hand —
+re-computing `page`, incrementing until `total` is collected. The SDK
+exposes a small async iterator helper that does that loop for you and
+yields each item exactly once across the entire result set:
+
+```ts
+import { StreamingClient } from "@stellar/streaming-sdk"
+
+const client = new StreamingClient({ env: "production" })
+
+// Iterate every public stream, page by page, as an async iterable.
+for await (const stream of client.paginateAll<Stream>("/streams", {
+  visibility: "public",
+  limit: 100,
+})) {
+  console.log("got stream", stream.id)
+}
+
+// Or collect the full list synchronously once the iterator drained.
+const allStreams = await client.paginateAll("/streams").toArray()
+```
+
+`paginateAll` exposes an async iterator (use `for await … of`) and the
+standard `AsyncIterable` helpers — `.toArray()`, `.map(fn)`,
+`.filter(fn)`. It stops when the `page * limit` envelope reaches
+`total`, so it works even if the server omits the (legacy) `hasMore`
+flag from the response.
+
 ---
 
 ## Types
@@ -293,9 +336,22 @@ All types are re-exported from the package root.
 
 ## Browser usage
 
-The SDK works in the browser out of the box. `HttpClient` uses the
-built-in `fetch`; `StreamingClient` uses `axios`, which the SDK
-bundles. No polyfills are required for evergreen browsers.
+The SDK ships both a **CJS** build (`dist/index.js`) and an **ESM**
+build (`dist-esm/index.js`) and exposes them through the standard
+`"exports"` field in `package.json`. Tree-shaking bundlers (`Vite`,
+`Webpack 5+`, `Rollup`, `esbuild`, `Turbopack`) automatically pick the
+ESM bundle; older bundlers and Node `require()` resolve to the CJS
+build. No polyfills are required for evergreen browsers — the SDK
+uses the native `fetch` and `crypto.subtle` APIs that have shipped in
+every evergreen browser for several years.
+
+```ts
+import { StreamingClient } from "@stellar/streaming-sdk"
+
+const client = new StreamingClient({
+  baseUrl: "https://api.my-deployment.example.com",
+})
+```
 
 For SSR environments (Next.js, Remix, etc.) avoid constructing the
 client at module scope; lazy-construct it inside the request handler so
@@ -322,6 +378,13 @@ For retry timing in tests, inject a custom `sleep`:
 new HttpClient("http://x", { sleep: async () => {} })
 ```
 
+For mutation testing — to detect undertested code paths masked by
+high line coverage — the SDK ships a Stryker config:
+
+```bash
+npm run test:mutation --workspace=xstreamroll-sdk
+```
+
 ---
 
 ## Versioning & compatibility
@@ -331,9 +394,11 @@ new HttpClient("http://x", { sleep: async () => {} })
 * Breaking changes bump the major version and are announced in the
   release notes.
 
-The package currently declares `axios` as a dependency for the
-high-level `StreamingClient`; the `HttpClient` + `withRetry` surface
-is dependency-free and safe to use in size-sensitive environments.
+> The package has **no runtime dependencies**. Everything in the public
+> surface (`StreamingClient`, `HttpClient`, `withRetry`, `paginateAll`,
+> `verifyWebhookSignature`, types) is built on the standard `fetch`
+> and `crypto.subtle` APIs, so the SDK is safe to use in
+> size-sensitive environments.
 
 ---
 
@@ -348,5 +413,5 @@ Publishing is done by the maintainers via the `release.yml` workflow
 4. Once merged and CI is green, push the matching tag:
    `git tag sdk/vX.Y.Z && git push origin sdk/vX.Y.Z`.
 
-The release workflow builds the package and publishes it to the
-configured registry.
+The release workflow builds the package (CJS + ESM) and publishes it
+to the configured registry.

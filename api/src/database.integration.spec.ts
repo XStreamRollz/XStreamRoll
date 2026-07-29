@@ -1,5 +1,10 @@
 import { Pool } from "pg"
-import { applySchema, resetDb, createTestApp, destroyTestApp, TestAppContext } from "./database/test-utils"
+import {
+  resetDb,
+  createTestApp,
+  destroyTestApp,
+  TestAppContext,
+} from "./database/test-utils"
 
 describe("Database Integration Tests", () => {
   let ctx: TestAppContext
@@ -86,10 +91,9 @@ describe("Database Integration Tests", () => {
       expect(insert.rows[0].email).toBe("alice@test.com")
       expect(insert.rows[0].id).toBeGreaterThan(0)
 
-      const read = await pool.query(
-        "SELECT * FROM users WHERE id = $1",
-        [insert.rows[0].id],
-      )
+      const read = await pool.query("SELECT * FROM users WHERE id = $1", [
+        insert.rows[0].id,
+      ])
       expect(read.rows[0].username).toBe("alice")
     })
 
@@ -120,10 +124,9 @@ describe("Database Integration Tests", () => {
     })
 
     it("returns null when user is not found by email", async () => {
-      const result = await pool.query(
-        "SELECT * FROM users WHERE email = $1",
-        ["nonexistent@test.com"],
-      )
+      const result = await pool.query("SELECT * FROM users WHERE email = $1", [
+        "nonexistent@test.com",
+      ])
       expect(result.rows).toHaveLength(0)
     })
   })
@@ -200,7 +203,9 @@ describe("Database Integration Tests", () => {
         [streamId],
       )
 
-      await pool.query("DELETE FROM stream_events WHERE stream_id = $1", [streamId])
+      await pool.query("DELETE FROM stream_events WHERE stream_id = $1", [
+        streamId,
+      ])
       await pool.query("DELETE FROM streams WHERE id = $1", [streamId])
 
       const events = await pool.query(
@@ -282,10 +287,9 @@ describe("Database Integration Tests", () => {
       )
       expect(deleted.rows).toHaveLength(1)
 
-      const check = await pool.query(
-        "SELECT * FROM streams WHERE id = $1",
-        [userAStreamId],
-      )
+      const check = await pool.query("SELECT * FROM streams WHERE id = $1", [
+        userAStreamId,
+      ])
       expect(check.rows).toHaveLength(0)
     })
 

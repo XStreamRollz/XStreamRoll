@@ -3,6 +3,11 @@ import { JwtService } from "@nestjs/jwt"
 import { StreamsGateway, resolveCorsOrigins } from "./streams.gateway"
 import { NOTIFICATION_EVENTS, STREAM_EVENTS } from "./stream-events"
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// NestJS gateway tests require socket mocks cast as any to satisfy the
+// Socket type from socket.io, which has dozens of internal fields that
+// are irrelevant for unit tests.
+
 type FakeHandshake = {
   auth?: Record<string, unknown>
   headers?: Record<string, string>
@@ -99,7 +104,9 @@ describe("resolveCorsOrigins", () => {
     const origEnv = process.env.NODE_ENV
     process.env.NODE_ENV = "production"
     const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {})
-    const exitSpy = jest.spyOn(process, "exit").mockImplementation((() => {}) as never)
+    const exitSpy = jest
+      .spyOn(process, "exit")
+      .mockImplementation((() => {}) as never)
 
     resolveCorsOrigins("invalid-url")
 
@@ -193,6 +200,66 @@ describe("StreamsGateway", () => {
       expect(socket.emit).toHaveBeenCalledWith("connected", {
         userId: "user-99",
       })
+    })
+
+    // Issue #319 acceptance criterion: a connection that supplies its
+    // token only via the `?token=` query string MUST be rejected — that
+    // codepath was the source of the nginx access-log JWT leak.
+    it("rejects a client that supplies the token ONLY via the query string (Issue #319)", async () => {
+      const socket = makeSocket({
+        handshake: {
+          auth: {},
+          headers: {},
+          query: { token: "query-only-token" },
+        },
+      })
+
+      await gateway.handleConnection(socket as unknown as any)
+
+      expect(socket.emit).toHaveBeenCalledWith(
+        STREAM_EVENTS.ERROR,
+        expect.objectContaining({
+          code: "MISSING_TOKEN",
+          message: expect.stringContaining("Authentication token required"),
+        }),
+      )
+      expect(socket.disconnect).toHaveBeenCalledWith(true)
+      // The query string token is never decoded — verification isn't
+      // attempted and the JWT signing path is never reached.
+      expect(jwtService.verifyAsync).not.toHaveBeenCalled()
+    })
+
+    it("prefers auth.token handshake over an Authorization header token", async () => {
+      const socket = makeSocket({
+        handshake: {
+          auth: { token: "auth-token" },
+          headers: { authorization: "Bearer header-token" },
+        },
+      })
+      jwtService.verifyAsync.mockResolvedValue({ sub: 7 })
+
+      await gateway.handleConnection(socket as unknown as any)
+
+      expect(jwtService.verifyAsync).toHaveBeenCalledWith("auth-token")
+    })
+
+    // Defends against a regression that re-adds the ?token= fallback
+    // "for flexibility" (#319). A query-string token alongside an
+    // auth.token must never reach the verifier.
+    it("prefers auth.token handshake over a query-string token (#319 regression guard)", async () => {
+      const socket = makeSocket({
+        handshake: {
+          auth: { token: "auth-token" },
+          headers: {},
+          query: { token: "decoy-token" },
+        },
+      })
+      jwtService.verifyAsync.mockResolvedValue({ sub: 11 })
+
+      await gateway.handleConnection(socket as unknown as any)
+
+      expect(jwtService.verifyAsync).toHaveBeenCalledWith("auth-token")
+      expect(jwtService.verifyAsync).not.toHaveBeenCalledWith("decoy-token")
     })
   })
 

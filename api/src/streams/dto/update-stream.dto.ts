@@ -25,4 +25,17 @@ export class UpdateStreamDto {
     message: "status must be one of: inactive, active, error",
   })
   status?: string
+
+  /**
+   * Visibility flip (issue #393). Owners can promote a stream to
+   * `"public"` or demote back to `"private"`; both directions are
+   * allowed without confirmation since the public listing surface
+   * already only shows metadata, not event payloads.
+   */
+  @IsOptional()
+  @IsString()
+  @IsIn(["public", "private"], {
+    message: "visibility must be one of: public, private",
+  })
+  visibility?: "public" | "private"
 }

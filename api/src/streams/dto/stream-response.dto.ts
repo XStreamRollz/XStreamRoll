@@ -32,7 +32,8 @@ export function toTagResponse(tag: Tag): SharedTag {
  * round-trip carries everything the dashboard needs to render tag
  * chips (issue #330). When the caller has not populated `tags`
  * (create / update / findOne) we emit an empty array so the field is
- * stable across endpoints.
+ * stable across endpoints. `visibility` is always included (issue
+ * #393) so callers never need to guess.
  */
 export function toStreamResponse(stream: Stream): SharedStream {
   return {
@@ -41,6 +42,7 @@ export function toStreamResponse(stream: Stream): SharedStream {
     name: stream.name,
     description: stream.description,
     status: stream.status,
+    visibility: stream.visibility,
     createdAt: stream.createdAt.toISOString(),
     updatedAt: stream.updatedAt.toISOString(),
     tags: (stream.tags ?? []).map(toTagResponse),

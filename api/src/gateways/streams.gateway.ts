@@ -91,6 +91,14 @@ interface JwtPayload {
  * handshake payload or an `Authorization: Bearer <token>` header. Invalid
  * or missing tokens result in immediate disconnection.
  *
+ * Issue #319 — the previous `?token=` query-string fallback has been
+ * removed. Reverse proxies (nginx, CloudFront, etc.) routinely log the
+ * full request URL including query parameters to access logs, which
+ * meant any JWT carried in `?token=` was persisted in plaintext. Tokens
+ * MUST now travel via the in-handshake `auth` payload or the standard
+ * Authorization header — both are NOT logged by CORS-aware reverse
+ * proxies.
+ *
  * Wire events (server → client):
  *   - `stream:started` { streamId, userId, startedAt }
  *   - `stream:stopped` { streamId, userId, stoppedAt, reason? }
@@ -256,6 +264,11 @@ export class StreamsGateway
     return `user:${String(userId)}`
   }
 
+  /**
+   * Extract the client's JWT from the handshake. Issue #319: the
+   * `?token=` query-string fallback has been removed entirely — see the
+   * class-level JSDoc for the security rationale.
+   */
   private extractToken(client: Socket): string | null {
     // Preferred: socket.io handshake auth payload — `io(url, { auth: { token }})`
     const handshakeAuth = (client.handshake?.auth ?? {}) as Record<
@@ -274,13 +287,6 @@ export class StreamsGateway
       authHeader.toLowerCase().startsWith("bearer ")
     ) {
       return authHeader.slice(7).trim() || null
-    }
-
-    // Last resort: `?token=` query string (useful for in-browser clients
-    // that cannot set custom headers).
-    const queryToken = client.handshake?.query?.token
-    if (typeof queryToken === "string" && queryToken.length > 0) {
-      return queryToken
     }
 
     return null

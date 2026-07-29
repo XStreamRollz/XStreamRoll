@@ -33,6 +33,7 @@ export type {
   CreateUserDto,
   Stream,
   StreamStatus,
+  StreamVisibility,
   CreateStreamDto,
   UpdateStreamDto,
   StreamEventType,

@@ -20,6 +20,8 @@ function typed<T>() {
 
 export const streamStatusSchema = z.enum(["active", "inactive", "error"])
 
+export const streamVisibilitySchema = z.enum(["public", "private"])
+
 export const streamSchema = typed<Stream>()(
   z.object({
     id: z.string(),
@@ -27,6 +29,7 @@ export const streamSchema = typed<Stream>()(
     name: z.string(),
     description: z.string().nullable(),
     status: streamStatusSchema,
+    visibility: streamVisibilitySchema,
     createdAt: z.string(),
     updatedAt: z.string(),
   }),

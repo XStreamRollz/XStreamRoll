@@ -10,7 +10,11 @@
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "test:cov": "jest --coverage",
-    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\""
+    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
+    "migrate": "node-pg-migrate up",
+    "migrate:down": "node-pg-migrate down 1",
+    "migrate:redo": "node-pg-migrate redo",
+    "migrate:create": "node-pg-migrate create"
   },
   "dependencies": {
     "@nestjs/cache-manager": "^2.3.0",
@@ -62,6 +66,7 @@
     "@types/supertest": "^7.2.0",
     "@xstreamroll/contract-tests": "file:../tests/contracts",
     "jest": "^29.7.0",
+    "node-pg-migrate": "^7.6.1",
     "supertest": "^7.2.2",
     "ts-jest": "^29.4.11",
     "typescript": "^5.3.0"
@@ -77,7 +82,10 @@
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
-    "transformIgnorePatterns": ["/node_modules/", "/dist/"],
+    "transformIgnorePatterns": [
+      "/node_modules/",
+      "/dist/"
+    ],
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],

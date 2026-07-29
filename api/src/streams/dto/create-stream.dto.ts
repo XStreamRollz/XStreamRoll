@@ -1,4 +1,4 @@
-import { IsOptional, IsString, Length, MaxLength } from "class-validator"
+import { IsIn, IsOptional, IsString, Length, MaxLength } from "class-validator"
 
 /**
  * Payload accepted by `POST /streams`.
@@ -16,4 +16,17 @@ export class CreateStreamDto {
     message: "description must be at most 2000 characters",
   })
   description?: string
+
+  /**
+   * Visibility on the discovery surface (issue #393). Defaults to
+   * `"private"` when omitted — the conservative choice so creating a
+   * stream never accidentally exposes it before the owner chooses
+   * otherwise.
+   */
+  @IsOptional()
+  @IsString()
+  @IsIn(["public", "private"], {
+    message: "visibility must be one of: public, private",
+  })
+  visibility?: "public" | "private"
 }
