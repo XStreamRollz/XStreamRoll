@@ -3,6 +3,8 @@ export type { ClientEnv } from "./client"
 export { HttpClient } from "./http"
 export type { RequestInterceptor, ResponseInterceptor, InterceptorHandle } from "./http"
 export { verifyWebhookSignature, computeWebhookSignature } from "./webhooks"
+export { paginateAll, PaginatedIterator } from "./pagination"
+export type { PaginatedFetcher, PaginateAllOptions } from "./pagination"
 export type {
   // Config
   StreamConfig,
@@ -14,6 +16,7 @@ export type {
   AuthTokens,
   // Stream
   StreamStatus,
+  StreamVisibility,
   Stream,
   CreateStreamDto,
   UpdateStreamDto,

@@ -150,3 +150,50 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+      # Issue #340 — run database migrations as a Kubernetes init
+      # container before the api container starts, using the same
+      # published API image so the runner, the schema, and the
+      # runtime image stay in lockstep (api/Dockerfile bakes
+      # database/migrations/ at /app/database/migrations/).
+      #
+      # Concurrency: every replica boots the runner on startup, so two
+      # pods can race the same migration. Today this is bounded by
+      # (a) every migration SQL using IF [NOT] EXISTS guards and (b)
+      # Postgres short-circuiting idempotent DDL on already-applied
+      # state. The pgmigrations tracking table may pick up duplicate
+      # rows but the schema stays correct. Follow-up: convert to a
+      # single-success Job (kinds: Job) and have each SQL migration
+      # take a pg_advisory_lock so the cosmetic duplication is gone.
+      #
+      # Exits non-zero on any actual migration error — the pod init
+      # fails and the deploy surfaces instead of starting broken.
+      initContainers:
+        - name: db-migrate
+          image: ghcr.io/xstreamrollz/xstreamroll-api:latest
+          imagePullPolicy: Always
+          command:
+            - node-pg-migrate
+          args:
+            - -d
+            - /app/database/migrations
+            - -m
+            - sql
+            - up
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: DATABASE_URL
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: NODE_ENV
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi

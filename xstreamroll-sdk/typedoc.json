@@ -1,0 +1,30 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "name": "@stellar/streaming-sdk",
+  "tsconfig": "./tsconfig.json",
+  "entryPoints": ["./src/index.ts"],
+  "entryPointStrategy": "expand",
+  "out": "./docs/api",
+  "readme": "none",
+  "exclude": [
+    "**/__tests__/**",
+    "**/*.test.ts",
+    "**/generated/**",
+    "**/node_modules/**"
+  ],
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "categorizeByGroup": true,
+  "groupOrder": [
+    "Configuration",
+    "Authentication",
+    "Streams",
+    "Stream Events",
+    "Pagination",
+    "Errors",
+    "HTTP transport",
+    "Retries"
+  ],
+  "treatWarnAsMessage": true,
+  "skipErrorCode": true
+}

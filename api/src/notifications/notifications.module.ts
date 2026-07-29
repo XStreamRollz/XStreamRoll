@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common"
+import { ScheduleModule } from "@nestjs/schedule"
 import { AuthModule } from "../auth/auth.module"
 import { AuthGuard } from "../common/guards/auth.guard"
 import { GatewaysModule } from "../gateways/gateways.module"
@@ -16,7 +17,7 @@ import { NotificationsRepository } from "./repository/notifications.repository"
 const isTest = process.env.NODE_ENV === "test"
 
 @Module({
-  imports: [AuthModule, GatewaysModule],
+  imports: [AuthModule, GatewaysModule, ScheduleModule.forRoot()],
   controllers: [NotificationsController],
   providers: [
     NotificationsService,

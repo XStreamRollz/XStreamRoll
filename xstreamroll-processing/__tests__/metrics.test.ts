@@ -65,7 +65,9 @@ describe("metrics server", () => {
     expect(res.status).toBe(200)
     expect(res.headers["content-type"]).toBe("text/plain; version=0.0.4")
     expect(res.data).toContain("# HELP xstreamroll_messages_processed_total")
-    expect(res.data).toContain("# TYPE xstreamroll_messages_processed_total counter")
+    expect(res.data).toContain(
+      "# TYPE xstreamroll_messages_processed_total counter",
+    )
     expect(res.data).toContain("xstreamroll_messages_processed_total")
     expect(res.data).toContain("# HELP xstreamroll_uptime_seconds")
   })
@@ -116,8 +118,10 @@ describe("metrics server", () => {
     await expect(axios.get(`${baseUrl}/invalid-route`)).rejects.toThrow()
     try {
       await axios.get(`${baseUrl}/invalid-route`)
-    } catch (err: any) {
-      expect(err.response.status).toBe(404)
+    } catch (err: unknown) {
+      expect((err as { response: { status: number } }).response.status).toBe(
+        404,
+      )
     }
   })
 
@@ -147,9 +151,15 @@ describe("metrics server", () => {
       try {
         await axios.get(`${baseUrl}/healthz`)
         throw new Error("expected request to fail")
-      } catch (err: any) {
-        expect(err.response.status).toBe(503)
-        expect(err.response.data.status).toBe("shutting-down")
+      } catch (err: unknown) {
+        expect(
+          (err as { response: { status: number; data: { status: string } } })
+            .response.status,
+        ).toBe(503)
+        expect(
+          (err as { response: { data: { status: string } } }).response.data
+            .status,
+        ).toBe("shutting-down")
       }
     })
   })

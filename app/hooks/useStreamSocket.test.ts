@@ -33,7 +33,7 @@ const mockUnsubscribe = unsubscribeFromStream as jest.MockedFunction<
  * flag the backoff path reads before calling `.connect()`.
  */
 class FakeSocket {
-  public listeners = new Map<string, Set<(...args: any[]) => void>>()
+  public listeners = new Map<string, Set<(...args: unknown[]) => void>>()
   public connected = false
 
   public connect = jest.fn(() => {
@@ -43,13 +43,13 @@ class FakeSocket {
     this.connected = false
   })
 
-  public on(event: string, fn: (...args: any[]) => void) {
+  public on(event: string, fn: (...args: unknown[]) => void) {
     if (!this.listeners.has(event)) this.listeners.set(event, new Set())
     this.listeners.get(event)!.add(fn)
     return this
   }
 
-  public off(event: string, fn: (...args: any[]) => void) {
+  public off(event: string, fn: (...args: unknown[]) => void) {
     this.listeners.get(event)?.delete(fn)
     return this
   }
@@ -58,7 +58,7 @@ class FakeSocket {
     // Mirror real socket.io-client semantics: once the transport emits
     // `disconnect`, .connected flips to false so the next backoff tick
     // sees a consistent state.
-    if (event === 'disconnect') {
+    if (event === "disconnect") {
       this.connected = false
     }
     const fns = this.listeners.get(event)
@@ -100,7 +100,8 @@ describe("useStreamSocket", () => {
     jest.useFakeTimers()
     // Each render with a new URL should get its own socket.
     mockCreate.mockImplementation(
-      () => new FakeSocket() as unknown as ReturnType<typeof createStreamSocket>,
+      () =>
+        new FakeSocket() as unknown as ReturnType<typeof createStreamSocket>,
     )
     mockSubscribe.mockResolvedValue({ ok: true })
     mockUnsubscribe.mockResolvedValue({ ok: true })
@@ -116,7 +117,7 @@ describe("useStreamSocket", () => {
     )
     expect(result.current.status).toBe("connecting")
 
-    const socket = (mockCreate.mock.results[0].value as unknown) as FakeSocket
+    const socket = mockCreate.mock.results[0].value as unknown as FakeSocket
     act(() => socket.emit("connect"))
     expect(result.current.status).toBe("connected")
 
@@ -144,7 +145,7 @@ describe("useStreamSocket", () => {
     const { result } = renderHook(() =>
       useStreamSocket("ws://localhost:3001/streams/42"),
     )
-    const socket = (mockCreate.mock.results[0].value as unknown) as FakeSocket
+    const socket = mockCreate.mock.results[0].value as unknown as FakeSocket
 
     act(() => socket.emit("connect"))
     expect(result.current.status).toBe("connected")
@@ -165,7 +166,7 @@ describe("useStreamSocket", () => {
     const { result } = renderHook(() =>
       useStreamSocket("ws://localhost:3001/streams/42"),
     )
-    const socket = (mockCreate.mock.results[0].value as unknown) as FakeSocket
+    const socket = mockCreate.mock.results[0].value as unknown as FakeSocket
 
     act(() => socket.emit("connect"))
     socket.connect.mockClear()
@@ -191,10 +192,10 @@ describe("useStreamSocket", () => {
   })
 
   it("escalates the delay across consecutive failed reconnects", () => {
-    const { result } = renderHook(() =>
+    const { result: _result } = renderHook(() =>
       useStreamSocket("ws://localhost:3001/streams/42"),
     )
-    const socket = (mockCreate.mock.results[0].value as unknown) as FakeSocket
+    const socket = mockCreate.mock.results[0].value as unknown as FakeSocket
 
     act(() => socket.emit("connect"))
     socket.connect.mockClear()
@@ -219,14 +220,12 @@ describe("useStreamSocket", () => {
     const { result } = renderHook(() =>
       useStreamSocket("ws://localhost:3001/streams/42"),
     )
-    const socket = (mockCreate.mock.results[0].value as unknown) as FakeSocket
+    const socket = mockCreate.mock.results[0].value as unknown as FakeSocket
 
     act(() => socket.emit("connect"))
     socket.connect.mockClear()
 
-    act(() =>
-      socket.emit("disconnect", "io client disconnect"),
-    )
+    act(() => socket.emit("disconnect", "io client disconnect"))
     expect(result.current.status).toBe("disconnected")
 
     act(() => jest.advanceTimersByTime(60_000))
@@ -237,14 +236,12 @@ describe("useStreamSocket", () => {
     const { result } = renderHook(() =>
       useStreamSocket("ws://localhost:3001/streams/42"),
     )
-    const socket = (mockCreate.mock.results[0].value as unknown) as FakeSocket
+    const socket = mockCreate.mock.results[0].value as unknown as FakeSocket
 
     act(() => socket.emit("connect"))
     socket.connect.mockClear()
 
-    act(() =>
-      socket.emit("disconnect", "io server disconnect"),
-    )
+    act(() => socket.emit("disconnect", "io server disconnect"))
     expect(result.current.status).toBe("disconnected")
 
     act(() => jest.advanceTimersByTime(60_000))
@@ -256,7 +253,8 @@ describe("useStreamSocket", () => {
       ({ url }: { url: string }) => useStreamSocket(url),
       { initialProps: { url: "ws://localhost:3001/streams/42" } },
     )
-    const firstSocket = (mockCreate.mock.results[0].value as unknown) as FakeSocket
+    const firstSocket = mockCreate.mock.results[0]
+      .value as unknown as FakeSocket
 
     act(() => firstSocket.emit("connect"))
     firstSocket.connect.mockClear()
@@ -270,5 +268,61 @@ describe("useStreamSocket", () => {
     // The original socket had a pending retry, but cleanup must have
     // cleared it so we never call connect on the disconnected one.
     expect(firstSocket.connect).not.toHaveBeenCalled()
+  })
+
+  describe("streamStatus (#362)", () => {
+    it("is null until a lifecycle event for the subscribed stream arrives", () => {
+      const { result } = renderHook(() =>
+        useStreamSocket("ws://localhost:3001/streams/42"),
+      )
+      expect(result.current.streamStatus).toBeNull()
+    })
+
+    it("derives 'active' from stream:started for the subscribed stream", () => {
+      const { result } = renderHook(() =>
+        useStreamSocket("ws://localhost:3001/streams/42"),
+      )
+      const socket = mockCreate.mock.results[0].value as unknown as FakeSocket
+
+      act(() => socket.emit("stream:started", { streamId: "42" }))
+      expect(result.current.streamStatus).toBe("active")
+    })
+
+    it("derives 'inactive' from stream:stopped and 'error' from stream:error", () => {
+      const { result } = renderHook(() =>
+        useStreamSocket("ws://localhost:3001/streams/42"),
+      )
+      const socket = mockCreate.mock.results[0].value as unknown as FakeSocket
+
+      act(() => socket.emit("stream:stopped", { streamId: "42" }))
+      expect(result.current.streamStatus).toBe("inactive")
+
+      act(() => socket.emit("stream:error", { streamId: "42" }))
+      expect(result.current.streamStatus).toBe("error")
+    })
+
+    it("ignores lifecycle events for a different stream on the shared socket", () => {
+      const { result } = renderHook(() =>
+        useStreamSocket("ws://localhost:3001/streams/42"),
+      )
+      const socket = mockCreate.mock.results[0].value as unknown as FakeSocket
+
+      act(() => socket.emit("stream:started", { streamId: "99" }))
+      expect(result.current.streamStatus).toBeNull()
+    })
+
+    it("resets streamStatus to null when the URL (and thus target stream) changes", () => {
+      const { result, rerender } = renderHook(
+        ({ url }: { url: string }) => useStreamSocket(url),
+        { initialProps: { url: "ws://localhost:3001/streams/42" } },
+      )
+      const firstSocket = mockCreate.mock.results[0]
+        .value as unknown as FakeSocket
+      act(() => firstSocket.emit("stream:started", { streamId: "42" }))
+      expect(result.current.streamStatus).toBe("active")
+
+      rerender({ url: "ws://localhost:3001/streams/99" })
+      expect(result.current.streamStatus).toBeNull()
+    })
   })
 })
