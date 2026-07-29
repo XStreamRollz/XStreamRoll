@@ -96,4 +96,127 @@ describe("GracefulShutdown", () => {
     await gs.requestShutdown("SIGTERM" as ShutdownReason)
     expect(gs.getState()).toBe("done")
   })
+
+  // -- Per-step timeout (issue #342) ------------------------------------
+
+  it("logs a warning and continues when a hook exceeds its timeout", async () => {
+    const calls: string[] = []
+    const exit = jest.fn()
+    const { logger, entries } = makeLogger()
+    const gs = new GracefulShutdown({ exit, logger, timeoutMs: 50 })
+
+    gs.register({
+      name: "hanging hook",
+      timeoutMs: 20,
+      run: async () => {
+        await new Promise(() => {}) // never resolves
+      },
+    })
+    gs.register({
+      name: "fast hook",
+      run: () => {
+        calls.push("fast")
+      },
+    })
+
+    await gs.requestShutdown("manual")
+
+    // The fast hook should have run despite the hanging hook
+    expect(calls).toEqual(["fast"])
+    // The hanging hook should have triggered a timeout warning
+    expect(
+      entries.some(
+        (e) =>
+          e.level === "warn" &&
+          (e.args as string[]).some((a) => String(a).includes("timed out")),
+      ),
+    ).toBe(true)
+    // Overall shutdown had an error from the timed-out hook
+    expect(exit).toHaveBeenCalledWith(1)
+  })
+
+  it("uses the per-step timeoutMs override when provided", async () => {
+    const exit = jest.fn()
+    const { logger } = makeLogger()
+    // Global timeout is very short, but the hook has a longer override
+    const gs = new GracefulShutdown({ exit, logger, timeoutMs: 1000 })
+
+    gs.register({
+      name: "fast but with long override",
+      timeoutMs: 200,
+      run: async () => {
+        await new Promise((r) => setTimeout(r, 5))
+      },
+    })
+
+    await gs.requestShutdown("manual")
+    expect(exit).toHaveBeenCalledWith(0)
+  })
+
+  it("falls back to the global timeout when per-step timeoutMs is omitted", async () => {
+    const exit = jest.fn()
+    const { logger, entries } = makeLogger()
+    const gs = new GracefulShutdown({ exit, logger, timeoutMs: 20 })
+
+    gs.register({
+      name: "hanging no-override",
+      // no timeoutMs — falls back to global 20ms
+      run: async () => {
+        await new Promise(() => {})
+      },
+    })
+    gs.register({
+      name: "still runs",
+      run: () => {},
+    })
+
+    await gs.requestShutdown("manual")
+    expect(
+      entries.some(
+        (e) =>
+          e.level === "warn" &&
+          (e.args as string[]).some((a) => String(a).includes("timed out")),
+      ),
+    ).toBe(true)
+    expect(exit).toHaveBeenCalledWith(1)
+  })
+
+  it("continues through multiple timed-out hooks", async () => {
+    const calls: string[] = []
+    const exit = jest.fn()
+    const { logger, entries } = makeLogger()
+    const gs = new GracefulShutdown({ exit, logger, timeoutMs: 50 })
+
+    gs.register({
+      name: "hang1",
+      timeoutMs: 10,
+      run: async () => {
+        await new Promise(() => {})
+      },
+    })
+    gs.register({
+      name: "hang2",
+      timeoutMs: 10,
+      run: async () => {
+        await new Promise(() => {})
+      },
+    })
+    gs.register({
+      name: "clean",
+      run: () => {
+        calls.push("clean")
+      },
+    })
+
+    await gs.requestShutdown("manual")
+
+    expect(calls).toEqual(["clean"])
+    const warnCount = entries.filter(
+      (e) =>
+        e.level === "warn" &&
+        (e.args as string[]).some((a) => String(a).includes("timed out")),
+    ).length
+    expect(warnCount).toBe(2)
+    expect(exit).toHaveBeenCalledWith(1)
+  })
 })

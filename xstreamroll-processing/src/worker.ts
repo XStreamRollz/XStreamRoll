@@ -4,15 +4,15 @@ import http from "http"
 import axios from "axios"
 
 import { env } from "./config"
-import { createLockManager, type LockManager } from "./leader-election"
+import { type LockManager, createLockManager } from "./leader-election"
 import { GracefulShutdown, ShutdownReason } from "./lifecycle"
 import { currentCorrelationId, newCorrelationId } from "./logger"
 import { markShuttingDown, setQueueDepth, startMetricsServer } from "./metrics"
 import {
   EventFilter,
-  createFilterConfigStore,
-  MemoryFilterConfigStore,
   type FilterConfigStore,
+  MemoryFilterConfigStore,
+  createFilterConfigStore,
 } from "./pipeline"
 import { ProcessedStreamEvent, StreamEvent } from "./session"
 import { SessionRegistry } from "./session-registry"
@@ -45,14 +45,8 @@ const LOCK_TTL_MS: number = (env.LOCK_TTL_MS as number | undefined) ?? 30_000
 // session's stop() promise hangs, this timeout fires a warning so
 // the shutdown can continue to the next session instead of blocking
 // forever on a single stuck session.
-const SHUTDOWN_TIMEOUT_MS = Math.max(
-  1,
-  Number(process.env.SHUTDOWN_TIMEOUT_MS ?? 15_000),
-)
-const SESSION_DRAIN_TIMEOUT_MS = Math.max(
-  1,
-  Number(process.env.SESSION_DRAIN_TIMEOUT_MS ?? 5_000),
-)
+const SHUTDOWN_TIMEOUT_MS: number = env.SHUTDOWN_TIMEOUT_MS
+const SESSION_DRAIN_TIMEOUT_MS: number = env.SESSION_DRAIN_TIMEOUT_MS
 
 // Issue #351: the EventFilter config store. Defaults to the same
 // in-process `Map` the worker used before the issue so existing
@@ -354,7 +348,7 @@ async function start(): Promise<void> {
 }
 
 const gracefulShutdown = new GracefulShutdown({
-  timeoutMs: 15_000,
+  timeoutMs: SHUTDOWN_TIMEOUT_MS,
 })
 
 gracefulShutdown.register({

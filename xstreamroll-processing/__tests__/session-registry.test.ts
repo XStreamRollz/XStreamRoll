@@ -135,6 +135,33 @@ describe("SessionRegistry", () => {
     expect(registry.lockCount()).toBe(0)
   })
 
+  it("drainAll with timeout resolves even when a session stop hangs (issue #342)", async () => {
+    const lockManager = new MemoryLockManager({ workerId: "w1", ttlMs: 30_000 })
+    const registry = new SessionRegistry(
+      "w1",
+      { publish: jest.fn() },
+      { maxConcurrentSessions: 4, lockManager },
+    )
+
+    await registry.route(evt("s1"))
+    const session = registry.get("s1")!
+
+    // Override stop() to hang forever
+    jest.spyOn(session, "stop").mockImplementation(() => {
+      return new Promise(() => {}) // never resolves
+    })
+
+    // drainAll with a short per-session timeout should still resolve
+    await registry.drainAll(50)
+
+    // The registry should be cleared despite the hung session
+    expect(registry.size()).toBe(0)
+    expect(registry.lockCount()).toBe(0)
+
+    // Restore original to allow cleanup
+    jest.restoreAllMocks()
+  })
+
   it("capacity() reports used vs max", async () => {
     const registry = makeRegistry(8)
     await registry.route(evt("s1"))
