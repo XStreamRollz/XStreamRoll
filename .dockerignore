@@ -1,0 +1,12 @@
+# Root .dockerignore — used when building Docker images with the repo
+# root as build context (e.g., api/Dockerfile needs workspace packages).
+node_modules
+dist
+coverage
+.git
+.env
+.env.*
+!.env.example
+npm-debug.log*
+.next
+*.log

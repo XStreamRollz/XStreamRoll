@@ -61,9 +61,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - context: api
+          - context: .
+            dockerfile: api/Dockerfile
             image: xstreamroll-api
-          - context: app
+          - context: .
+            dockerfile: app/Dockerfile
             image: xstreamroll-app
           - context: xstreamroll-processing
             image: xstreamroll-processing

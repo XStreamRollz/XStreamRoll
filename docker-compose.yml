@@ -43,7 +43,8 @@ services:
 
   api:
     build:
-      context: ./api
+      context: .
+      dockerfile: api/Dockerfile
     ports:
       - "3001:3001"
     environment:
@@ -71,7 +72,8 @@ services:
 
   app:
     build:
-      context: ./app
+      context: .
+      dockerfile: app/Dockerfile
       args:
         NEXT_PUBLIC_API_URL: http://localhost:3001
         NEXT_PUBLIC_VIEWER_URL: http://localhost:3000

@@ -1,16 +1,23 @@
-# ── Deps ──────────────────────────────────────────────────────────────────────
-FROM node:20-alpine AS deps
-WORKDIR /app
-
-COPY package.json ./
-RUN npm install
-
-# ── Builder ───────────────────────────────────────────────────────────────────
+# Build context: repo root (not app/) — required so npm can resolve the
+# file: workspace dependency @xstreamroll/types (file:../packages/types).
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+# Copy app package manifest
+COPY app/package.json ./
+
+# Copy workspace dependency so npm can resolve file:../packages/types
+COPY packages/types/package.json packages/types/tsconfig.json /packages/types/
+COPY packages/types/src/ /packages/types/src/
+
+RUN npm install
+
+# Copy app source
+COPY app/ ./
+
+# Ensure public directory exists (optional in Next.js, but the runner stage
+# expects it for static asset serving).
+RUN mkdir -p public
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
