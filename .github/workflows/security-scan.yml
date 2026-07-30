@@ -126,7 +126,8 @@ jobs:
             context: .
             dockerfile: api/Dockerfile
           - image: app
-            context: app
+            context: .
+            dockerfile: app/Dockerfile
           - image: processing
             context: xstreamroll-processing
 
