@@ -5,6 +5,10 @@ export async function POST(req: NextRequest) {
 
   const { email, password } = body;
 
+
+
+
+  
   const apiResponse = await fetch('http://localhost:3001/auth/login', {
     method: 'POST',
     headers: {
