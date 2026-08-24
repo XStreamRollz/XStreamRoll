@@ -39,6 +39,8 @@ export interface StreamListFilter {
  * processing worker via `GET /streams/pending`.
  */
 export interface PendingStreamEvent {
+  /** Stable row identifier for keyset pagination and drain (issue #524). */
+  id: string
   streamId: string
   data: Record<string, unknown>
   timestamp: string
@@ -168,8 +170,8 @@ export class StreamsRepository {
    */
   async getPendingEvents(
     _limit: number,
-    _offset: number,
-  ): Promise<{ data: PendingStreamEvent[]; nextCursor: number | null }> {
+    _cursor: string | null,
+  ): Promise<{ data: PendingStreamEvent[]; nextCursor: string | null }> {
     return { data: [], nextCursor: null }
   }
 

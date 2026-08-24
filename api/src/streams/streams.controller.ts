@@ -76,7 +76,8 @@ export class StreamsController {
     description:
       "Returns a paginated batch of unprocessed stream events. " +
       "Intended for internal use by the processing worker only. " +
-      "Advance `cursor` by the returned `nextCursor` value until it is null.",
+      "Uses keyset pagination over (timestamp, id) for stable ordering. " +
+      "Pass the returned `nextCursor` as `cursor` until it is null.",
   })
   @ApiQuery({
     name: "limit",
@@ -87,8 +88,9 @@ export class StreamsController {
   @ApiQuery({
     name: "cursor",
     required: false,
-    type: Number,
-    description: "Offset cursor (default 0)",
+    type: String,
+    description:
+      'Opaque keyset cursor (JSON {timestamp,id}). Omit for the first page.',
   })
   @ApiOkResponse({ description: "Paginated list of pending stream events." })
   async getPending(
@@ -96,8 +98,7 @@ export class StreamsController {
     @Query("cursor") cursorStr?: string,
   ) {
     const limit = Math.min(Math.max(1, Number(limitStr ?? 100)), 1000)
-    const offset = Math.max(0, Number(cursorStr ?? 0))
-    return this.streamsService.getPendingEvents(limit, offset)
+    return this.streamsService.getPendingEvents(limit, cursorStr ?? null)
   }
 
   /**
