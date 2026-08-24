@@ -1,11 +1,14 @@
-import { ConflictException, NotFoundException } from "@nestjs/common"
+import {
+  ConflictException,
+  NotFoundException,
+  PayloadTooLargeException,
+} from "@nestjs/common"
 import * as fc from "fast-check"
 
+
 import { Stream } from "./stream.entity"
-import { StreamsGateway } from "../gateways/streams.gateway"
 import { Tag } from "../tags/tag.entity"
 import { TagsService } from "../tags/tags.service"
-import { WebhooksService } from "../webhooks/webhooks.service"
 import { StreamsRepository } from "./repository/streams.repository"
 import { StreamsService } from "./streams.service"
 
@@ -19,6 +22,8 @@ describe("StreamsService", () => {
     update: jest.Mock
     delete: jest.Mock
     listEventsForStream: jest.Mock
+    insertPendingEvent: jest.Mock
+    getPendingEvents: jest.Mock
   }
   let mockWebhooksService: { dispatchStreamEvent: jest.Mock }
   let mockTagsService: { listForStreamIds: jest.Mock }
@@ -52,6 +57,8 @@ describe("StreamsService", () => {
       update: jest.fn(),
       delete: jest.fn(),
       listEventsForStream: jest.fn(),
+      insertPendingEvent: jest.fn(),
+      getPendingEvents: jest.fn(),
     }
     mockWebhooksService = {
       dispatchStreamEvent: jest.fn().mockResolvedValue(undefined),
@@ -368,6 +375,51 @@ describe("StreamsService", () => {
     await expect(service.update(3, { status: "active" })).rejects.toThrow(ConflictException)
   })
 
+  // ── Event ingestion (#514) ──────────────────────────────────────────────
+
+  it("ingestEvent delegates to the repository with a server-stamped timestamp", async () => {
+    const pending = {
+      streamId: "7",
+      data: { viewerId: "u1" },
+      timestamp: "2026-08-01T00:00:00.000Z",
+    }
+    mockRepo.insertPendingEvent.mockResolvedValue(pending)
+
+    const result = await service.ingestEvent({
+      streamId: "7",
+      data: { viewerId: "u1" },
+    })
+
+    // The timestamp is supplied by the server (Issue #514: trusting client
+    // clocks for latency metrics is a correctness risk).
+    expect(mockRepo.insertPendingEvent).toHaveBeenCalledWith(
+      7,
+      { viewerId: "u1" },
+      expect.any(Date),
+    )
+    expect(result).toEqual(pending)
+  })
+
+  it("ingestEvent rejects oversize payloads without touching the repository", async () => {
+    const bigData = { blob: "x".repeat(64 * 1024) }
+
+    await expect(
+      service.ingestEvent({ streamId: "7", data: bigData }),
+    ).rejects.toThrow(PayloadTooLargeException)
+    expect(mockRepo.insertPendingEvent).not.toHaveBeenCalled()
+  })
+
+  it("getPendingEvents delegates to the repository", async () => {
+    mockRepo.getPendingEvents.mockResolvedValue({
+      data: [],
+      nextCursor: null,
+    })
+
+    await service.getPendingEvents(100, 0)
+
+    expect(mockRepo.getPendingEvents).toHaveBeenCalledWith(100, 0)
+  })
+
   it("delete existing stream resolves", async () => {
     mockRepo.delete.mockResolvedValue(true)
     await expect(service.delete(1)).resolves.toBeUndefined()
@@ -466,14 +518,10 @@ describe("StreamsService", () => {
   })
 })
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // ============================================
 // PROPERTY-BASED TESTS FOR STREAM STATUS TRANSITIONS + VISIBILITY TRANSITIONS
 // ============================================
-// These legacy property-based blocks were authored with loose `any`
-// mocks; the disable is scoped to this section (it runs to EOF) and
-// mirrors the file-level disable convention in streams.gateway.spec.ts.
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 describe("StreamsService - Property-Based Tests", () => {
   let service: StreamsService;
   let mockRepo: any;

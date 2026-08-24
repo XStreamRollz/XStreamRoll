@@ -38,6 +38,7 @@ import { StreamOwnershipGuard } from "./common/guards/stream-ownership.guard"
 import { StreamOwnershipService } from "./common/guards/stream-ownership.service"
 import createJwtConfig, { createRefreshJwtConfig } from "./config/jwt.config"
 import { StreamsRepository } from "./streams/repository/streams.repository"
+import { StreamApiKeyGuard } from "./streams/stream-api-key.guard"
 import { StreamsController } from "./streams/streams.controller"
 import { StreamsService } from "./streams/streams.service"
 import { TagsRepository } from "./tags/repository/tags.repository"
@@ -46,6 +47,7 @@ import { TagsService } from "./tags/tags.service"
 import { WebhooksService } from "./webhooks/webhooks.service"
 
 process.env.JWT_SECRET ??= "test-secret"
+process.env.STREAM_API_KEY ??= "test-stream-key"
 
 /** In-memory double for the Postgres-backed UsersRepository. */
 class InMemoryUsersRepository {
@@ -124,6 +126,7 @@ describe("Contract provider verification (api)", () => {
         AuthGuard,
         JwtExtractorService,
         StreamOwnershipGuard,
+        StreamApiKeyGuard,
         { provide: StreamOwnershipService, useValue: streamOwnershipService },
         { provide: TokenDenylistService, useValue: tokenDenylistService },
         AuthService,
@@ -212,8 +215,21 @@ describe("Contract provider verification (api)", () => {
     if (contract.request.authenticated) {
       req = req.set("Authorization", `Bearer ${accessToken}`)
     }
+    if (contract.request.apiKey) {
+      req = req.set("X-Stream-Api-Key", process.env.STREAM_API_KEY ?? "")
+    }
     if (contract.request.body !== undefined) {
-      req = req.send(contract.request.body as object)
+      // Substitute stream-id placeholders inside the request body (e.g. the
+      // `streamId` field of the ingest contract) the same way path params are.
+      const body = JSON.parse(JSON.stringify(contract.request.body)) as Record<
+        string,
+        unknown
+      >
+      for (const [k, v] of Object.entries(body)) {
+        if (v === PLACEHOLDER.EXISTING_STREAM_ID) body[k] = existingStreamId
+        if (v === PLACEHOLDER.MISSING_STREAM_ID) body[k] = "999999"
+      }
+      req = req.send(body)
     }
     return req
   }

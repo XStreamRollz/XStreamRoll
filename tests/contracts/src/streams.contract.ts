@@ -1,8 +1,8 @@
 import { PLACEHOLDER, type Contract } from "./contract"
 import {
   apiErrorSchema,
-  pagedTagsSchema,
   paginatedStreamsSchema,
+  pendingStreamEventSchema,
   streamSchema,
 } from "./schemas"
 
@@ -89,19 +89,23 @@ export const streamsContracts: Contract[] = [
     },
   },
   {
-    name: "list-stream-tags",
-    description: "GET /streams/:id/tags returns the tags attached to an owned stream",
+    name: "ingest-stream-event",
+    description: "POST /streams/events accepts an event for the worker queue",
     consumer: "xstreamroll-sdk",
     provider: "api",
     request: {
-      method: "GET",
-      path: "/streams/:id/tags",
-      pathParams: { id: PLACEHOLDER.EXISTING_STREAM_ID },
-      authenticated: true,
+      method: "POST",
+      path: "/streams/events",
+      body: {
+        streamId: PLACEHOLDER.EXISTING_STREAM_ID,
+        data: { viewerId: "user_42" },
+      },
+      // Authenticated with the stream API key, not a user bearer token.
+      apiKey: true,
     },
     response: {
-      status: 200,
-      schema: pagedTagsSchema,
+      status: 201,
+      schema: pendingStreamEventSchema,
     },
   },
   {

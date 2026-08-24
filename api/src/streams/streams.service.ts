@@ -1,10 +1,12 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
-  Optional,
+  PayloadTooLargeException,
 } from "@nestjs/common"
 
+import { IngestStreamEventDto } from "./dto/ingest-stream-event.dto"
 import { Stream } from "./stream.entity"
 import { PaginatedResult } from "../common/dto/pagination.dto"
 import { STREAM_EVENTS } from "../gateways/stream-events"
@@ -12,8 +14,8 @@ import { StreamsGateway } from "../gateways/streams.gateway"
 import { TagsService } from "../tags/tags.service"
 import { WebhooksService } from "../webhooks/webhooks.service"
 import { StreamAnalyticsDto } from "./dto/stream-analytics.dto"
-import { PendingStreamEvent } from "./repository/streams.repository"
 import { StreamsRepository } from "./repository/streams.repository"
+import { PendingStreamEvent } from "./repository/streams.repository"
 
 import type { StreamVisibility } from "./dto/visibility"
 import type {
@@ -26,6 +28,9 @@ import type { StreamEventRecord } from "@xstreamroll/types"
 export interface PagedStreams extends PaginatedResult<Stream> {
   hasMore: boolean
 }
+
+/** Max serialized size of an ingested event payload (64 KiB). */
+const MAX_INGEST_PAYLOAD_BYTES = 64 * 1024
 
 /** Maps a stream's new `status` to the webhook event name it fires. */
 const STATUS_TO_WEBHOOK_EVENT: Record<string, string> = {
@@ -202,6 +207,30 @@ export class StreamsService {
     offset: number,
   ): Promise<{ data: PendingStreamEvent[]; nextCursor: number | null }> {
     return this.repo.getPendingEvents(limit, offset)
+  }
+
+  /**
+   * Ingests a single event into `stream_data` — the worker's poll source
+   * (issue #514). The server stamps the arrival timestamp; oversized
+   * payloads are rejected before touching the database.
+   */
+  async ingestEvent(dto: IngestStreamEventDto): Promise<PendingStreamEvent> {
+    // `data` must be a plain JSON object (the DTO's IsDefined only guards
+    // presence; the whitelist pipe strips nothing with a decorator).
+    if (dto.data === null || typeof dto.data !== "object" || Array.isArray(dto.data)) {
+      throw new BadRequestException("data must be a JSON object")
+    }
+    const serialized = JSON.stringify(dto.data)
+    if (serialized.length > MAX_INGEST_PAYLOAD_BYTES) {
+      throw new PayloadTooLargeException(
+        `event payload exceeds ${MAX_INGEST_PAYLOAD_BYTES} bytes`,
+      )
+    }
+    return this.repo.insertPendingEvent(
+      Number(dto.streamId),
+      dto.data,
+      new Date(),
+    )
   }
 
   async getAnalytics(id: number): Promise<StreamAnalyticsDto> {

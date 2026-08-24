@@ -117,26 +117,45 @@ describe("StreamingClient Integration", () => {
   })
 
   describe("streams", () => {
-    it("publishEvent sends correct body and headers", async () => {
+    it("publishEvent sends the streamId/data body and the X-Stream-Api-Key header (issue #514)", async () => {
       const event = {
         streamId: "stream-1",
         eventType: "data" as const,
         data: { foo: "bar" },
       }
+      const apiKey = "sk-live-abc123"
+      const keyedClient = new StreamingClient({ baseUrl: BASE_URL, apiKey })
 
       nock(BASE_URL)
         .post("/streams/events", (body) => {
           return (
             body.streamId === event.streamId &&
-            body.eventType === event.eventType &&
             body.data.foo === "bar" &&
-            typeof body.timestamp === "string" &&
-            typeof body.clientId === "string"
+            body.eventType === undefined &&
+            body.timestamp === undefined &&
+            body.clientId === undefined
           )
         })
+        .matchHeader("X-Stream-Api-Key", apiKey)
         .reply(201)
 
-      await client.publishEvent(event)
+      await keyedClient.publishEvent(event)
+      expect(nock.isDone()).toBe(true)
+    })
+
+    it("publishEvent omits the API key header when none is configured", async () => {
+      nock(BASE_URL)
+        .post("/streams/events", (body) => {
+          return body.streamId === "stream-1" && body.data.foo === "bar"
+        })
+        .matchHeader("X-Stream-Api-Key", (val) => val === undefined)
+        .reply(201)
+
+      await client.publishEvent({
+        streamId: "stream-1",
+        eventType: "data",
+        data: { foo: "bar" },
+      })
       expect(nock.isDone()).toBe(true)
     })
 

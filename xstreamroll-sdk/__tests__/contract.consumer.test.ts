@@ -20,7 +20,7 @@
 import {
   allContracts,
   authResponseSchema,
-  pagedTagsSchema,
+  pendingStreamEventSchema,
   streamSchema,
   type Contract,
 } from "@xstreamroll/contract-tests"
@@ -73,33 +73,33 @@ describe("Consumer contract verification (xstreamroll-sdk)", () => {
     expect(result).toEqual(example)
   })
 
-  it("getStreamTags() requests exactly what list-stream-tags expects and returns a contract-valid PagedTags", async () => {
-    const c = contract("list-stream-tags")
+  it("publishEvent() hits POST /streams/events with the api key and a contract-valid response (issue #514)", async () => {
+    const c = contract("ingest-stream-event")
+    const apiKey = "sk-test-123"
+    const keyedClient = new StreamingClient({ baseUrl: BASE_URL, apiKey })
+
     const example = {
-      data: [
-        {
-          id: 1,
-          name: "Live Streaming",
-          slug: "live-streaming",
-          createdAt: "2026-01-01T00:00:00.000Z",
-        },
-      ],
-      page: 1,
-      limit: 50,
-      total: 1,
-      hasMore: false,
+      streamId: "42",
+      data: { viewerId: "user_42" },
+      timestamp: "2026-01-01T00:00:00.000Z",
     }
-    // The example itself must be valid per the shared schema, or this
-    // test would be asserting nothing meaningful.
-    expect(() => pagedTagsSchema.parse(example)).not.toThrow()
+    expect(() => pendingStreamEventSchema.parse(example)).not.toThrow()
 
-    const scope = nock(BASE_URL).get("/streams/42/tags").reply(c.response.status, example)
+    const scope = nock(BASE_URL)
+      .post("/streams/events", {
+        streamId: "42",
+        data: { viewerId: "user_42" },
+      })
+      .matchHeader("X-Stream-Api-Key", apiKey)
+      .reply(c.response.status, example)
 
-    const result = await client.getStreamTags("42")
+    await keyedClient.publishEvent({
+      streamId: "42",
+      eventType: "viewer:joined",
+      data: { viewerId: "user_42" },
+    })
 
     expect(scope.isDone()).toBe(true)
-    expect(() => pagedTagsSchema.parse(result)).not.toThrow()
-    expect(result).toEqual(example)
   })
 
   it("register() sends the request body the register contract expects", async () => {

@@ -26,6 +26,7 @@ const ENV_URLS: Record<ClientEnv, string> = {
 export class StreamingClient {
   private apiUrl: string
   private clientId: string
+  private apiKey?: string
   private http: HttpClient
   private tokens: AuthTokens | null = null
 
@@ -38,6 +39,7 @@ export class StreamingClient {
       this.apiUrl = config.apiUrl ?? ENV_URLS.development
     }
     this.clientId = config.clientId || `client-${Date.now()}`
+    this.apiKey = config.apiKey
 
     // Single HTTP layer: fetch-based HttpClient (with withRetry).
     this.http = new HttpClient(this.apiUrl)
@@ -96,16 +98,26 @@ export class StreamingClient {
 
   // ── Streams ───────────────────────────────────────────────────────────────
 
+  /**
+   * Push a single event into the worker queue (issue #514). The API
+   * endpoint is `POST /streams/events`, authenticated with the stream API
+   * key (`X-Stream-Api-Key` header) rather than a user JWT. The server
+   * stamps the arrival timestamp, so the client no longer sends one.
+   */
   async publishEvent(event: StreamEvent): Promise<void> {
     try {
-      await this.requestJson<void>("/streams/events", {
-        method: "POST",
-        body: {
-          clientId: this.clientId,
-          ...event,
-          timestamp: new Date().toISOString(),
+      const headers: Record<string, string> = {}
+      if (this.apiKey) {
+        headers["X-Stream-Api-Key"] = this.apiKey
+      }
+      await this.requestJson<void>(
+        "/streams/events",
+        {
+          method: "POST",
+          body: { streamId: event.streamId, data: event.data },
+          headers,
         },
-      })
+      )
     } catch (error) {
       console.error("Failed to publish event:", error)
       throw error

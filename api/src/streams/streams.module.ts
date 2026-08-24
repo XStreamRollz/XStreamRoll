@@ -1,7 +1,6 @@
 import { CacheModule } from "@nestjs/cache-manager"
 import { Module } from "@nestjs/common"
 
-import { StreamsController } from "./streams.controller"
 import { AuthModule } from "../auth/auth.module"
 import { StreamsDbRepository } from "./repository/streams-db.repository"
 import { StreamsRepository } from "./repository/streams.repository"
@@ -13,6 +12,12 @@ import { streamsCacheConfig } from "../config/cache.config"
 import { GatewaysModule } from "../gateways/gateways.module"
 import { TagsModule } from "../tags/tags.module"
 import { WebhooksModule } from "../webhooks/webhooks.module"
+import { StreamsDbRepository } from "./repository/streams-db.repository"
+import { StreamsRepository } from "./repository/streams.repository"
+import { StreamApiKeyGuard } from "./stream-api-key.guard"
+import { StreamsController } from "./streams.controller"
+import { StreamsService } from "./streams.service"
+import { streamsCacheConfig } from "../config/cache.config"
 
 /**
  * Injection token used to swap the streams repository implementation.
@@ -52,6 +57,7 @@ const isTest = process.env.NODE_ENV === "test"
     AuthGuard,
     StreamOwnershipGuard,
     StreamOwnershipService,
+    StreamApiKeyGuard,
   ],
   exports: [StreamsService],
 })
