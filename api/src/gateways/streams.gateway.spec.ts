@@ -387,6 +387,38 @@ describe("StreamsGateway", () => {
       ])
     })
 
+    // Issue #519: the broadcast must land on the exact room a client
+    // joined via `stream:subscribe` — this ties the subscribe handshake
+    // to the emit helpers end-to-end.
+    it("broadcasts a status emit to the room a subscribed socket joined", () => {
+      const { server, events } = makeServer()
+      gateway.server = server as unknown as any
+
+      const socket = makeSocket({ data: { userId: 55 } })
+      gateway.handleSubscribe(socket as unknown as any, { streamId: "abc" })
+
+      gateway.emitStarted({
+        streamId: "abc",
+        userId: 55,
+        startedAt: "2026-06-16T00:00:00Z",
+      })
+
+      expect(events).toEqual([
+        {
+          room: "stream:abc",
+          event: STREAM_EVENTS.STARTED,
+          payload: {
+            streamId: "abc",
+            userId: 55,
+            startedAt: "2026-06-16T00:00:00Z",
+          },
+        },
+      ])
+      // The emit targets the stream room, not the user room the socket
+      // joined during the connection handshake.
+      expect(socket.join).toHaveBeenCalledWith("stream:abc")
+    })
+
     it("broadcasts notifications only to the target user's room", () => {
       const { server, events } = makeServer()
       gateway.server = server as unknown as any
