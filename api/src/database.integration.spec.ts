@@ -1,4 +1,5 @@
 import { Pool } from "pg"
+
 import {
   resetDb,
   createTestApp,
@@ -37,6 +38,8 @@ describe("Database Integration Tests", () => {
       expect(columns).toContain("email")
       expect(columns).toContain("password_hash")
       expect(columns).toContain("created_at")
+      // Issue #511: single admin bit, defaulting to non-admin.
+      expect(columns).toContain("is_admin")
     })
 
     it("has the streams table with foreign key to users", async () => {

@@ -90,6 +90,7 @@ function dummyUser(overrides: Partial<User> = {}): User {
     password_hash:
       "$2b$10$abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ12",
     created_at: new Date("2026-01-01T00:00:00Z"),
+    is_admin: false,
     ...overrides,
   }
 }
@@ -415,6 +416,24 @@ describe("AuthService", () => {
         passwordChangedAt: expect.any(Number),
         jti: expect.any(String),
       })
+    })
+
+    it("carries isAdmin: true in the access token when the user is flagged admin", async () => {
+      const user = dummyUser({ email: dto.email, is_admin: true })
+      users.findByEmail.mockResolvedValue(user)
+      ;(bcrypt.compare as jest.Mock).mockResolvedValue(true)
+      accessJwt.sign.mockReturnValue("jwt.token.here")
+      refreshJwt.sign.mockReturnValue("refresh.token.here")
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- partial request stub for test
+      await service.login(dto, {
+        ip: "127.0.0.1",
+        headers: { "user-agent": "test" },
+      } as any) // eslint-disable-line @typescript-eslint/no-explicit-any -- partial request stub for test
+
+      expect(accessJwt.sign).toHaveBeenCalledWith(
+        expect.objectContaining({ isAdmin: true }),
+      )
     })
   })
 

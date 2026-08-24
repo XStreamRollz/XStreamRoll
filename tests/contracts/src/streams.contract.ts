@@ -1,6 +1,12 @@
-import type { CreateStreamDto, UpdateStreamDto } from "@xstreamroll/types"
 import { PLACEHOLDER, type Contract } from "./contract"
-import { apiErrorSchema, paginatedStreamsSchema, streamSchema } from "./schemas"
+import {
+  apiErrorSchema,
+  pagedTagsSchema,
+  paginatedStreamsSchema,
+  streamSchema,
+} from "./schemas"
+
+import type { CreateStreamDto, UpdateStreamDto } from "@xstreamroll/types"
 
 const createBody: CreateStreamDto = {
   name: "My stream",
@@ -80,6 +86,22 @@ export const streamsContracts: Contract[] = [
     response: {
       status: 403,
       schema: apiErrorSchema,
+    },
+  },
+  {
+    name: "list-stream-tags",
+    description: "GET /streams/:id/tags returns the tags attached to an owned stream",
+    consumer: "xstreamroll-sdk",
+    provider: "api",
+    request: {
+      method: "GET",
+      path: "/streams/:id/tags",
+      pathParams: { id: PLACEHOLDER.EXISTING_STREAM_ID },
+      authenticated: true,
+    },
+    response: {
+      status: 200,
+      schema: pagedTagsSchema,
     },
   },
   {

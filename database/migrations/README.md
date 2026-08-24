@@ -86,6 +86,24 @@ psql -d "$DATABASE_URL" -f database/migrations/2026051501_add_stream_tags.down.s
 | `2026072501_add_composite_stream_events_index.up.sql` | `idx_stream_events_stream_id_created_at_desc` — composite index for the `WHERE stream_id = ? ORDER BY created_at DESC` query pattern |
 | `2026072801_alter_timestamp_to_timestamptz.up.sql`    | Converts all `TIMESTAMP` columns to `TIMESTAMPTZ` across every table; rewrites `DEFAULT CURRENT_TIMESTAMP` → `DEFAULT NOW()`         |
 | `2026080501_add_stream_visibility.up.sql`             | `streams.visibility` (`public` \| `private`, default `private`), CHECK constraint, supporting index                                  |
+| `2026082401_add_users_is_admin.up.sql`               | `users.is_admin` (`BOOLEAN NOT NULL DEFAULT false`) — single admin bit for the admin surface (issue #511)                              |
+
+## Promoting the first admin (issue #511)
+
+The admin flag lives on the `users` row, not in any config file, so the
+only way to become an admin is a deliberate database write:
+
+```bash
+psql "$DATABASE_URL" -c "UPDATE users SET is_admin = true WHERE email = 'you@example.com';"
+```
+
+The flag is read at access-token issuance: the user must **log in again**
+after the `UPDATE` so the new token carries the `isAdmin` claim. Tokens
+minted before the promotion do not grant admin access and expire within
+15 minutes (`JWT_ACCESS_TOKEN_EXPIRES_IN`).
+
+Role management endpoints (assign/revoke admin over HTTP) are out of
+scope for issue #511; the SQL above is the bootstrap path until they land.
 
 > **Note on `2026061001` / `2026061002`:** both migrations add the same
 > `users.password_hash` column. `2026061001_add_password_hash` is the

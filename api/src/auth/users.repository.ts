@@ -1,5 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common"
 import { Pool } from "pg"
+
 import { PG_POOL } from "../database/database.module"
 
 export interface User {
@@ -9,6 +10,8 @@ export interface User {
   password_hash: string
   created_at: Date
   password_changed_at?: Date
+  /** Issue #511: single admin bit; read at access-token issuance. */
+  is_admin: boolean
 }
 
 /**
@@ -23,7 +26,7 @@ export class UsersRepository {
 
   async findByEmail(email: string): Promise<User | null> {
     const { rows } = await this.pool.query(
-      "SELECT id, username, email, password_hash, created_at, password_changed_at FROM users WHERE email = $1",
+      "SELECT id, username, email, password_hash, created_at, password_changed_at, is_admin FROM users WHERE email = $1",
       [email],
     )
     return rows[0] ?? null
@@ -31,7 +34,7 @@ export class UsersRepository {
 
   async findByUsername(username: string): Promise<User | null> {
     const { rows } = await this.pool.query(
-      "SELECT id, username, email, password_hash, created_at, password_changed_at FROM users WHERE username = $1",
+      "SELECT id, username, email, password_hash, created_at, password_changed_at, is_admin FROM users WHERE username = $1",
       [username],
     )
     return rows[0] ?? null
@@ -39,7 +42,7 @@ export class UsersRepository {
 
   async findById(id: number): Promise<User | null> {
     const { rows } = await this.pool.query(
-      "SELECT id, username, email, password_hash, created_at, password_changed_at FROM users WHERE id = $1",
+      "SELECT id, username, email, password_hash, created_at, password_changed_at, is_admin FROM users WHERE id = $1",
       [id],
     )
     return rows[0] ?? null
@@ -53,7 +56,7 @@ export class UsersRepository {
     const { rows } = await this.pool.query(
       `INSERT INTO users (username, email, password_hash)
        VALUES ($1, $2, $3)
-       RETURNING id, username, email, password_hash, created_at, password_changed_at`,
+       RETURNING id, username, email, password_hash, created_at, password_changed_at, is_admin`,
       [username, email, passwordHash],
     )
     return rows[0]
@@ -85,7 +88,7 @@ export class UsersRepository {
       `UPDATE users
        SET ${sets.join(", ")}
        WHERE id = $${idx}
-       RETURNING id, username, email, password_hash, created_at, password_changed_at`,
+       RETURNING id, username, email, password_hash, created_at, password_changed_at, is_admin`,
       values,
     )
     return rows[0]
@@ -101,7 +104,7 @@ export class UsersRepository {
        SET password_hash = $1,
            password_changed_at = $2
        WHERE id = $3
-       RETURNING id, username, email, password_hash, created_at, password_changed_at`,
+       RETURNING id, username, email, password_hash, created_at, password_changed_at, is_admin`,
       [passwordHash, passwordChangedAt, id],
     )
     return rows[0]

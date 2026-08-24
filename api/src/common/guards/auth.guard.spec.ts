@@ -1,9 +1,10 @@
 import { UnauthorizedException } from "@nestjs/common"
+
 import { AuthGuard } from "./auth.guard"
 import { JwtExtractorService } from "./jwt-extractor.service"
 
 interface MockJwtExtractor {
-  authenticate: jest.Mock<Promise<number>>
+  authenticate: jest.Mock<Promise<{ userId: number; isAdmin: boolean }>>
   extractBearerToken: jest.Mock<string>
 }
 
@@ -12,7 +13,11 @@ function makeGuard(extractor: MockJwtExtractor): AuthGuard {
 }
 
 function contextWithToken(token: string) {
-  const req: { header: jest.Mock; auth?: { userId: number } } = {
+  const req: {
+    header: jest.Mock
+    auth?: { userId: number }
+    user?: { sub: number; roles: string[] }
+  } = {
     header: jest.fn().mockReturnValue(`Bearer ${token}`),
   }
   const context = {
@@ -27,20 +32,34 @@ describe("AuthGuard", () => {
   let guard: AuthGuard
 
   beforeEach(() => {
-    extractor = { authenticate: jest.fn(), extractBearerToken: jest.fn() }
+    extractor = {
+      authenticate: jest.fn(),
+      extractBearerToken: jest.fn(),
+    }
     guard = makeGuard(extractor)
     jest.clearAllMocks()
   })
 
   it("allows a verified token whose jti is not revoked", async () => {
     const { req, context } = contextWithToken("tok")
-    extractor.authenticate.mockResolvedValue(1)
+    extractor.authenticate.mockResolvedValue({ userId: 1, isAdmin: false })
 
     const result = await guard.canActivate(context)
 
     expect(result).toBe(true)
     expect(extractor.authenticate).toHaveBeenCalledWith("Bearer tok")
     expect(req.auth).toEqual({ userId: 1 })
+    expect(req.user).toEqual({ sub: 1, roles: [] })
+  })
+
+  it("maps the isAdmin claim to the admin role on req.user", async () => {
+    const { req, context } = contextWithToken("tok")
+    extractor.authenticate.mockResolvedValue({ userId: 1, isAdmin: true })
+
+    await guard.canActivate(context)
+
+    expect(req.auth).toEqual({ userId: 1 })
+    expect(req.user).toEqual({ sub: 1, roles: ["admin"] })
   })
 
   it("rejects a token whose jti is on the denylist", async () => {
@@ -56,7 +75,7 @@ describe("AuthGuard", () => {
 
   it("skips the denylist lookup for tokens issued before the jti claim", async () => {
     const { req, context } = contextWithToken("tok")
-    extractor.authenticate.mockResolvedValue(7)
+    extractor.authenticate.mockResolvedValue({ userId: 7, isAdmin: false })
 
     const result = await guard.canActivate(context)
 
@@ -114,7 +133,7 @@ describe("AuthGuard", () => {
 
   it("allows a token minted at or after the password change", async () => {
     const { req, context } = contextWithToken("tok")
-    extractor.authenticate.mockResolvedValue(1)
+    extractor.authenticate.mockResolvedValue({ userId: 1, isAdmin: false })
 
     const result = await guard.canActivate(context)
 

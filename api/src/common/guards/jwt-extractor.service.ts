@@ -30,10 +30,16 @@ export class JwtExtractorService {
    *   4. Validate the `sub` claim resolves to a positive integer.
    *   5. Reject tokens minted before the user's last password change.
    *
-   * @returns The authenticated user's id.
+   * @returns The authenticated user's id and admin flag. The admin flag is
+   *          read from the token's `isAdmin` claim and defaults to `false`
+   *          for tokens minted before the claim existed, so legacy tokens
+   *          can never grant admin access.
    * @throws UnauthorizedException at any step when credentials are invalid.
    */
-  async authenticate(header: string | undefined): Promise<number> {
+  async authenticate(header: string | undefined): Promise<{
+    userId: number
+    isAdmin: boolean
+  }> {
     const token = this.extractBearerToken(header ?? "")
     const payload = await this.verifyToken(token)
 
@@ -70,7 +76,13 @@ export class JwtExtractorService {
       }
     }
 
-    return userId
+    return {
+      userId,
+      // Default to false: tokens issued before the isAdmin claim existed
+      // (or tokens for users since demoted without re-login) must never
+      // carry admin privileges.
+      isAdmin: (payload as { isAdmin?: unknown }).isAdmin === true,
+    }
   }
 
   /**

@@ -25,21 +25,23 @@ import {
   type Contract,
 } from "@xstreamroll/contract-tests"
 import request from "supertest"
+
 import { AuditService } from "./audit/audit.service"
 import { AuthController } from "./auth/auth.controller"
 import { AuthService } from "./auth/auth.service"
 import { PasswordResetService } from "./auth/password-reset.service"
 import { TokenDenylistService } from "./auth/token-denylist.service"
 import { User, UsersRepository } from "./auth/users.repository"
-import createJwtConfig, { createRefreshJwtConfig } from "./config/jwt.config"
 import { AuthGuard } from "./common/guards/auth.guard"
 import { JwtExtractorService } from "./common/guards/jwt-extractor.service"
 import { StreamOwnershipGuard } from "./common/guards/stream-ownership.guard"
 import { StreamOwnershipService } from "./common/guards/stream-ownership.service"
+import createJwtConfig, { createRefreshJwtConfig } from "./config/jwt.config"
 import { StreamsRepository } from "./streams/repository/streams.repository"
 import { StreamsController } from "./streams/streams.controller"
 import { StreamsService } from "./streams/streams.service"
 import { TagsRepository } from "./tags/repository/tags.repository"
+import { StreamTagsController } from "./tags/tags.controller"
 import { TagsService } from "./tags/tags.service"
 import { WebhooksService } from "./webhooks/webhooks.service"
 
@@ -73,6 +75,7 @@ class InMemoryUsersRepository {
       email,
       password_hash: passwordHash,
       created_at: new Date(),
+      is_admin: false,
     }
     this.byId.set(user.id, user)
     return user
@@ -108,7 +111,7 @@ describe("Contract provider verification (api)", () => {
         JwtModule.registerAsync({ useFactory: () => createJwtConfig() }),
         CacheModule.register(),
       ],
-      controllers: [StreamsController, AuthController],
+      controllers: [StreamsController, StreamTagsController, AuthController],
       providers: [
         StreamsService,
         TagsService,
@@ -176,6 +179,15 @@ describe("Contract provider verification (api)", () => {
       description: "Seeded for contract verification",
     })
     existingStreamId = String(stream.id)
+
+    // Attach one tag so `list-stream-tags` exercises a non-empty
+    // response (the schema pins the Tag shape, not just the empty case).
+    const tagsRepository = moduleFixture.get(TagsRepository)
+    const seededTag = await tagsRepository.upsertBySlug(
+      "Live Streaming",
+      "live-streaming",
+    )
+    await tagsRepository.attachToStream(stream.id, seededTag.id)
   })
 
   afterAll(async () => {

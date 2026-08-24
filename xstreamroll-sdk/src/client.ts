@@ -1,12 +1,12 @@
 import { HttpClient, HttpRequestError } from "./http"
 import { paginateAll as createIterator, type PaginatedFetcher } from "./pagination"
-
 import {
   ApiError,
   type ApiErrorResponse,
   type AuthTokens,
   type CreateUserDto,
   type CreateWebhookDto,
+  type PagedTags,
   type Stream,
   type StreamConfig,
   type StreamEvent,
@@ -119,6 +119,16 @@ export class StreamingClient {
       console.error("Failed to get stream status:", error)
       throw error
     }
+  }
+
+  /**
+   * Lists the tags attached to a stream (issue #517). Requires the
+   * caller to own the stream — the API returns 403 otherwise.
+   */
+  async getStreamTags(streamId: string): Promise<PagedTags> {
+    return this.requestJson<PagedTags>(`/streams/${streamId}/tags`, {
+      method: "GET",
+    })
   }
 
   // ── Webhooks ──────────────────────────────────────────────────────────────

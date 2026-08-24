@@ -20,10 +20,12 @@
 import {
   allContracts,
   authResponseSchema,
+  pagedTagsSchema,
   streamSchema,
   type Contract,
 } from "@xstreamroll/contract-tests"
 import nock from "nock"
+
 import { StreamingClient } from "../src/client"
 
 const BASE_URL = "http://api.test"
@@ -68,6 +70,35 @@ describe("Consumer contract verification (xstreamroll-sdk)", () => {
 
     expect(scope.isDone()).toBe(true)
     expect(() => streamSchema.parse(result)).not.toThrow()
+    expect(result).toEqual(example)
+  })
+
+  it("getStreamTags() requests exactly what list-stream-tags expects and returns a contract-valid PagedTags", async () => {
+    const c = contract("list-stream-tags")
+    const example = {
+      data: [
+        {
+          id: 1,
+          name: "Live Streaming",
+          slug: "live-streaming",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      page: 1,
+      limit: 50,
+      total: 1,
+      hasMore: false,
+    }
+    // The example itself must be valid per the shared schema, or this
+    // test would be asserting nothing meaningful.
+    expect(() => pagedTagsSchema.parse(example)).not.toThrow()
+
+    const scope = nock(BASE_URL).get("/streams/42/tags").reply(c.response.status, example)
+
+    const result = await client.getStreamTags("42")
+
+    expect(scope.isDone()).toBe(true)
+    expect(() => pagedTagsSchema.parse(result)).not.toThrow()
     expect(result).toEqual(example)
   })
 
