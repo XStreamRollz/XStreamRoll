@@ -3,8 +3,8 @@ echo "Building workspace dependencies..."
 # Build packages that other workspaces reference via file: links.
 # These produce dist/ directories that are gitignored, so they must
 # be compiled before any downstream typecheck can resolve them.
-npx tsc --build packages/types/tsconfig.json || { echo "❌ Build failed: packages/types"; exit 1; }
-npx tsc --build tests/contracts/tsconfig.json || { echo "❌ Build failed: tests/contracts"; exit 1; }
+(cd packages/types && npm run build) || { echo "❌ Build failed: packages/types"; exit 1; }
+(cd tests/contracts && npm run build) || { echo "❌ Build failed: tests/contracts"; exit 1; }
 
 echo "Running type-checks on all packages..."
 
