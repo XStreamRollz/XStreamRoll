@@ -1,0 +1,9 @@
+# CODEOWNERS — automatic review assignment per package
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+/api/                    @xstreamroll/api-maintainers
+/app/                    @xstreamroll/app-maintainers
+/xstreamroll-sdk/        @xstreamroll/sdk-maintainers
+/xstreamroll-processing/ @xstreamroll/processing-maintainers
+/database/               @xstreamroll/infra-maintainers
+/.github/                @xstreamroll/infra-maintainers

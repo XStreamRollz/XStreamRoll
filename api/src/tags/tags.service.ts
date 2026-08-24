@@ -3,10 +3,11 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common"
-import { PaginatedResult } from "../common/dto/pagination.dto"
+
 import { TagsRepository } from "./repository/tags.repository"
 import { slugify } from "./slugify"
 import { Tag } from "./tag.entity"
+import { PaginatedResult } from "../common/dto/pagination.dto"
 
 export interface PagedTags extends PaginatedResult<Tag> {
   hasMore: boolean
@@ -24,6 +25,43 @@ export class TagsService {
       limit,
       total,
       hasMore: page * limit < total,
+    }
+  }
+
+  /**
+   * Loads every tag attached to any stream in `streamIds`, grouped by
+   * stream id. Powers the inline `tags` field on `GET /streams`
+   * (issue #330) so the dashboard can render tag chips without a
+   * second round-trip per stream.
+   */
+  async listForStreamIds(
+    streamIds: number[],
+  ): Promise<Map<number, Tag[]>> {
+    // Short-circuit: empty input avoids a DB roundtrip (both in-memory
+    // and DB-backed repositories short-circuit at their level too).
+    if (streamIds.length === 0) return new Map()
+    return this.tags.listForStreamIds(streamIds)
+  }
+
+  /**
+   * Loads the tags attached to a single stream, reusing the batch
+   * `listForStreamIds` path (issue #330) so the DB cost stays at one
+   * round-trip instead of a per-tag query. Returns the `PagedTags`
+   * envelope the app's `useStreamTags` hook parses (issue #517).
+   */
+  async listForStream(
+    streamId: number,
+    page = 1,
+    limit = 50,
+  ): Promise<PagedTags> {
+    const tags = (await this.listForStreamIds([streamId])).get(streamId) ?? []
+    const offset = (page - 1) * limit
+    return {
+      data: tags.slice(offset, offset + limit),
+      page,
+      limit,
+      total: tags.length,
+      hasMore: page * limit < tags.length,
     }
   }
 

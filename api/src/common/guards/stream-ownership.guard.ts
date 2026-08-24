@@ -3,37 +3,39 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
-  UnauthorizedException,
 } from "@nestjs/common"
-import { Request } from "express"
+import type { Request } from "express"
+import { AuthGuard } from "./auth.guard"
 import { StreamOwnershipService } from "./stream-ownership.service"
 
 /**
  * Guard that ensures the requesting user owns the stream referenced by
- * the `:id` URL parameter. Until the JWT auth pipeline lands the
- * authenticated user id is sourced from the `X-User-Id` header; the
- * controller signature stays the same so the only thing that will need
- * updating later is *how* `userId` is extracted (e.g. `req.user.sub`).
+ * the `:id` URL parameter.  Authentication is delegated to
+ * {@link AuthGuard} so that every security fix applied there
+ * (denylist checks, password-change invalidation, etc.) automatically
+ * applies to ownership-gated routes as well.
  */
 @Injectable()
 export class StreamOwnershipGuard implements CanActivate {
-  constructor(private readonly ownership: StreamOwnershipService) {}
+  constructor(
+    private readonly authGuard: AuthGuard,
+    private readonly ownership: StreamOwnershipService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    // Delegate the full JWT authentication pipeline to AuthGuard.
+    // It will throw UnauthorizedException on any auth failure.
+    await this.authGuard.canActivate(context)
+
     const req = context.switchToHttp().getRequest<Request>()
+    const userId = (req as Request & { auth?: { userId: number } }).auth?.userId
 
-    const rawUserId = (req.header("x-user-id") ?? "").trim()
-    if (!rawUserId) {
-      throw new UnauthorizedException(
-        "X-User-Id header is required (placeholder until JWT auth lands)",
-      )
-    }
-    const userId = Number(rawUserId)
-    if (!Number.isInteger(userId) || userId <= 0) {
-      throw new UnauthorizedException("X-User-Id must be a positive integer")
+    if (userId === undefined) {
+      throw new ForbiddenException("authentication required")
     }
 
-    const rawStreamId = req.params?.id
+    const rawStreamId = (req as Request & { params?: { id?: string } }).params
+      ?.id
     const streamId = Number(rawStreamId)
     if (!Number.isInteger(streamId) || streamId <= 0) {
       throw new ForbiddenException("invalid stream id")
@@ -46,9 +48,6 @@ export class StreamOwnershipGuard implements CanActivate {
       )
     }
 
-    // Stash on the request so downstream handlers can read the actor
-    // without re-parsing the header.
-    ;(req as Request & { auth?: { userId: number } }).auth = { userId }
     return true
   }
 }

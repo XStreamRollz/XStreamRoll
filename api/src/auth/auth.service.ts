@@ -1,24 +1,39 @@
+import { randomUUID } from "node:crypto"
+
 import {
   ConflictException,
   Injectable,
+  Inject,
   UnauthorizedException,
 } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 import * as bcrypt from "bcrypt"
-import { RegisterDto } from "./dto/register.dto"
+
+
+import { ForgotPasswordDto } from "./dto/forgot-password.dto"
 import { LoginDto } from "./dto/login.dto"
+import { RegisterDto } from "./dto/register.dto"
+import { ResetPasswordDto } from "./dto/reset-password.dto"
+import { PasswordResetService } from "./password-reset.service"
+import { TokenDenylistService, TokenJti } from "./token-denylist.service"
 import { User, UsersRepository } from "./users.repository"
+import { AuditAction } from "../audit/audit-action.enum"
+import { AuditService } from "../audit/audit.service"
+
+import type { User as SharedUser } from "@xstreamroll/types"
+import type { Request } from "express"
 
 /** Rounds for bcrypt key derivation (auto-salt). */
 const BCRYPT_ROUNDS = 12
 
-/** Public-safe user representation — never includes the password hash. */
-export interface SafeUser {
-  id: number
-  username: string
-  email: string
-  createdAt: Date
-}
+/**
+ * Public-safe user representation — never includes the password hash.
+ * Matches the `@xstreamroll/types#User` wire contract; `id` is
+ * serialized to a string even though the `users.id` column is a
+ * numeric `SERIAL`, for the same reason as `Stream.id` — see
+ * `streams/dto/stream-response.dto.ts`.
+ */
+export type SafeUser = SharedUser
 
 export interface AuthResponse {
   user: SafeUser
@@ -29,19 +44,33 @@ export interface AuthResponse {
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly jwtService: JwtService,
+    @Inject("JWT_REFRESH") private readonly refreshJwt: JwtService,
+    private readonly accessJwt: JwtService,
     private readonly usersRepository: UsersRepository,
+    private readonly passwordResetService: PasswordResetService,
+    private readonly tokenDenylistService: TokenDenylistService,
+    private readonly auditService: AuditService,
   ) {}
 
   /**
    * Register a new user.
    *
    * Validates email and username uniqueness, hashes the password with bcrypt,
-   * and returns a signed JWT together with a public-safe user object.
+   * and returns signed JWTs together with a public-safe user object.
+   * Logs registration failures with IP and user-agent for security monitoring.
    */
-  async register(dto: RegisterDto): Promise<AuthResponse> {
+  async register(dto: RegisterDto, req: Request): Promise<AuthResponse> {
+    const ip = this.extractClientIp(req)
+    const _userAgent = req.headers["user-agent"] ?? "unknown"
+
     const emailExists = await this.usersRepository.findByEmail(dto.email)
     if (emailExists) {
+      await this.auditService.log(
+        null,
+        AuditAction.AUTH_REGISTER_FAILURE,
+        { reason: "email_conflict", email: dto.email },
+        ip,
+      )
       throw new ConflictException("email is already registered")
     }
 
@@ -49,6 +78,12 @@ export class AuthService {
       dto.username,
     )
     if (usernameExists) {
+      await this.auditService.log(
+        null,
+        AuditAction.AUTH_REGISTER_FAILURE,
+        { reason: "username_conflict", username: dto.username },
+        ip,
+      )
       throw new ConflictException("username is already taken")
     }
 
@@ -60,9 +95,16 @@ export class AuthService {
       passwordHash,
     )
 
+    await this.auditService.log(
+      null,
+      AuditAction.AUTH_REGISTER_SUCCESS,
+      { email: dto.email },
+      ip,
+    )
+
     return {
       user: toSafeUser(user),
-      accessToken: this.signToken(user),
+      accessToken: this.signAccessToken(user),
       refreshToken: this.signRefreshToken(user),
     }
   }
@@ -71,59 +113,220 @@ export class AuthService {
    * Authenticate an existing user.
    *
    * Looks up the user by email, compares the provided password against
-   * the stored bcrypt hash, and returns a JWT on success.
+   * the stored bcrypt hash, and returns JWTs on success.
+   * Logs all authentication failures with IP and user-agent for threat monitoring.
    */
-  async login(dto: LoginDto): Promise<AuthResponse> {
+  async login(dto: LoginDto, req: Request): Promise<AuthResponse> {
+    const ip = this.extractClientIp(req)
+
     const user = await this.usersRepository.findByEmail(dto.email)
     if (!user) {
+      await this.auditService.log(
+        null,
+        AuditAction.AUTH_LOGIN_FAILURE,
+        { reason: "user_not_found", email: dto.email },
+        ip,
+      )
       throw new UnauthorizedException("invalid email or password")
     }
 
     const valid = await bcrypt.compare(dto.password, user.password_hash)
     if (!valid) {
+      await this.auditService.log(
+        user.id,
+        AuditAction.AUTH_LOGIN_FAILURE,
+        { reason: "invalid_password", email: dto.email },
+        ip,
+      )
       throw new UnauthorizedException("invalid email or password")
+    }
+
+    await this.auditService.log(
+      user.id,
+      AuditAction.AUTH_LOGIN_SUCCESS,
+      { email: dto.email },
+      ip,
+    )
+
+    return {
+      user: toSafeUser(user),
+      accessToken: this.signAccessToken(user),
+      refreshToken: this.signRefreshToken(user),
+    }
+  }
+
+  async refresh(req: Request): Promise<AuthResponse> {
+    const refreshToken = req.cookies?.refresh_token
+    if (!refreshToken) {
+      throw new UnauthorizedException("missing refresh token")
+    }
+
+    await this.verifyRefreshToken(refreshToken)
+
+    const payload = this.refreshJwt.decode(refreshToken) as {
+      sub?: number
+      jti?: string
+    } | null
+    const userId = payload?.sub
+    if (!userId) {
+      throw new UnauthorizedException("invalid refresh token")
+    }
+
+    // Issue #510: a revoked refresh token must not mint a new token pair.
+    // The refresh token always carries a `jti` (see signRefreshToken), so a
+    // missing jti here means a legacy token — which cannot have been
+    // revoked and is left to expire naturally.
+    const jti = payload.jti
+    if (
+      typeof jti === "string" &&
+      jti.length > 0 &&
+      (await this.tokenDenylistService.isRevoked(
+        jti as TokenJti,
+      ))
+    ) {
+      throw new UnauthorizedException("refresh token has been revoked")
+    }
+
+    const user = await this.usersRepository.findById(userId)
+    if (!user) {
+      throw new UnauthorizedException("invalid refresh token")
     }
 
     return {
       user: toSafeUser(user),
-      accessToken: this.signToken(user),
+      accessToken: this.signAccessToken(user),
       refreshToken: this.signRefreshToken(user),
+    }
+  }
+
+  async forgotPassword(dto: ForgotPasswordDto): Promise<void> {
+    await this.passwordResetService.sendResetToken(dto.email)
+  }
+
+  async resetPassword(dto: ResetPasswordDto): Promise<void> {
+    await this.passwordResetService.resetPassword(dto.token, dto.password)
+  }
+
+  async logout(
+    authorizationHeader: string,
+    refreshToken?: string,
+  ): Promise<void> {
+    const token = this.extractBearerToken(authorizationHeader)
+    await this.verifyToken(token)
+
+    const payload = this.accessJwt.decode(token) as { exp?: number } | null
+    const expiresAt = typeof payload?.exp === "number" ? payload.exp : undefined
+    if (!expiresAt) {
+      throw new UnauthorizedException("invalid access token")
+    }
+
+    const ttlSeconds = Math.floor(expiresAt - Date.now() / 1000)
+    if (ttlSeconds <= 0) {
+      throw new UnauthorizedException("access token has expired")
+    }
+
+    // Issue #510: revoke by the token's `jti` — the same key the guard's
+    // denylist lookup reads. Revoking the raw JWT string here was the bug:
+    // the two sides hashed different values and the entry never matched.
+    await this.tokenDenylistService.revoke(
+      this.tokenDenylistService.decodeJti(token),
+      ttlSeconds,
+    )
+
+    if (refreshToken) {
+      const refreshPayload = this.refreshJwt.decode(refreshToken) as {
+        exp?: number
+      } | null
+      const refreshExpiresAt =
+        typeof refreshPayload?.exp === "number" ? refreshPayload.exp : undefined
+      if (refreshExpiresAt) {
+        const refreshTtl = Math.floor(refreshExpiresAt - Date.now() / 1000)
+        if (refreshTtl > 0) {
+          await this.tokenDenylistService.revoke(
+            this.tokenDenylistService.decodeJti(refreshToken),
+            refreshTtl,
+          )
+        }
+      }
+    }
+  }
+
+  private async verifyToken(token: string): Promise<void> {
+    try {
+      await this.accessJwt.verifyAsync(token)
+    } catch {
+      throw new UnauthorizedException("invalid or expired access token")
+    }
+  }
+
+  private async verifyRefreshToken(token: string): Promise<void> {
+    try {
+      await this.refreshJwt.verifyAsync(token)
+    } catch {
+      throw new UnauthorizedException("invalid or expired refresh token")
     }
   }
 
   /**
-   * Refresh an access token using a valid refresh token.
-   *
-   * Accepts the refresh token either from the request body (SDK path) or
-   * from the httpOnly cookie (browser proxy path). Validates the token,
-   * looks up the user, and returns a fresh token pair.
+   * Extract client IP from request.
+   * Checks X-Forwarded-For header (for proxies) before falling back to connection IP.
    */
-  async refresh(refreshToken: string): Promise<AuthResponse> {
-    let payload: { sub: number }
-    try {
-      payload = this.jwtService.verify<{ sub: number }>(refreshToken)
-    } catch {
-      throw new UnauthorizedException("invalid or expired refresh token")
+  private extractClientIp(req: Request): string {
+    const xForwardedFor = req.headers["x-forwarded-for"]
+    if (typeof xForwardedFor === "string") {
+      return xForwardedFor.split(",")[0].trim()
     }
-
-    const user = await this.usersRepository.findById(payload.sub)
-    if (!user) {
-      throw new UnauthorizedException("user not found")
+    if (Array.isArray(xForwardedFor)) {
+      return xForwardedFor[0]
     }
-
-    return {
-      user: toSafeUser(user),
-      accessToken: this.signToken(user),
-      refreshToken: this.signRefreshToken(user),
-    }
+    return req.ip ?? "unknown"
   }
 
-  /** Create a short-lived JWT access token for the given user. */
-  private signToken(user: User): string {
-    return this.jwtService.sign({
+  private extractBearerToken(header: string): string {
+    const raw = header?.trim()
+    if (!raw) {
+      throw new UnauthorizedException(
+        "Authorization header is required for logout",
+      )
+    }
+
+    const match = raw.match(/^Bearer\s+(.+)$/i)
+    if (!match) {
+      throw new UnauthorizedException(
+        "Authorization header must contain a Bearer token",
+      )
+    }
+
+    return match[1]
+  }
+
+  /**
+   * Create a short-lived JWT access token for the given user.
+   *
+   * The token carries a `jti` so it can be revoked via the denylist
+   * (issue #510) — tokens minted before this claim existed cannot be
+   * revoked and simply expire naturally.
+   */
+  private signAccessToken(user: User): string {
+    return this.accessJwt.sign({
       sub: user.id,
       email: user.email,
       username: user.username,
+      passwordChangedAt:
+        user.password_changed_at?.getTime() ?? user.created_at.getTime(),
+      jti: randomUUID(),
+    })
+  }
+
+  /** Create a long-lived JWT refresh token for the given user. */
+  private signRefreshToken(user: User): string {
+    return this.refreshJwt.sign({
+      sub: user.id,
+      email: user.email,
+      username: user.username,
+      passwordChangedAt:
+        user.password_changed_at?.getTime() ?? user.created_at.getTime(),
+      jti: randomUUID(),
     })
   }
 
@@ -137,11 +340,11 @@ export class AuthService {
 }
 
 /** Strip the password hash from a user row before returning to clients. */
-function toSafeUser(row: User): SafeUser {
+export function toSafeUser(row: User): SafeUser {
   return {
-    id: row.id,
+    id: String(row.id),
     username: row.username,
     email: row.email,
-    createdAt: row.created_at,
+    createdAt: row.created_at.toISOString(),
   }
 }

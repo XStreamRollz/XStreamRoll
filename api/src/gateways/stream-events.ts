@@ -31,3 +31,16 @@ export interface StreamErrorPayload {
   code: string
   message: string
 }
+
+/** Canonical event name broadcast when a notification is created. */
+export const NOTIFICATION_EVENTS = Object.freeze({
+  NEW: "notification:new",
+} as const)
+
+export interface NotificationCreatedPayload {
+  id: number
+  userId: string | number
+  type: string
+  payload: Record<string, unknown>
+  createdAt: string
+}

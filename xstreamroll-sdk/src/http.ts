@@ -1,15 +1,17 @@
+import { type RetryOptions, withRetry } from "./retry"
+
 /** A function that transforms a request config before it is sent. */
 export type RequestInterceptor = (
-  config: RequestInit & { url: string }
+  config: RequestInit & { url: string },
 ) => RequestInit & { url: string }
 
 /** A function that transforms a response after it is received. */
-export type ResponseInterceptor = (response: Response) => Response | Promise<Response>
+export type ResponseInterceptor = (
+  response: Response,
+) => Response | Promise<Response>
 
 /** Opaque handle returned when registering an interceptor. */
 export type InterceptorHandle = number
-
-import { withRetry, type RetryOptions } from "./retry"
 
 /** Options that control retry behaviour for a single HttpClient. */
 export interface HttpClientRetryOptions extends RetryOptions {
@@ -47,8 +49,14 @@ export class HttpRequestError extends Error {
 export class HttpClient {
   private readonly baseUrl: string
   private nextId = 0
-  private readonly requestInterceptors = new Map<InterceptorHandle, RequestInterceptor>()
-  private readonly responseInterceptors = new Map<InterceptorHandle, ResponseInterceptor>()
+  private readonly requestInterceptors = new Map<
+    InterceptorHandle,
+    RequestInterceptor
+  >()
+  private readonly responseInterceptors = new Map<
+    InterceptorHandle,
+    ResponseInterceptor
+  >()
   private readonly retryOptions: HttpClientRetryOptions
 
   constructor(baseUrl: string, retryOptions: HttpClientRetryOptions = {}) {
@@ -74,7 +82,10 @@ export class HttpClient {
   }
 
   async request(path: string, init: RequestInit = {}): Promise<Response> {
-    let config: RequestInit & { url: string } = { ...init, url: `${this.baseUrl}${path}` }
+    let config: RequestInit & { url: string } = {
+      ...init,
+      url: `${this.baseUrl}${path}`,
+    }
 
     for (const fn of this.requestInterceptors.values()) {
       config = fn(config)
@@ -119,6 +130,36 @@ export class HttpClient {
         this.retryOptions.maxAttempts ?? 3,
       )
     }
+  }
+
+  /** GET convenience wrapper around {@link request}. */
+  get(path: string, init: RequestInit = {}): Promise<Response> {
+    return this.request(path, { ...init, method: "GET" })
+  }
+
+  /**
+   * POST convenience wrapper that JSON-serialises `body` and sets
+   * `Content-Type: application/json` when a body is provided.
+   */
+  post(
+    path: string,
+    body?: unknown,
+    init: RequestInit = {},
+  ): Promise<Response> {
+    const headers: Record<string, string> = {
+      ...(init.headers as Record<string, string> | undefined),
+    }
+    let requestBody = init.body
+    if (body !== undefined) {
+      headers["Content-Type"] = headers["Content-Type"] ?? "application/json"
+      requestBody = JSON.stringify(body)
+    }
+    return this.request(path, {
+      ...init,
+      method: "POST",
+      headers,
+      body: requestBody,
+    })
   }
 }
 

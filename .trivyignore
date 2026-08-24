@@ -1,0 +1,17 @@
+# Trivy ignore file — XStreamRoll
+#
+# Use this file to suppress vulnerability findings that have been triaged as
+# false positives or accepted risks. One ID per line. Lines starting with `#`
+# are comments.
+#
+# Format:
+#   <VULNERABILITY-ID>             # suppress by CVE/Trivy ID
+# or
+#   <VULNERABILITY-ID>:<expiration> # suppress until YYYY-MM-DD
+#
+# Examples (uncomment & adjust when triaging a real finding):
+# CVE-2024-12345     # Investigated 2026-07-26 — only present in dev tooling, not in production images.
+# CVE-2025-67890:2027-01-01  # Temporary suppression while upstream fix is verified.
+#
+# Before adding an entry, document the rationale in the corresponding PR so
+# future maintainers can audit the suppressions.

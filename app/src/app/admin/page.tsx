@@ -1,7 +1,9 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
-import { AdminDashboard } from "./admin-dashboard"
+
 import { getCurrentUser, hasRole } from "@/lib/api/current-user"
+
+import { AdminDashboard } from "./admin-dashboard"
 
 export const metadata: Metadata = {
   title: "Admin Dashboard | XStreamRoll",

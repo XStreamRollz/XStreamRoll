@@ -1,11 +1,18 @@
+import { CacheModule } from "@nestjs/cache-manager"
 import { Module } from "@nestjs/common"
+
+import { StreamsController } from "./streams.controller"
+import { AuthModule } from "../auth/auth.module"
+import { StreamsDbRepository } from "./repository/streams-db.repository"
+import { StreamsRepository } from "./repository/streams.repository"
+import { StreamsService } from "./streams.service"
 import { AuthGuard } from "../common/guards/auth.guard"
 import { StreamOwnershipGuard } from "../common/guards/stream-ownership.guard"
 import { StreamOwnershipService } from "../common/guards/stream-ownership.service"
-import { StreamsDbRepository } from "./repository/streams-db.repository"
-import { StreamsRepository } from "./repository/streams.repository"
-import { StreamsController } from "./streams.controller"
-import { StreamsService } from "./streams.service"
+import { streamsCacheConfig } from "../config/cache.config"
+import { GatewaysModule } from "../gateways/gateways.module"
+import { TagsModule } from "../tags/tags.module"
+import { WebhooksModule } from "../webhooks/webhooks.module"
 
 /**
  * Injection token used to swap the streams repository implementation.
@@ -21,6 +28,17 @@ import { StreamsService } from "./streams.service"
 const isTest = process.env.NODE_ENV === "test"
 
 @Module({
+  imports: [
+    AuthModule,
+    WebhooksModule,
+    // TagsModule provides TagsService so StreamsService.list() can
+    // batch-load tags for the streams on the current page (#330).
+    TagsModule,
+    // GatewaysModule provides StreamsGateway so StreamsService can
+    // broadcast status transitions to subscribed sockets (#519).
+    GatewaysModule,
+    CacheModule.register(streamsCacheConfig()),
+  ],
   controllers: [StreamsController],
   providers: [
     StreamsService,

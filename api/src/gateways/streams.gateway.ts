@@ -1,5 +1,4 @@
-import { Logger } from "@nestjs/common"
-import { JwtService } from "@nestjs/jwt"
+import { Logger, Optional } from "@nestjs/common"
 import {
   ConnectedSocket,
   OnGatewayConnection,
@@ -9,13 +8,19 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from "@nestjs/websockets"
-import type { Server, Socket } from "socket.io"
+
 import {
+  NOTIFICATION_EVENTS,
+  NotificationCreatedPayload,
   STREAM_EVENTS,
   StreamErrorPayload,
   StreamStartedPayload,
   StreamStoppedPayload,
 } from "./stream-events"
+import { JwtExtractorService } from "../common/guards/jwt-extractor.service"
+import { MetricsService } from "../metrics/metrics.service"
+
+import type { Server, Socket } from "socket.io"
 
 interface AuthenticatedSocket extends Socket {
   data: {
@@ -24,9 +29,55 @@ interface AuthenticatedSocket extends Socket {
   }
 }
 
-interface JwtPayload {
-  sub: string | number
-  [key: string]: unknown
+/** Origin used when `CORS_ORIGIN` is unset or empty — keeps local dev working. */
+const DEFAULT_CORS_ORIGIN = "http://localhost:3000"
+
+function isValidUrl(origin: string): boolean {
+  try {
+    const parsed = new URL(origin)
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Resolve the trusted WebSocket CORS origin(s) from the environment.
+ *
+ * Mirrors the REST API policy in `main.ts`
+ * (`process.env.CORS_ORIGIN || "http://localhost:3000"`) but additionally
+ * accepts a comma-separated list so several trusted origins can be allowed.
+ * Returns a single string when one origin is configured and an array when
+ * multiple are; socket.io matches the handshake `Origin` header against this
+ * value and rejects any origin not on the list, closing the Cross-Site
+ * WebSocket Hijacking hole left by the previous `origin: "*"`.
+ */
+export function resolveCorsOrigins(
+  raw: string | undefined = process.env.CORS_ORIGIN,
+): string | string[] {
+  const origins = (raw ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0)
+
+  if (origins.length === 0) {
+    return DEFAULT_CORS_ORIGIN
+  }
+
+  for (const origin of origins) {
+    if (!isValidUrl(origin)) {
+      const errMsg = `Invalid CORS_ORIGIN "${origin}": must be a well-formed HTTP/HTTPS URL`
+      if (process.env.NODE_ENV === "production") {
+        console.error(`Environment validation failed:\n  - CORS_ORIGIN: ${errMsg}`)
+        process.exit(1)
+      } else {
+        console.warn(`[CORS Warning] ${errMsg}; falling back to default origin ${DEFAULT_CORS_ORIGIN}`)
+        return DEFAULT_CORS_ORIGIN
+      }
+    }
+  }
+
+  return origins.length === 1 ? origins[0] : origins
 }
 
 /**
@@ -35,7 +86,18 @@ interface JwtPayload {
  *
  * Authentication: clients must present a JWT either via the `auth.token`
  * handshake payload or an `Authorization: Bearer <token>` header. Invalid
- * or missing tokens result in immediate disconnection.
+ * or missing tokens result in immediate disconnection. Verification runs
+ * through {@link JwtExtractorService} — the same pipeline as the REST
+ * guards — so revoked tokens and tokens minted before the user's last
+ * password change are rejected on socket connect too (issue #510).
+ *
+ * Issue #319 — the previous `?token=` query-string fallback has been
+ * removed. Reverse proxies (nginx, CloudFront, etc.) routinely log the
+ * full request URL including query parameters to access logs, which
+ * meant any JWT carried in `?token=` was persisted in plaintext. Tokens
+ * MUST now travel via the in-handshake `auth` payload or the standard
+ * Authorization header — both are NOT logged by CORS-aware reverse
+ * proxies.
  *
  * Wire events (server → client):
  *   - `stream:started` { streamId, userId, startedAt }
@@ -49,7 +111,7 @@ interface JwtPayload {
  */
 @WebSocketGateway({
   namespace: "/streams",
-  cors: { origin: "*" },
+  cors: { origin: resolveCorsOrigins(), credentials: true },
 })
 export class StreamsGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
@@ -59,7 +121,10 @@ export class StreamsGateway
   @WebSocketServer()
   public server!: Server
 
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtExtractorService: JwtExtractorService,
+    @Optional() private readonly metricsService?: MetricsService,
+  ) {}
 
   afterInit(_server: Server): void {
     this.logger.log("StreamsGateway initialised on namespace /streams")
@@ -69,20 +134,41 @@ export class StreamsGateway
     try {
       const token = this.extractToken(client)
       if (!token) {
-        this.disconnectWithError(client, "MISSING_TOKEN", "Authentication token required")
+        this.disconnectWithError(
+          client,
+          "MISSING_TOKEN",
+          "Authentication token required",
+        )
         return
       }
 
-      const payload = await this.jwtService.verifyAsync<JwtPayload>(token)
-      client.data.userId = payload.sub
-
-      this.logger.log(
-        `client ${client.id} connected (user=${String(payload.sub)})`,
+      // Issue #510: route through the same pipeline as the REST guards so
+      // revoked tokens and tokens minted before the user's last password
+      // change are rejected here too — the JWT's `jti` is checked against
+      // the denylist inside authenticate().
+      const userId = await this.jwtExtractorService.authenticate(
+        `Bearer ${token}`,
       )
-      client.emit("connected", { userId: payload.sub })
+      client.data.userId = userId
+
+      // Every authenticated client joins its own per-user room so
+      // server-initiated pushes (e.g. notifications) can target a user
+      // without requiring an explicit subscribe handshake.
+      void client.join(this.userRoomFor(userId))
+
+      this.metricsService?.websocketConnectionsTotal.inc()
+      this.metricsService?.websocketActiveConnections.inc()
+
+      this.logger.log(`client ${client.id} connected (user=${userId})`)
+      client.emit("connected", { userId })
     } catch (err) {
-      const message = err instanceof Error ? err.message : "unknown verification error"
-      this.disconnectWithError(client, "INVALID_TOKEN", `JWT verification failed: ${message}`)
+      const message =
+        err instanceof Error ? err.message : "unknown verification error"
+      this.disconnectWithError(
+        client,
+        "INVALID_TOKEN",
+        `JWT verification failed: ${message}`,
+      )
     }
   }
 
@@ -92,6 +178,7 @@ export class StreamsGateway
     // `try/catch` exists to make sure a buggy logger never throws back
     // into the framework and crashes the worker.
     try {
+      this.metricsService?.websocketActiveConnections.dec()
       this.logger.log(
         `client ${client.id} disconnected (user=${String(client.data?.userId ?? "anon")})`,
       )
@@ -126,6 +213,9 @@ export class StreamsGateway
     @ConnectedSocket() client: AuthenticatedSocket,
     payload: { streamId?: string | number } = {},
   ): { ok: boolean; room?: string; error?: string } {
+    if (!client.data?.userId) {
+      return { ok: false, error: "unauthenticated" }
+    }
     if (payload.streamId === undefined || payload.streamId === null) {
       return { ok: false, error: "streamId required" }
     }
@@ -141,15 +231,31 @@ export class StreamsGateway
    * ------------------------------------------------------------------ */
 
   emitStarted(payload: StreamStartedPayload): void {
-    this.server.to(this.roomFor(payload.streamId)).emit(STREAM_EVENTS.STARTED, payload)
+    this.server
+      .to(this.roomFor(payload.streamId))
+      .emit(STREAM_EVENTS.STARTED, payload)
   }
 
   emitStopped(payload: StreamStoppedPayload): void {
-    this.server.to(this.roomFor(payload.streamId)).emit(STREAM_EVENTS.STOPPED, payload)
+    this.server
+      .to(this.roomFor(payload.streamId))
+      .emit(STREAM_EVENTS.STOPPED, payload)
   }
 
   emitError(payload: StreamErrorPayload): void {
-    this.server.to(this.roomFor(payload.streamId)).emit(STREAM_EVENTS.ERROR, payload)
+    this.server
+      .to(this.roomFor(payload.streamId))
+      .emit(STREAM_EVENTS.ERROR, payload)
+  }
+
+  /**
+   * Push a newly created notification to every socket the target user has
+   * open. Scoped to the user's own room so other clients never see it.
+   */
+  emitNotification(payload: NotificationCreatedPayload): void {
+    this.server
+      .to(this.userRoomFor(payload.userId))
+      .emit(NOTIFICATION_EVENTS.NEW, payload)
   }
 
   /* -------------------------------------------------------------- */
@@ -158,9 +264,21 @@ export class StreamsGateway
     return `stream:${String(streamId)}`
   }
 
+  private userRoomFor(userId: string | number): string {
+    return `user:${String(userId)}`
+  }
+
+  /**
+   * Extract the client's JWT from the handshake. Issue #319: the
+   * `?token=` query-string fallback has been removed entirely — see the
+   * class-level JSDoc for the security rationale.
+   */
   private extractToken(client: Socket): string | null {
     // Preferred: socket.io handshake auth payload — `io(url, { auth: { token }})`
-    const handshakeAuth = (client.handshake?.auth ?? {}) as Record<string, unknown>
+    const handshakeAuth = (client.handshake?.auth ?? {}) as Record<
+      string,
+      unknown
+    >
     const rawAuthToken = handshakeAuth["token"]
     if (typeof rawAuthToken === "string" && rawAuthToken.length > 0) {
       return rawAuthToken
@@ -168,21 +286,21 @@ export class StreamsGateway
 
     // Fallback: `Authorization: Bearer <token>` header.
     const authHeader = client.handshake?.headers?.authorization
-    if (typeof authHeader === "string" && authHeader.toLowerCase().startsWith("bearer ")) {
+    if (
+      typeof authHeader === "string" &&
+      authHeader.toLowerCase().startsWith("bearer ")
+    ) {
       return authHeader.slice(7).trim() || null
-    }
-
-    // Last resort: `?token=` query string (useful for in-browser clients
-    // that cannot set custom headers).
-    const queryToken = client.handshake?.query?.token
-    if (typeof queryToken === "string" && queryToken.length > 0) {
-      return queryToken
     }
 
     return null
   }
 
-  private disconnectWithError(client: Socket, code: string, message: string): void {
+  private disconnectWithError(
+    client: Socket,
+    code: string,
+    message: string,
+  ): void {
     this.logger.warn(`rejecting client ${client.id}: [${code}] ${message}`)
     client.emit(STREAM_EVENTS.ERROR, {
       streamId: "",

@@ -1,30 +1,17 @@
 import { Module } from "@nestjs/common"
-import { JwtModule } from "@nestjs/jwt"
+
 import { StreamsGateway } from "./streams.gateway"
+import { AuthModule } from "../auth/auth.module"
+import { MetricsModule } from "../metrics/metrics.module"
 
 /**
- * Bundles the WebSocket gateway(s) together with the JwtModule used to
- * verify handshake tokens. JWT secret is loaded from the JWT_SECRET
- * environment variable; a dev-only fallback keeps local boots painless
- * while still surfacing the requirement loudly in production logs.
+ * Bundles the WebSocket gateway(s). Handshake authentication routes
+ * through `JwtExtractorService` (provided by AuthModule) so socket
+ * connections run the exact same verification, denylist, and
+ * password-change checks as the REST guards.
  */
 @Module({
-  imports: [
-    JwtModule.registerAsync({
-      useFactory: () => {
-        const secret = process.env.JWT_SECRET
-        if (!secret && process.env.NODE_ENV === "production") {
-          throw new Error(
-            "JWT_SECRET must be set in production for WebSocket auth",
-          )
-        }
-        return {
-          secret: secret ?? "dev-insecure-secret-change-me",
-          signOptions: { expiresIn: "1h" },
-        }
-      },
-    }),
-  ],
+  imports: [MetricsModule, AuthModule],
   providers: [StreamsGateway],
   exports: [StreamsGateway],
 })

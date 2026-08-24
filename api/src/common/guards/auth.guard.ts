@@ -1,39 +1,35 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  Injectable,
-  UnauthorizedException,
-} from "@nestjs/common"
+import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common"
+
+import { JwtExtractorService } from "./jwt-extractor.service"
+
 import type { Request } from "express"
 
 /**
- * Lightweight auth guard that extracts the authenticated user id from the
- * `X-User-Id` header. This is a placeholder until the full JWT auth
- * pipeline lands — at that point the guard will read `req.user.sub`
- * instead.
+ * Auth guard that validates a JWT access token from the Authorization header
+ * and rejects revoked tokens.
  *
  * Apply with `@UseGuards(AuthGuard)` on controllers or individual
  * handlers that require authentication.
  */
 @Injectable()
 export class AuthGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
+  constructor(private readonly jwtExtractor: JwtExtractorService) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<Request>()
+    const { userId, isAdmin } = await this.jwtExtractor.authenticate(
+      req.header("authorization"),
+    )
 
-    const rawUserId = (req.header("x-user-id") ?? "").trim()
-    if (!rawUserId) {
-      throw new UnauthorizedException(
-        "X-User-Id header is required (placeholder until JWT auth lands)",
-      )
+    const authenticatedReq = req as Request & {
+      auth?: { userId: number }
+      user?: { sub: number; roles: string[] }
     }
-    const userId = Number(rawUserId)
-    if (!Number.isInteger(userId) || userId <= 0) {
-      throw new UnauthorizedException("X-User-Id must be a positive integer")
-    }
-
-    // Stash on the request so downstream handlers / guards can access
-    // the authenticated user without re-parsing.
-    ;(req as Request & { auth?: { userId: number } }).auth = { userId }
+    authenticatedReq.auth = { userId }
+    // Issue #511: roles are derived exclusively from the token's isAdmin
+    // claim — never from request headers. A token without the claim yields
+    // an empty role set, so RolesGuard denies admin-gated routes.
+    authenticatedReq.user = { sub: userId, roles: isAdmin ? ["admin"] : [] }
     return true
   }
 }

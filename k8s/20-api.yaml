@@ -1,0 +1,199 @@
+# API Deployment — the NestJS backend service.
+# ---------------------------------------------------------------------------
+# Exposing:
+#   • Service `api`:3001 -> pod :3001
+#   • Liveness  -> GET /health/live  (no dependency checks; also aliased at
+#                  /health/livez for K8s convention compatibility)
+#   • Readiness -> GET /health (checks DB, heap memory, and event loop lag;
+#                  returns 503 if any dependency is unhealthy)
+#
+# Pulls the published image from GHCR:
+#   ghcr.io/xstreamrollz/xstreamroll-api:<tag>
+# Tag defaults to the `latest` semver alias from .github/workflows/release.yml.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+  namespace: xstreamroll
+data:
+  NODE_ENV: production
+  PORT: "3001"
+  # CORS_ORIGIN is non-sensitive but environment-specific; overrides
+  # should be done via a Kustomize patch in higher environments.
+  CORS_ORIGIN: http://app:3000
+  REDIS_URL: redis://redis:6379
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: api-secrets
+  namespace: xstreamroll
+type: Opaque
+stringData:
+  # Replace these placeholders BEFORE applying this manifest in any
+  # non-development environment.
+  DATABASE_URL: postgresql://xstreamroll:CHANGEME-postgres-password@postgres:5432/xstreamroll
+  JWT_SECRET: CHANGEME-jwt-secret
+  STREAM_API_KEY: CHANGEME-stream-api-key
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: xstreamroll
+  labels:
+    app: api
+spec:
+  type: ClusterIP
+  selector:
+    app: api
+  ports:
+    - name: http
+      port: 3001
+      targetPort: 3001
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: xstreamroll
+  labels:
+    app: api
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      # Allow rolling restarts to finish in-flight requests.
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: ghcr.io/xstreamrollz/xstreamroll-api:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3001
+          env:
+            - name: PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: PORT
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: NODE_ENV
+            - name: CORS_ORIGIN
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: CORS_ORIGIN
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: DATABASE_URL
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: JWT_SECRET
+            - name: STREAM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: STREAM_API_KEY
+          # Readiness: checks DB connectivity, heap memory usage, and event
+          # loop lag. The pod is removed from rotation on 503 without restart.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 5
+          # Liveness: deliberately dependency-free so a transient DB outage
+          # or memory spike cannot trigger an unwanted restart loop.
+          # /health/live is the canonical path; /health/livez is an alias.
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      # Issue #340 — run database migrations as a Kubernetes init
+      # container before the api container starts, using the same
+      # published API image so the runner, the schema, and the
+      # runtime image stay in lockstep (api/Dockerfile bakes
+      # database/migrations/ at /app/database/migrations/).
+      #
+      # Concurrency: every replica boots the runner on startup, so two
+      # pods can race the same migration. Today this is bounded by
+      # (a) every migration SQL using IF [NOT] EXISTS guards and (b)
+      # Postgres short-circuiting idempotent DDL on already-applied
+      # state. The pgmigrations tracking table may pick up duplicate
+      # rows but the schema stays correct. Follow-up: convert to a
+      # single-success Job (kinds: Job) and have each SQL migration
+      # take a pg_advisory_lock so the cosmetic duplication is gone.
+      #
+      # Exits non-zero on any actual migration error — the pod init
+      # fails and the deploy surfaces instead of starting broken.
+      initContainers:
+        - name: db-migrate
+          image: ghcr.io/xstreamrollz/xstreamroll-api:latest
+          imagePullPolicy: Always
+          command:
+            - node-pg-migrate
+          args:
+            - -d
+            - /app/database/migrations
+            - -m
+            - sql
+            - up
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: DATABASE_URL
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: NODE_ENV
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi

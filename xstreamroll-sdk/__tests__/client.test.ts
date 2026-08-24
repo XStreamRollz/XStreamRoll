@@ -79,13 +79,24 @@ describe("StreamingClient env presets", () => {
   })
 
   it("custom baseUrl overrides env preset", () => {
-    const client = new StreamingClient({ env: "production", baseUrl: "https://custom.example.com" })
+    const client = new StreamingClient({
+      env: "production",
+      baseUrl: "https://custom.example.com",
+    })
     expect(getApiUrl(client)).toBe("https://custom.example.com")
   })
 
   it("legacy apiUrl still works", () => {
     const client = new StreamingClient({ apiUrl: "http://legacy:9000" })
     expect(getApiUrl(client)).toBe("http://legacy:9000")
+  })
+
+  it("uses HttpClient internally (not axios)", () => {
+    const client = new StreamingClient({ baseUrl: "http://api.test" })
+    const http = (
+      client as unknown as { http: { constructor: { name: string } } }
+    ).http
+    expect(http.constructor.name).toBe("HttpClient")
   })
 })
 

@@ -1,11 +1,12 @@
 import {
+  Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
   ServiceUnavailableException,
 } from "@nestjs/common"
 import { Pool } from "pg"
-import { env } from "../../config/env"
+import { PG_POOL } from "../../database/database.module"
 import { StreamTag, Tag } from "../tag.entity"
 
 /**
@@ -19,16 +20,9 @@ import { StreamTag, Tag } from "../tag.entity"
  */
 @Injectable()
 export class TagsDbRepository {
-  private readonly pool: Pool
   private readonly logger = new Logger(TagsDbRepository.name)
 
-  constructor() {
-    this.pool = new Pool({ connectionString: env.DATABASE_URL })
-
-    this.pool.on("error", (err) => {
-      this.logger.error("Unexpected PostgreSQL pool error", err.stack)
-    })
-  }
+  constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
 
   /** Map a raw DB row to the Tag entity shape. */
   private rowToTag(row: Record<string, unknown>): Tag {
@@ -194,6 +188,44 @@ export class TagsDbRepository {
       return rows[0]?.exists ?? false
     } catch (err) {
       this.handleDbError(err, "isAttached")
+    }
+  }
+
+  /**
+   * Batch-load tags grouped by stream id in a single SQL roundtrip.
+   * Every requested stream id appears as a key — possibly with an
+   * empty array — so the caller can rely on `map.get(id)` returning
+   * `[]` instead of `undefined` for streams that have no tags
+   * attached. Tags are sorted by `(stream_id ASC, slug ASC)` so the
+   * wire order is stable per stream.
+   *
+   * Used by {@link StreamsService.list} to eliminate the N+1 query
+   * where the dashboard previously fetched tags per stream in a loop
+   * (issue #330). The query plan uses the composite primary key
+   * `(stream_id, tag_id)` on `stream_tags`.
+   */
+  async listForStreamIds(
+    streamIds: number[],
+  ): Promise<Map<number, Tag[]>> {
+    if (streamIds.length === 0) return new Map()
+    try {
+      const { rows } = await this.pool.query<Record<string, unknown>>(
+        `SELECT st.stream_id, t.id, t.name, t.slug, t.created_at
+         FROM stream_tags st
+         JOIN tags t ON t.id = st.tag_id
+         WHERE st.stream_id = ANY($1::int[])
+         ORDER BY st.stream_id ASC, t.slug ASC`,
+        [streamIds],
+      )
+      const result = new Map<number, Tag[]>()
+      for (const id of streamIds) result.set(id, [])
+      for (const row of rows) {
+        const streamId = row.stream_id as number
+        result.get(streamId)?.push(this.rowToTag(row))
+      }
+      return result
+    } catch (err) {
+      this.handleDbError(err, "listForStreamIds")
     }
   }
 }

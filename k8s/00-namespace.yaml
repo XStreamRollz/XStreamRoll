@@ -1,0 +1,36 @@
+# Issue #217 — Kubernetes manifests for the XStreamRoll platform.
+# ---------------------------------------------------------------------------
+# All manifests assume the kubectl context has cluster-admin (or equivalent
+# permission to create namespaces, RBAC, workloads, and ingress). Apply with:
+#
+#   kubectl apply -f k8s/00-namespace.yaml
+#   kubectl apply -f k8s/10-postgres.yaml
+#   … etc.
+#
+# Or, with Kustomize, a single `kubectl apply -k k8s/` produces every
+# resource described here plus the Postgres init ConfigMap (which is
+# generated from ../../database/schema.sql at build time).
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: xstreamroll
+  labels:
+    name: xstreamroll
+    app.kubernetes.io/part-of: xstreamroll
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: xstreamroll-quota
+  namespace: xstreamroll
+spec:
+  hard:
+    pods: "20"
+    requests.cpu: "4"
+    requests.memory: 8Gi
+    limits.cpu: "8"
+    limits.memory: 16Gi

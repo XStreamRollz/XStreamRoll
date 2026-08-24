@@ -1,69 +1,330 @@
+import { randomBytes, randomUUID } from "crypto"
+import http from "http"
+
 import axios from "axios"
+
 import { env } from "./config"
-import { EventFilter } from "./pipeline"
-import { SessionRegistry } from "./session-registry"
+import { createLockManager, type LockManager } from "./leader-election"
+import { GracefulShutdown, ShutdownReason } from "./lifecycle"
+import { currentCorrelationId, newCorrelationId } from "./logger"
+import { markShuttingDown, setQueueDepth, startMetricsServer } from "./metrics"
+import {
+  EventFilter,
+  createFilterConfigStore,
+  MemoryFilterConfigStore,
+  type FilterConfigStore,
+} from "./pipeline"
 import { ProcessedStreamEvent, StreamEvent } from "./session"
-import { Agent } from "http"
-import { GracefulShutdown } from "./lifecycle"
+import { SessionRegistry } from "./session-registry"
 
 const API_URL = env.API_URL
-const WORKER_ID = `worker-${Date.now()}`
+// Issue #347: Use POD_NAME from Kubernetes environment if available,
+// falling back to crypto.randomUUID() for guaranteed uniqueness. The
+// POD_NAME path lets operators correlate worker logs to specific pods
+// in kubectl/Grafana dashboards; the UUID fallback ensures local dev
+// and non-k8s deployments never see collisions.
+const WORKER_ID = process.env.POD_NAME ?? `worker-${randomUUID()}`
 const POLL_INTERVAL_MS = Number(env.POLL_INTERVAL_MS)
 const MAX_CONCURRENT_SESSIONS = Math.max(
   1,
   Number(process.env.MAX_CONCURRENT_SESSIONS ?? 32),
 )
+const MAX_QUEUE_DEPTH = Math.max(1, Number(env.MAX_QUEUE_DEPTH))
+const POLL_BATCH_SIZE: number =
+  (env.POLL_BATCH_SIZE as number | undefined) ?? 100
+const MAX_PUBLISH_RETRIES: number =
+  (env.PROCESSING_PUBLISH_MAX_RETRIES as number | undefined) ?? 3
+const HIGH_WATERMARK = MAX_CONCURRENT_SESSIONS * MAX_QUEUE_DEPTH
+// `env.LOCK_BACKEND` may be missing in hand-rolled test mocks; fall
+// back to the safe default so we don't crash on import.
+const LOCK_BACKEND: "memory" | "postgres" =
+  (env.LOCK_BACKEND as "memory" | "postgres" | undefined) ?? "memory"
+const LOCK_TTL_MS: number = (env.LOCK_TTL_MS as number | undefined) ?? 30_000
 
-const registry = new SessionRegistry(
-  WORKER_ID,
-  {
-    async publish(event: ProcessedStreamEvent): Promise<void> {
-      await axios.post(`${API_URL}/streams/processed`, event)
-    },
-  },
-  { maxConcurrentSessions: MAX_CONCURRENT_SESSIONS },
-)
+// Issue #351: the EventFilter config store. Defaults to the same
+// in-process `Map` the worker used before the issue so existing
+// behaviour is preserved when EVENT_FILTER_BACKEND is unset. When
+// switched to `redis` the URL falls back to REDIS_URL so workers
+// running in the same cluster as the API can reuse the connection.
+const EVENT_FILTER_BACKEND: "memory" | "redis" =
+  (env.EVENT_FILTER_BACKEND as "memory" | "redis" | undefined) ?? "memory"
+const EVENT_FILTER_REDIS_URL: string | undefined =
+  (env.EVENT_FILTER_REDIS_URL as string | undefined) ?? process.env.REDIS_URL
+
+// Shared keep-alive agent so axios reuses TCP connections and we can
+// explicitly destroy the pool on graceful shutdown.
+export const httpAgent = new http.Agent({ keepAlive: true })
+
+/**
+ * HTTP server that exposes worker metrics and probes to Kubernetes.
+ * Started at module load only when NOT in tests so the production
+ * container has a stable port that the kubelet can probe. The server
+ * is held in module scope so the graceful shutdown sequence (registered
+ * below) can close it without losing the reference.
+ */
+export const metricsServer =
+  env.NODE_ENV !== "test" ? startMetricsServer(3002) : null
+
+// Axios instance that routes all requests through the shared agent.
+export const axiosInstance = axios.create({ httpAgent })
+
+// Propagate W3C trace context on every outbound request so the API can
+// correlate worker-initiated polls and callbacks to a single trace.
+// generateTraceparent creates a fresh root span for each polling cycle;
+// when the API sends a traceparent response header the worker will echo
+// it on subsequent calls within the same cycle via the activeTraceparent
+// module-level variable below.
+let activeTraceparent: string | null = null
+
+function generateTraceparent(): string {
+  const traceId = randomBytes(16).toString("hex")
+  const spanId = randomBytes(8).toString("hex")
+  return `00-${traceId}-${spanId}-01`
+}
+
+axiosInstance.interceptors.request.use((config) => {
+  const tp = activeTraceparent ?? generateTraceparent()
+  config.headers["traceparent"] = tp
+  const reqId = currentCorrelationId() ?? newCorrelationId()
+  if (!config.headers["X-Request-Id"] && !config.headers["x-request-id"]) {
+    config.headers["X-Request-Id"] = reqId
+  }
+  return config
+})
+
+axiosInstance.interceptors.response.use((response) => {
+  const incoming = response.headers["traceparent"]
+  if (typeof incoming === "string" && incoming.length > 0) {
+    activeTraceparent = incoming
+  }
+  return response
+})
+
+// Module-scoped state used by the shutdown hooks. Both are assigned
+// by `start()` once the lock manager has been installed and the
+// registry has been constructed. Kept as `let` rather than `const`
+// to keep the option open for tests that re-initialise them.
+let lockManager: LockManager | null = null
+let registry: SessionRegistry | null = null
+let filterStore: FilterConfigStore | null = null
+let shuttingDown = false
+let pollPromise: Promise<void> = Promise.resolve()
+// Errors-per-dedupe-key are kept in a single Map with an LRU cap so
+// a sustained outage with varied error messages cannot grow memory
+// without bound. Map preserves insertion order so `keys().next()`
+// is always the oldest entry. Bump a key by `delete` + `set` when
+// it's seen again to make sure the LRU scan treats it as newest.
+const ROUTE_ERROR_DEDUPE_MS = 30_000
+const MAX_TRACKED_ERROR_KEYS = 100
+interface DedupeState {
+  lastLoggedAtMs: number
+  /** suppressed-repeats since the last log line that escaped the window */
+  suppressedBatch: number
+}
+const routeErrorDedupe = new Map<string, DedupeState>()
 
 const filter = new EventFilter()
 
-let shuttingDown = false
+async function initLockManager(): Promise<LockManager> {
+  return await createLockManager({
+    workerId: WORKER_ID,
+    backend: LOCK_BACKEND,
+    databaseUrl: env.DATABASE_URL,
+    ttlMs: LOCK_TTL_MS,
+  })
+}
 
-async function pollOnce(): Promise<void> {
-  let events: StreamEvent[] = []
+async function initFilterStore(): Promise<FilterConfigStore> {
   try {
-    const response = await axios.get<StreamEvent[]>(`${API_URL}/streams/pending`)
-    events = Array.isArray(response.data) ? response.data : []
+    return await createFilterConfigStore({
+      workerId: WORKER_ID,
+      backend: EVENT_FILTER_BACKEND,
+      redisUrl: EVENT_FILTER_REDIS_URL,
+    })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    console.error(`[${WORKER_ID}] polling failed: ${message}`)
+    // Fail loud when the operator asked for a distributed backend
+    // (otherwise the cluster would silently drift). Surface as a
+    // warning AND fall back to in-process state so a transient
+    // bootstrap error never blocks stream processing — the
+    // reconcile loop in the operator's runbook can flip the env var
+    // once Redis is healthy.
+    if (EVENT_FILTER_BACKEND === "redis") {
+      console.error(
+        `[${WORKER_ID}] failed to initialise redis filter store: ${message}; falling back to in-process state`,
+      )
+    } else {
+      console.warn(
+        `[${WORKER_ID}] filter store initialisation failed: ${message}`,
+      )
+    }
+    return new MemoryFilterConfigStore({ workerId: WORKER_ID })
+  }
+}
+
+async function pollOnce(): Promise<void> {
+  activeTraceparent = generateTraceparent()
+  if (!registry) return
+  const totalDepth = registry.totalQueueDepth()
+  if (totalDepth >= HIGH_WATERMARK) {
+    setQueueDepth(totalDepth)
+    console.warn(
+      `[${WORKER_ID}] total queue depth (${totalDepth}) exceeds high-watermark (${HIGH_WATERMARK}); skipping poll`,
+    )
     return
   }
 
-  for (const event of events) {
-    if (!event || typeof event.streamId !== "string" || event.streamId.length === 0) {
-      console.warn(`[${WORKER_ID}] dropping malformed event`, event)
-      continue
+  // Fetch events in bounded batches until the server signals there are no
+  // more (nextCursor === null) or we reach the high-watermark mid-page.
+  let cursor = 0
+  let totalFetched = 0
+
+  while (!shuttingDown) {
+    let events: StreamEvent[] = []
+    let nextCursor: number | null = null
+
+    try {
+      const response = await axiosInstance.get<{
+        data: StreamEvent[]
+        nextCursor: number | null
+      }>(`${API_URL}/streams/pending?limit=${POLL_BATCH_SIZE}&cursor=${cursor}`)
+
+      // Support both the new paginated shape { data, nextCursor } and the
+      // legacy plain-array response so tests that mock the old format keep
+      // working during the rollout period.
+      if (Array.isArray(response.data)) {
+        events = response.data
+        nextCursor =
+          events.length < POLL_BATCH_SIZE ? null : cursor + events.length
+      } else {
+        events = Array.isArray(response.data?.data) ? response.data.data : []
+        nextCursor = response.data?.nextCursor ?? null
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error(`[${WORKER_ID}] polling failed: ${message}`)
+      setQueueDepth(registry.totalQueueDepth())
+      return
     }
-    if (!filter.allow(event)) {
-      continue // silently drop filtered events
+
+    totalFetched += events.length
+
+    for (const event of events) {
+      if (
+        !event ||
+        typeof event.streamId !== "string" ||
+        event.streamId.length === 0
+      ) {
+        console.warn(`[${WORKER_ID}] dropping malformed event`, event)
+        continue
+      }
+      if (!filter.allow(event)) {
+        continue // silently drop filtered events
+      }
+      let result: "enqueued" | "capacity" | "rejected" | "locked"
+      try {
+        result = await registry.route(event)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        logRouteError(event.streamId, message)
+        continue
+      }
+      if (result === "capacity") {
+        const cap = registry.capacity()
+        console.warn(
+          `[${WORKER_ID}] at capacity (${cap.used}/${cap.max}); dropping event for stream ${event.streamId}`,
+        )
+      } else if (result === "rejected") {
+        console.warn(
+          `[${WORKER_ID}] session for stream ${event.streamId} no longer accepting events`,
+        )
+      } else if (result === "locked") {
+        console.log(
+          `[${WORKER_ID}] stream ${event.streamId} owned by another worker; skipping`,
+        )
+      }
     }
-    const result = registry.route(event)
-    if (result === "capacity") {
-      const cap = registry.capacity()
-      console.warn(
-        `[${WORKER_ID}] at capacity (${cap.used}/${cap.max}); dropping event for stream ${event.streamId}`,
-      )
-    } else if (result === "rejected") {
-      console.warn(
-        `[${WORKER_ID}] session for stream ${event.streamId} no longer accepting events`,
-      )
+
+    setQueueDepth(registry.totalQueueDepth())
+
+    // Stop paging if:
+    //   • the server says there are no more events (nextCursor === null), or
+    //   • the batch was smaller than the page size (last page), or
+    //   • we've now hit the high-watermark (back-pressure)
+    const currentDepth = registry.totalQueueDepth()
+    if (
+      nextCursor === null ||
+      events.length < POLL_BATCH_SIZE ||
+      currentDepth >= HIGH_WATERMARK
+    ) {
+      if (currentDepth >= HIGH_WATERMARK && totalFetched > 0) {
+        console.warn(
+          `[${WORKER_ID}] high-watermark reached mid-poll (fetched ${totalFetched} events); pausing pagination`,
+        )
+      }
+      break
     }
+
+    cursor = nextCursor
   }
 }
 
 async function start(): Promise<void> {
+  try {
+    lockManager = await initLockManager()
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error(
+      `[${WORKER_ID}] failed to initialise ${LOCK_BACKEND} lock manager: ${message}`,
+    )
+    if (env.NODE_ENV === "test") {
+      // In tests, surface the failure as a rejected module load would
+      // do, but `void start()` swallows rejections. Re-throw via a
+      // process-warning so test runners see the cause.
+      console.warn(
+        `[${WORKER_ID}] tests will see previously-routed events only`,
+      )
+    }
+    return
+  }
+
+  // Issue #351: wire up the distributed filter store BEFORE the
+  // registry spins up so the first poll already sees the canonical
+  // snapshot from Redis (when applicable). The default construction
+  // `new EventFilter()` above already used the in-process store;
+  // `setStore()` swaps in the distributed one if we managed to
+  // construct it, then `start()` triggers the install + subscribe.
+  try {
+    filterStore = await initFilterStore()
+    filter.setStore(filterStore)
+    await filter.start()
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error(
+      `[${WORKER_ID}] filter store start failed: ${message}; continuing with an empty filter`,
+    )
+  }
+
+  registry = new SessionRegistry(
+    WORKER_ID,
+    {
+      async publish(event: ProcessedStreamEvent): Promise<void> {
+        await axiosInstance.post(`${API_URL}/streams/processed`, event)
+      },
+    },
+    {
+      maxConcurrentSessions: MAX_CONCURRENT_SESSIONS,
+      maxQueueDepth: MAX_QUEUE_DEPTH,
+      maxPublishRetries: MAX_PUBLISH_RETRIES,
+      lockManager,
+    },
+  )
+
   console.log(
-    `[${WORKER_ID}] stream processor started (max concurrent sessions=${MAX_CONCURRENT_SESSIONS}, poll=${POLL_INTERVAL_MS}ms)`,
+    `[${WORKER_ID}] stream processor started ` +
+      `(workerId=${WORKER_ID}, ` +
+      `max concurrent sessions=${MAX_CONCURRENT_SESSIONS}, ` +
+      `poll=${POLL_INTERVAL_MS}ms, lockBackend=${LOCK_BACKEND})`,
   )
 
   // Drive the first poll immediately so the worker doesn't wait a full
@@ -76,40 +337,160 @@ async function start(): Promise<void> {
       await sleep(POLL_INTERVAL_MS)
     }
   }
-  void loop()
+  pollPromise = loop()
 }
 
-const shutdown = new GracefulShutdown({ timeoutMs: 15_000 })
+const gracefulShutdown = new GracefulShutdown({
+  timeoutMs: 15_000,
+})
 
-shutdown.register({
+gracefulShutdown.register({
   name: "stop poll loop",
   run: () => {
     shuttingDown = true
   },
 })
 
-shutdown.register({
+gracefulShutdown.register({
   name: "drain sessions",
   run: async () => {
+    // Wait for the in-flight poll cycle to finish before draining
+    // sessions so we don't tear state out from under it.
+    await pollPromise
+    if (!registry) return
     await registry.drainAll()
   },
 })
 
-shutdown.register({
-  name: "close http pool",
-  run: () => {
-    // axios' default adapter uses the global http(s).Agent; calling
-    // destroy() on the agent releases keep-alive sockets so the
-    // process can exit promptly after drain.
-    const agent = new Agent()
-    agent.destroy()
+gracefulShutdown.register({
+  name: "release locks",
+  run: async () => {
+    if (!lockManager) return
+    try {
+      await lockManager.releaseAll()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.warn(`[${WORKER_ID}] lockManager.releaseAll failed: ${message}`)
+    }
   },
 })
 
-shutdown.install()
+gracefulShutdown.register({
+  name: "close lock manager",
+  run: async () => {
+    if (!lockManager) return
+    try {
+      await lockManager.close()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.warn(`[${WORKER_ID}] lockManager.close failed: ${message}`)
+    }
+  },
+})
+
+gracefulShutdown.register({
+  name: "close filter store",
+  run: async () => {
+    // Tear down Redis pub/sub connections so the disconnect timer
+    // doesn't keep the loop alive past drain. The in-process store
+    // has no transport to close — its `close()` is a no-op.
+    await filter.close()
+  },
+})
+
+gracefulShutdown.register({
+  name: "close http pool",
+  run: () => {
+    // Destroy the shared keep-alive agent so all pooled sockets are
+    // released and the process can exit promptly after drain.
+    httpAgent.destroy()
+  },
+})
+
+gracefulShutdown.register({
+  name: "stop metrics server",
+  run: () =>
+    new Promise<void>((resolve, reject) => {
+      // Flip the readiness flag first so any in-flight probe sees
+      // 503 and the kubelet removes us from service endpoints.
+      markShuttingDown()
+      if (!metricsServer) {
+        resolve()
+        return
+      }
+      metricsServer.close((err) => {
+        if (err) reject(err)
+        else resolve()
+      })
+    }),
+})
+
+if (env.NODE_ENV !== "test") {
+  gracefulShutdown.install()
+}
+
+/** Exported for testing: triggers the graceful-shutdown sequence. */
+export const shutdown = (signal: string): Promise<void> =>
+  gracefulShutdown.requestShutdown(signal as ShutdownReason)
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(), ms)
+    if (typeof timer.unref === "function") timer.unref()
+  })
+}
+
+/**
+ * Log a routing error, deduplicating identical messages that
+ * recur within {@link ROUTE_ERROR_DEDUPE_MS}. The first occurrence
+ * prints immediately; repeats are counted and surface in a single
+ * summary line when the next occurrence crosses the dedupe window.
+ */
+function logRouteError(streamId: string, message: string): void {
+  const key = `${streamId}::${message}`
+  const now = Date.now()
+
+  // Bound memory: when a brand-new key arrives and we are at the
+  // LRU cap, evict the entry whose `lastLoggedAtMs` is the
+  // smallest — that key's dedup window has spent the most time
+  // outside the active suppression period, so it is the most
+  // likely candidate for a post-suppression log next.
+  if (
+    !routeErrorDedupe.has(key) &&
+    routeErrorDedupe.size >= MAX_TRACKED_ERROR_KEYS
+  ) {
+    let evictKey: string | undefined
+    let evictAt = Number.POSITIVE_INFINITY
+    for (const [k, v] of routeErrorDedupe) {
+      if (v.lastLoggedAtMs < evictAt) {
+        evictAt = v.lastLoggedAtMs
+        evictKey = k
+      }
+    }
+    if (evictKey !== undefined) {
+      routeErrorDedupe.delete(evictKey)
+    }
+  }
+  const existing = routeErrorDedupe.get(key) ?? {
+    lastLoggedAtMs: 0,
+    suppressedBatch: 0,
+  }
+  routeErrorDedupe.delete(key)
+  routeErrorDedupe.set(key, existing)
+
+  if (now - existing.lastLoggedAtMs >= ROUTE_ERROR_DEDUPE_MS) {
+    const tag =
+      existing.suppressedBatch > 0
+        ? ` (${existing.suppressedBatch} similar errors suppressed in the last ${ROUTE_ERROR_DEDUPE_MS / 1000}s)`
+        : ""
+    console.error(
+      `[${WORKER_ID}] routing event for ${streamId} failed: ${message}${tag}`,
+    )
+    existing.lastLoggedAtMs = now
+    existing.suppressedBatch = 0
+  } else {
+    existing.suppressedBatch += 1
+  }
 }
 
 void start()

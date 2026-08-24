@@ -2,11 +2,13 @@ export { StreamingClient } from "./client"
 export type { ClientEnv } from "./client"
 export { HttpClient } from "./http"
 export type { RequestInterceptor, ResponseInterceptor, InterceptorHandle } from "./http"
+export { verifyWebhookSignature, computeWebhookSignature } from "./webhooks"
+export { paginateAll, PaginatedIterator } from "./pagination"
+export type { PaginatedFetcher, PaginateAllOptions } from "./pagination"
 export type {
   // Config
   StreamConfig,
   // User
-  UserRole,
   User,
   CreateUserDto,
   UpdateUserDto,
@@ -23,6 +25,10 @@ export type {
   StreamEventType,
   StreamEvent,
   StreamEventRecord,
+  // Webhooks
+  CreateWebhookDto,
+  WebhookSubscription,
+  WebhookDelivery,
   // Pagination
   PaginatedResponse,
   PaginationParams,

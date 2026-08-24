@@ -1,8 +1,16 @@
-import { IsOptional, IsString, Length, MaxLength } from "class-validator"
+import { IsIn, IsOptional, IsString, Length, MaxLength } from "class-validator"
+import {
+  IsOptionalStreamVisibility,
+  type StreamVisibility,
+} from "./visibility"
 
 /**
  * Payload accepted by `PATCH /streams/:id`. All fields are optional;
  * only the supplied fields are updated.
+ *
+ * `visibility` is optional so an owner can flip a stream between
+ * public and private at any time without touching the rest of the
+ * record.
  */
 export class UpdateStreamDto {
   @IsOptional()
@@ -21,8 +29,11 @@ export class UpdateStreamDto {
 
   @IsOptional()
   @IsString()
-  @Length(1, 50, {
-    message: "status must be between 1 and 50 characters",
+  @IsIn(["inactive", "active", "error"], {
+    message: "status must be one of: inactive, active, error",
   })
   status?: string
+
+  @IsOptionalStreamVisibility()
+  visibility?: StreamVisibility
 }
