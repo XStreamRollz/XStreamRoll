@@ -25,17 +25,18 @@ import {
   type Contract,
 } from "@xstreamroll/contract-tests"
 import request from "supertest"
+
 import { AuditService } from "./audit/audit.service"
 import { AuthController } from "./auth/auth.controller"
 import { AuthService } from "./auth/auth.service"
 import { PasswordResetService } from "./auth/password-reset.service"
 import { TokenDenylistService } from "./auth/token-denylist.service"
 import { User, UsersRepository } from "./auth/users.repository"
-import createJwtConfig, { createRefreshJwtConfig } from "./config/jwt.config"
 import { AuthGuard } from "./common/guards/auth.guard"
 import { JwtExtractorService } from "./common/guards/jwt-extractor.service"
 import { StreamOwnershipGuard } from "./common/guards/stream-ownership.guard"
 import { StreamOwnershipService } from "./common/guards/stream-ownership.service"
+import createJwtConfig, { createRefreshJwtConfig } from "./config/jwt.config"
 import { StreamsRepository } from "./streams/repository/streams.repository"
 import { StreamsController } from "./streams/streams.controller"
 import { StreamsService } from "./streams/streams.service"
@@ -141,7 +142,13 @@ describe("Contract provider verification (api)", () => {
         },
         { provide: UsersRepository, useClass: InMemoryUsersRepository },
         { provide: PasswordResetService, useValue: {} },
-        { provide: AuditService, useValue: { log: async () => undefined } },
+        {
+          provide: AuditService,
+          useValue: {
+            log: async () => undefined,
+            logSafely: async () => undefined,
+          },
+        },
       ],
     }).compile()
 

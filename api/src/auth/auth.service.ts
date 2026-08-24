@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto"
+
 import {
   ConflictException,
   Injectable,
@@ -5,19 +7,21 @@ import {
   UnauthorizedException,
 } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
-import type { User as SharedUser } from "@xstreamroll/types"
 import * as bcrypt from "bcrypt"
-import { randomUUID } from "node:crypto"
-import type { Request } from "express"
-import { RegisterDto } from "./dto/register.dto"
-import { LoginDto } from "./dto/login.dto"
+
+
 import { ForgotPasswordDto } from "./dto/forgot-password.dto"
+import { LoginDto } from "./dto/login.dto"
+import { RegisterDto } from "./dto/register.dto"
 import { ResetPasswordDto } from "./dto/reset-password.dto"
+import { PasswordResetService } from "./password-reset.service"
 import { TokenDenylistService } from "./token-denylist.service"
 import { User, UsersRepository } from "./users.repository"
-import { PasswordResetService } from "./password-reset.service"
-import { AuditService } from "../audit/audit.service"
 import { AuditAction } from "../audit/audit-action.enum"
+import { AuditService } from "../audit/audit.service"
+
+import type { User as SharedUser } from "@xstreamroll/types"
+import type { Request } from "express"
 
 /** Rounds for bcrypt key derivation (auto-salt). */
 const BCRYPT_ROUNDS = 12
@@ -61,7 +65,7 @@ export class AuthService {
 
     const emailExists = await this.usersRepository.findByEmail(dto.email)
     if (emailExists) {
-      await this.auditService.log(
+      await this.auditService.logSafely(
         null,
         AuditAction.AUTH_REGISTER_FAILURE,
         { reason: "email_conflict", email: dto.email },
@@ -74,7 +78,7 @@ export class AuthService {
       dto.username,
     )
     if (usernameExists) {
-      await this.auditService.log(
+      await this.auditService.logSafely(
         null,
         AuditAction.AUTH_REGISTER_FAILURE,
         { reason: "username_conflict", username: dto.username },
@@ -91,7 +95,7 @@ export class AuthService {
       passwordHash,
     )
 
-    await this.auditService.log(
+    await this.auditService.logSafely(
       null,
       AuditAction.AUTH_REGISTER_SUCCESS,
       { email: dto.email },
@@ -117,7 +121,7 @@ export class AuthService {
 
     const user = await this.usersRepository.findByEmail(dto.email)
     if (!user) {
-      await this.auditService.log(
+      await this.auditService.logSafely(
         null,
         AuditAction.AUTH_LOGIN_FAILURE,
         { reason: "user_not_found", email: dto.email },
@@ -128,7 +132,7 @@ export class AuthService {
 
     const valid = await bcrypt.compare(dto.password, user.password_hash)
     if (!valid) {
-      await this.auditService.log(
+      await this.auditService.logSafely(
         user.id,
         AuditAction.AUTH_LOGIN_FAILURE,
         { reason: "invalid_password", email: dto.email },
@@ -137,7 +141,7 @@ export class AuthService {
       throw new UnauthorizedException("invalid email or password")
     }
 
-    await this.auditService.log(
+    await this.auditService.logSafely(
       user.id,
       AuditAction.AUTH_LOGIN_SUCCESS,
       { email: dto.email },

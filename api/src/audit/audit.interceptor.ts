@@ -4,10 +4,11 @@ import {
   ExecutionContext,
   CallHandler,
 } from "@nestjs/common"
-import { Observable, tap } from "rxjs"
 import { Request } from "express"
-import { AuditService } from "./audit.service"
+import { Observable, tap } from "rxjs"
+
 import { AuditAction } from "./audit-action.enum"
+import { AuditService } from "./audit.service"
 
 const SENSITIVE_ACTIONS: Record<string, AuditAction> = {
   "POST /auth/login": AuditAction.LOGIN,
@@ -37,8 +38,10 @@ export class AuditInterceptor implements NestInterceptor {
     return next.handle().pipe(
       // metadata is empty here because the interceptor doesn't have access to
       // the request body post-processing. Callers that need richer metadata
-      // (e.g. AuthService) call auditService.log() directly.
-      tap(() => this.auditService.log(userId, action, {}, ip)),
+      // (e.g. AuthService) call auditService.logSafely() directly.
+      // Fail-open policy (issue #530): logSafely never throws, so a failed
+      // audit INSERT cannot surface as a post-response error either.
+      tap(() => this.auditService.logSafely(userId, action, {}, ip)),
     )
   }
 }
