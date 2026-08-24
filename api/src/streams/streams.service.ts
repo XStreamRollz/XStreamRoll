@@ -2,22 +2,26 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common"
-import type { StreamEventRecord } from "@xstreamroll/types"
+
+import { Stream } from "./stream.entity"
 import { PaginatedResult } from "../common/dto/pagination.dto"
+import { STREAM_EVENTS } from "../gateways/stream-events"
+import { StreamsGateway } from "../gateways/streams.gateway"
+import { TagsService } from "../tags/tags.service"
+import { WebhooksService } from "../webhooks/webhooks.service"
+import { StreamAnalyticsDto } from "./dto/stream-analytics.dto"
+import { PendingStreamEvent } from "./repository/streams.repository"
+import { StreamsRepository } from "./repository/streams.repository"
+
+import type { StreamVisibility } from "./dto/visibility"
 import type {
   StreamListFilter,
   StreamUpdateChanges,
   StreamCreateParams,
 } from "./repository/streams.repository"
-import { PendingStreamEvent } from "./repository/streams.repository"
-import { STREAM_EVENTS } from "../gateways/stream-events"
-import { TagsService } from "../tags/tags.service"
-import { WebhooksService } from "../webhooks/webhooks.service"
-import { StreamsRepository } from "./repository/streams.repository"
-import { StreamAnalyticsDto } from "./dto/stream-analytics.dto"
-import { Stream } from "./stream.entity"
-import type { StreamVisibility } from "./dto/visibility"
+import type { StreamEventRecord } from "@xstreamroll/types"
 
 export interface PagedStreams extends PaginatedResult<Stream> {
   hasMore: boolean
@@ -36,6 +40,10 @@ export class StreamsService {
     private readonly repo: StreamsRepository,
     private readonly webhooksService: WebhooksService,
     private readonly tagsService: TagsService,
+    // Optional so unit tests and any consumer that predates the socket
+    // wiring can construct the service without a gateway. Mirrors the
+    // `NotificationsService` injection pattern.
+    @Optional() private readonly gateway?: StreamsGateway,
   ) {}
 
   async create(params: StreamCreateParams): Promise<Stream> {
@@ -115,35 +123,63 @@ export class StreamsService {
     })
 
     if (changes.status !== undefined && changes.status !== stream.status) {
-      this.dispatchStatusWebhook(updated, changes.status)
+      this.dispatchStatusSideEffects(updated, changes.status)
     }
 
     return updated
   }
 
   /**
-   * Fires the webhook event matching a stream's new status. Runs in the
-   * background — a slow or unreachable subscriber must never delay the
-   * status transition response.
+   * Fires the side effects that accompany a stream status transition:
+   * the matching webhook event (fire-and-forget) and the matching
+   * socket broadcast scoped to the stream's room (issue #519). Both
+   * paths derive their payloads from the same `now`/`base` values so
+   * they cannot drift, and each is independent — a failed webhook
+   * dispatch never suppresses the socket emit.
    */
-  private dispatchStatusWebhook(stream: Stream, newStatus: string): void {
+  private dispatchStatusSideEffects(stream: Stream, newStatus: string): void {
     const event = STATUS_TO_WEBHOOK_EVENT[newStatus]
     if (!event) return
 
     const now = new Date().toISOString()
-    const payload =
-      newStatus === "error"
-        ? { streamId: stream.id, userId: stream.userId, occurredAt: now }
-        : newStatus === "active"
-          ? { streamId: stream.id, userId: stream.userId, startedAt: now }
-          : { streamId: stream.id, userId: stream.userId, stoppedAt: now }
+    const base = { streamId: stream.id, userId: stream.userId } as const
 
+    const webhookPayload =
+      newStatus === "error"
+        ? { ...base, occurredAt: now }
+        : newStatus === "active"
+          ? { ...base, startedAt: now }
+          : { ...base, stoppedAt: now }
+
+    // Webhook fan-out is fire-and-forget — a slow or unreachable
+    // subscriber must never delay the status transition response.
     this.webhooksService
-      .dispatchStreamEvent(stream.id, event, payload)
+      .dispatchStreamEvent(stream.id, event, webhookPayload)
       .catch(() => {
         // dispatchStreamEvent already logs; swallow here so a webhook
         // fan-out failure never surfaces as an update() error.
       })
+
+    // Socket broadcast is independent of webhook delivery: a failed
+    // webhook dispatch must not suppress the live status update.
+    switch (newStatus) {
+      case "active":
+        this.gateway?.emitStarted({ ...base, startedAt: now })
+        break
+      case "inactive":
+        this.gateway?.emitStopped({ ...base, stoppedAt: now })
+        break
+      case "error":
+        // The webhook payload has no code/message; the socket wire
+        // contract requires them, so the emit supplies defaults.
+        this.gateway?.emitError({
+          ...base,
+          occurredAt: now,
+          code: "STREAM_ERROR",
+          message: `stream ${stream.id} entered error state`,
+        })
+        break
+    }
   }
 
   async delete(id: number): Promise<void> {
