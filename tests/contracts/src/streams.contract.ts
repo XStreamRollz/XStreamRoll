@@ -1,6 +1,12 @@
-import type { CreateStreamDto, UpdateStreamDto } from "@xstreamroll/types"
 import { PLACEHOLDER, type Contract } from "./contract"
-import { apiErrorSchema, paginatedStreamsSchema, streamSchema } from "./schemas"
+import {
+  apiErrorSchema,
+  paginatedStreamsSchema,
+  pendingStreamEventSchema,
+  streamSchema,
+} from "./schemas"
+
+import type { CreateStreamDto, UpdateStreamDto } from "@xstreamroll/types"
 
 const createBody: CreateStreamDto = {
   name: "My stream",
@@ -80,6 +86,26 @@ export const streamsContracts: Contract[] = [
     response: {
       status: 403,
       schema: apiErrorSchema,
+    },
+  },
+  {
+    name: "ingest-stream-event",
+    description: "POST /streams/events accepts an event for the worker queue",
+    consumer: "xstreamroll-sdk",
+    provider: "api",
+    request: {
+      method: "POST",
+      path: "/streams/events",
+      body: {
+        streamId: PLACEHOLDER.EXISTING_STREAM_ID,
+        data: { viewerId: "user_42" },
+      },
+      // Authenticated with the stream API key, not a user bearer token.
+      apiKey: true,
+    },
+    response: {
+      status: 201,
+      schema: pendingStreamEventSchema,
     },
   },
   {

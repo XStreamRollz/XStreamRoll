@@ -30,7 +30,6 @@ if [ -z "$SPEC_JSON" ]; then
       process.env.STREAM_API_KEY = process.env.STREAM_API_KEY || 'dev-key';
       process.env.JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
       process.env.NODE_ENV = 'development';
-      process.env.ALLOW_HEADER_ROLES = '1';
 
       const { Test } = require('@nestjs/testing');
       const { SwaggerModule, DocumentBuilder } = require('@nestjs/swagger');

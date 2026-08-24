@@ -1,17 +1,20 @@
 import { HttpClient, HttpRequestError } from "./http"
 import { paginateAll as createIterator, type PaginatedFetcher } from "./pagination"
-
 import {
   ApiError,
   type ApiErrorResponse,
   type AuthTokens,
   type CreateUserDto,
   type CreateWebhookDto,
+  type PagedTags,
+  type PaginatedResponse,
   type Stream,
   type StreamConfig,
   type StreamEvent,
-  type PaginatedResponse,
+  type UpdateWebhookDto,
+  type WebhookDelivery,
   type WebhookSubscription,
+  type WebhookSubscriptionSummary,
 } from "./types"
 
 /** Named environment presets for base URL resolution. */
@@ -26,6 +29,7 @@ const ENV_URLS: Record<ClientEnv, string> = {
 export class StreamingClient {
   private apiUrl: string
   private clientId: string
+  private apiKey?: string
   private http: HttpClient
   private tokens: AuthTokens | null = null
 
@@ -38,6 +42,7 @@ export class StreamingClient {
       this.apiUrl = config.apiUrl ?? ENV_URLS.development
     }
     this.clientId = config.clientId || `client-${Date.now()}`
+    this.apiKey = config.apiKey
 
     // Single HTTP layer: fetch-based HttpClient (with withRetry).
     this.http = new HttpClient(this.apiUrl)
@@ -96,16 +101,26 @@ export class StreamingClient {
 
   // ── Streams ───────────────────────────────────────────────────────────────
 
+  /**
+   * Push a single event into the worker queue (issue #514). The API
+   * endpoint is `POST /streams/events`, authenticated with the stream API
+   * key (`X-Stream-Api-Key` header) rather than a user JWT. The server
+   * stamps the arrival timestamp, so the client no longer sends one.
+   */
   async publishEvent(event: StreamEvent): Promise<void> {
     try {
-      await this.requestJson<void>("/streams/events", {
-        method: "POST",
-        body: {
-          clientId: this.clientId,
-          ...event,
-          timestamp: new Date().toISOString(),
+      const headers: Record<string, string> = {}
+      if (this.apiKey) {
+        headers["X-Stream-Api-Key"] = this.apiKey
+      }
+      await this.requestJson<void>(
+        "/streams/events",
+        {
+          method: "POST",
+          body: { streamId: event.streamId, data: event.data },
+          headers,
         },
-      })
+      )
     } catch (error) {
       console.error("Failed to publish event:", error)
       throw error
@@ -119,6 +134,16 @@ export class StreamingClient {
       console.error("Failed to get stream status:", error)
       throw error
     }
+  }
+
+  /**
+   * Lists the tags attached to a stream (issue #517). Requires the
+   * caller to own the stream — the API returns 403 otherwise.
+   */
+  async getStreamTags(streamId: string): Promise<PagedTags> {
+    return this.requestJson<PagedTags>(`/streams/${streamId}/tags`, {
+      method: "GET",
+    })
   }
 
   // ── Webhooks ──────────────────────────────────────────────────────────────
@@ -135,6 +160,65 @@ export class StreamingClient {
       method: "POST",
       body: dto,
     })
+  }
+
+  /**
+   * Lists the caller's webhook subscriptions, newest first. Optionally
+   * narrows to a single stream via `streamId`. The signing `secret` is
+   * not included in list responses — it is creation-time-only.
+   */
+  async listWebhooks(params: {
+    streamId?: string | number
+    page?: number
+    limit?: number
+  } = {}): Promise<PaginatedResponse<WebhookSubscriptionSummary>> {
+    const qs = new URLSearchParams()
+    if (params.streamId !== undefined) qs.set("streamId", String(params.streamId))
+    if (params.page !== undefined) qs.set("page", String(params.page))
+    if (params.limit !== undefined) qs.set("limit", String(params.limit))
+    const query = qs.toString()
+    return this.requestJson<PaginatedResponse<WebhookSubscriptionSummary>>(
+      `/webhooks${query ? `?${query}` : ""}`,
+      { method: "GET" },
+    )
+  }
+
+  /**
+   * Partially updates a webhook subscription: URL, event list, and/or
+   * `active`. Deactivating (`active: false`) stops new deliveries and
+   * retries immediately; reactivating resumes them. The signing secret
+   * cannot be changed — it is creation-time-only.
+   */
+  async updateWebhook(
+    id: string | number,
+    changes: UpdateWebhookDto,
+  ): Promise<WebhookSubscriptionSummary> {
+    return this.requestJson<WebhookSubscriptionSummary>(`/webhooks/${id}`, {
+      method: "PATCH",
+      body: changes,
+    })
+  }
+
+  /**
+   * Deletes a webhook subscription and its entire delivery history.
+   */
+  async deleteWebhook(id: string | number): Promise<void> {
+    await this.requestJson<void>(`/webhooks/${id}`, { method: "DELETE" })
+  }
+
+  /**
+   * Manually re-queues a failed or pending delivery so the retry sweep
+   * picks it up immediately. The retry budget still applies — the
+   * attempt count is kept, not reset.
+   */
+  async retryWebhookDelivery(
+    webhookId: string | number,
+    deliveryId: string | number,
+  ): Promise<WebhookDelivery> {
+    return this.requestJson<WebhookDelivery>(
+      `/webhooks/${webhookId}/deliveries/${deliveryId}/retry`,
+      { method: "POST" },
+    )
   }
 
   // ── Pagination (#390) ─────────────────────────────────────────────────────
@@ -185,16 +269,37 @@ export class StreamingClient {
    * Maps non-2xx responses (and exhausted HttpClient retries) to ApiError,
    * and optionally retries once after a token refresh on 401.
    */
+  /** Routes a request to the matching HttpClient convenience method. */
+  private async dispatch(
+    path: string,
+    method: string,
+    body: unknown,
+    headers?: Record<string, string>,
+  ): Promise<Response> {
+    switch (method) {
+      case "POST":
+        return this.http.post(path, body, { headers })
+      case "PATCH":
+        return this.http.patch(path, body, { headers })
+      case "DELETE":
+        return this.http.delete(path, body, { headers })
+      default:
+        return this.http.get(path, { headers })
+    }
+  }
+
   private async requestJson<T>(
     path: string,
     init: { method?: string; body?: unknown; headers?: Record<string, string> } = {},
     options: { skipAuthRefresh?: boolean; retried?: boolean } = {},
   ): Promise<T> {
     try {
-      const response =
-        init.method === "POST" || init.body !== undefined
-          ? await this.http.post(path, init.body, { headers: init.headers })
-          : await this.http.get(path, { headers: init.headers })
+      const response = await this.dispatch(
+        path,
+        init.method ?? (init.body !== undefined ? "POST" : "GET"),
+        init.body,
+        init.headers,
+      )
 
       if (
         response.status === 401 &&

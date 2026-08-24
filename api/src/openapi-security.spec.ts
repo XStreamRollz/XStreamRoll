@@ -5,6 +5,9 @@ import { Test } from "@nestjs/testing"
 
 import { AdminStatsService } from "./admin/admin-stats.service"
 import { AdminController } from "./admin/admin.controller"
+import { AdminGuard } from "./common/auth/admin.guard"
+import { RolesGuard } from "./common/auth/roles.guard"
+import { AuthGuard } from "./common/guards/auth.guard"
 import { StreamsController } from "./streams/streams.controller"
 import { StreamsService } from "./streams/streams.service"
 
@@ -44,6 +47,12 @@ async function buildOpenApiDoc(): Promise<{ paths: Record<string, PathItem> }> {
       { provide: StreamsService, useValue: {} },
       { provide: AdminStatsService, useValue: {} },
       { provide: CACHE_MANAGER, useValue: { get: jest.fn(), set: jest.fn() } },
+      // AdminController is gated by AdminGuard (AuthGuard + RolesGuard);
+      // supply inert doubles so the Swagger doc can be built without
+      // booting the real auth pipeline.
+      { provide: AuthGuard, useValue: { canActivate: () => true } },
+      { provide: RolesGuard, useValue: { canActivate: () => true } },
+      { provide: AdminGuard, useValue: { canActivate: () => true } },
     ],
   }).compile()
 

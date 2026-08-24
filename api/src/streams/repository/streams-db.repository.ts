@@ -3,12 +3,13 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common"
 import { Pool } from "pg"
+
 import { PG_POOL } from "../../database/database.module"
 import { StreamAnalyticsDto } from "../dto/stream-analytics.dto"
-import type { StreamVisibility } from "../dto/visibility"
 import { Stream } from "../stream.entity"
 import {
   StreamsRepository,
@@ -17,6 +18,8 @@ import {
   type StreamListFilter,
   type StreamUpdateChanges,
 } from "./streams.repository"
+
+import type { StreamVisibility } from "../dto/visibility"
 
 /**
  * PostgreSQL-backed streams repository.
@@ -224,6 +227,41 @@ export class StreamsDbRepository {
       return (rowCount ?? 0) > 0
     } catch (err) {
       this.handleDbError(err, "delete")
+    }
+  }
+
+  /**
+   * Append an ingested event to `stream_data` — the worker's poll source
+   * (issue #514). The server stamps the timestamp; a nonexistent stream
+   * id surfaces as a foreign-key violation, mapped to 404.
+   */
+  async insertPendingEvent(
+    streamId: number,
+    data: Record<string, unknown>,
+    timestamp: Date,
+  ): Promise<PendingStreamEvent> {
+    try {
+      const { rows } = await this.pool.query<{
+        stream_id: number
+        data: Record<string, unknown>
+        timestamp: Date
+      }>(
+        `INSERT INTO stream_data (stream_id, data, timestamp)
+         VALUES ($1, $2, $3)
+         RETURNING stream_id, data, timestamp`,
+        [streamId, data, timestamp],
+      )
+      return {
+        streamId: String(rows[0].stream_id),
+        data: rows[0].data,
+        timestamp: rows[0].timestamp.toISOString(),
+      }
+    } catch (err) {
+      // 23503 = foreign_key_violation — the stream does not exist.
+      if ((err as { code?: string }).code === "23503") {
+        throw new NotFoundException(`stream ${streamId} not found`)
+      }
+      this.handleDbError(err, "insertPendingEvent")
     }
   }
 

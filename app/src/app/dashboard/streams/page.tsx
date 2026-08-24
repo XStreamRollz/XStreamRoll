@@ -23,7 +23,6 @@ export const dynamic = "force-dynamic"
  */
 export default function StreamsDashboardPage() {
   const demoStreamId = 1
-  const demoUserId = 1
 
   return (
     <main className="container mx-auto max-w-3xl px-4 py-10">
@@ -38,11 +37,7 @@ export default function StreamsDashboardPage() {
       </header>
       <Suspense fallback={<StreamListSkeleton />}>
         <StreamsListLive />
-        <StreamTagEditor
-          streamId={demoStreamId}
-          initialTags={[]}
-          actingUserId={demoUserId}
-        />
+        <StreamTagEditor streamId={demoStreamId} initialTags={[]} />
       </Suspense>
     </main>
   )

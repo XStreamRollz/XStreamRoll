@@ -8,20 +8,24 @@
  *   3. Variable context (email, username, reason …) is stored
  *      separately in the `metadata` JSONB column.
  *
+ * Only actions that are actually recorded may appear here — an action
+ * that documents an interceptor capture for a route that does not exist
+ * is dead vocabulary (issue #523).
+ *
  * @see database/migrations/2026072801_add_audit_log_metadata_and_index.up.sql
  */
 export enum AuditAction {
-  // ── Authentication ────────────────────────────────────────────────
+  // ── Authentication (service-level, written by AuthService) ─────────
   AUTH_LOGIN_SUCCESS = "AUTH_LOGIN_SUCCESS",
   AUTH_LOGIN_FAILURE = "AUTH_LOGIN_FAILURE",
   AUTH_REGISTER_SUCCESS = "AUTH_REGISTER_SUCCESS",
   AUTH_REGISTER_FAILURE = "AUTH_REGISTER_FAILURE",
 
   // ── Generic interceptor-captured actions ─────────────────────────
-  /** Captured by AuditInterceptor on POST /auth/login */
-  LOGIN = "login",
-  PASSWORD_CHANGE = "password_change",
-  STREAM_DELETE = "stream_delete",
-  ROLE_CHANGE = "role_change",
+  /** Captured by AuditInterceptor on PATCH /users/me */
   PROFILE_UPDATE = "profile_update",
+  /** Captured by AuditInterceptor on POST /users/me/change-password */
+  PASSWORD_CHANGE = "password_change",
+  /** Captured by AuditInterceptor on DELETE /streams/:id */
+  STREAM_DELETE = "stream_delete",
 }

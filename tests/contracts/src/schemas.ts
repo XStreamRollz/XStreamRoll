@@ -1,8 +1,10 @@
 import { z, type ZodType } from "zod"
+
 import type {
   ApiErrorResponse,
   PaginatedResponse,
   Stream,
+  Tag,
   User,
 } from "@xstreamroll/types"
 
@@ -44,6 +46,29 @@ export const paginatedStreamsSchema = typed<PaginatedResponse<Stream>>()(
   }),
 )
 
+export const tagSchema = typed<Tag>()(
+  z.object({
+    id: z.number(),
+    name: z.string(),
+    slug: z.string(),
+    createdAt: z.string(),
+  }),
+)
+
+/**
+ * Envelope returned by `GET /streams/:id/tags` (issue #517). Uses the
+ * `PagedTags` shape (with `hasMore`) that the app's `useStreamTags`
+ * hook parses — deliberately not pinned via `typed<>` because no
+ * shared `@xstreamroll/types` interface carries `hasMore` yet.
+ */
+export const pagedTagsSchema = z.object({
+  data: z.array(tagSchema),
+  page: z.number(),
+  limit: z.number(),
+  total: z.number(),
+  hasMore: z.boolean(),
+})
+
 export const userSchema = typed<User>()(
   z.object({
     id: z.string(),
@@ -58,6 +83,64 @@ export const authResponseSchema = z.object({
   user: userSchema,
   accessToken: z.string(),
   refreshToken: z.string(),
+})
+
+/**
+ * Shape returned by `POST /streams/events` (issue #514) and, per row,
+ * by `GET /streams/pending` — the `stream_data` wire shape the worker
+ * consumes.
+ */
+export const pendingStreamEventSchema = z.object({
+  streamId: z.string(),
+  data: z.record(z.string(), z.unknown()),
+  timestamp: z.string(),
+})
+
+/**
+ * A webhook subscription as returned by `POST /webhooks` — the only
+ * response that includes the signing `secret`.
+ */
+export const webhookSubscriptionSchema = z.object({
+  id: z.union([z.string(), z.number()]),
+  userId: z.union([z.string(), z.number()]),
+  streamId: z.union([z.string(), z.number()]),
+  url: z.string(),
+  events: z.array(z.string()),
+  secret: z.string(),
+  active: z.boolean(),
+  createdAt: z.string(),
+})
+
+/**
+ * A webhook subscription on every non-creation endpoint (`GET /webhooks`,
+ * `PATCH /webhooks/:id`) — identical to `webhookSubscriptionSchema` minus
+ * the secret, which is creation-time-only.
+ */
+export const webhookSubscriptionSummarySchema = webhookSubscriptionSchema.omit({
+  secret: true,
+})
+
+export const paginatedWebhookSubscriptionsSchema = z.object({
+  data: z.array(webhookSubscriptionSummarySchema),
+  total: z.number(),
+  page: z.number(),
+  limit: z.number(),
+})
+
+/** A single webhook delivery, as returned by the deliveries endpoints. */
+export const webhookDeliverySchema = z.object({
+  id: z.union([z.string(), z.number()]),
+  webhookSubscriptionId: z.union([z.string(), z.number()]),
+  event: z.string(),
+  payload: z.record(z.string(), z.unknown()),
+  status: z.enum(["pending", "success", "failed"]),
+  attemptCount: z.number(),
+  lastStatusCode: z.number().nullable(),
+  lastResponseBody: z.string().nullable(),
+  lastError: z.string().nullable(),
+  nextAttemptAt: z.string().nullable(),
+  deliveredAt: z.string().nullable(),
+  createdAt: z.string(),
 })
 
 export const apiErrorSchema = typed<ApiErrorResponse>()(

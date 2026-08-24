@@ -6,6 +6,9 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(255) UNIQUE NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
+    -- Issue #511: single admin bit. Defaults to false; promote the first
+    -- admin with: UPDATE users SET is_admin = true WHERE email = '...';
+    is_admin BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

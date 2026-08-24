@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto"
+
 import {
   ConflictException,
   Injectable,
@@ -5,10 +7,11 @@ import {
 } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 import * as bcrypt from "bcrypt"
+
+import { AuditService } from "../audit/audit.service"
 import { SafeUser, toSafeUser } from "../auth/auth.service"
 import { TokenDenylistService } from "../auth/token-denylist.service"
 import { User, UsersRepository } from "../auth/users.repository"
-import { AuditService } from "../audit/audit.service"
 import { ChangePasswordDto } from "./dto/change-password.dto"
 import { UpdateProfileDto } from "./dto/update-profile.dto"
 
@@ -67,7 +70,13 @@ export class UsersService {
 
     if (emailChanged) {
       const token = this.extractBearerToken(authorizationHeader)
-      await this.tokenDenylistService.revoke(token, 3600)
+      // Issue #510: revoke by the token's `jti` — the same key the guard
+      // reads. Revoking the raw JWT here hashed a different value and the
+      // revocation never took effect.
+      await this.tokenDenylistService.revoke(
+        this.tokenDenylistService.decodeJti(token),
+        3600,
+      )
 
       accessToken = this.signToken(updated)
     }
@@ -101,7 +110,11 @@ export class UsersService {
     )
 
     const token = this.extractBearerToken(authorizationHeader)
-    await this.tokenDenylistService.revoke(token, 3600)
+    // Issue #510: revoke by the token's `jti`, not the raw JWT string.
+    await this.tokenDenylistService.revoke(
+      this.tokenDenylistService.decodeJti(token),
+      3600,
+    )
 
     return {
       user: toSafeUser(updated),
@@ -109,6 +122,10 @@ export class UsersService {
     }
   }
 
+  /**
+   * Sign a fresh access token. Carries a `jti` so the token can be
+   * revoked via the denylist (issue #510).
+   */
   private signToken(user: User): string {
     return this.jwtService.sign({
       sub: user.id,
@@ -116,6 +133,7 @@ export class UsersService {
       username: user.username,
       passwordChangedAt:
         user.password_changed_at?.getTime() ?? user.created_at.getTime(),
+      jti: randomUUID(),
     })
   }
 

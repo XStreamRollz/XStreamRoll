@@ -1,5 +1,7 @@
 import { EventEmitter } from "events"
 
+import { incrementProcessed } from "./metrics"
+
 export type SessionState =
   "idle" | "running" | "draining" | "stopped" | "errored"
 
@@ -177,6 +179,11 @@ export class StreamSession extends EventEmitter {
         while (true) {
           try {
             await this.handlers.publish(processed)
+            // Issue #521: count the event only once the publish has
+            // actually succeeded (after any retries). Dead-lettered
+            // events never reach this line, so processed-vs-failed
+            // stays observable on the /metrics endpoint.
+            incrementProcessed()
             this.emit("processed", processed)
             break // success — move to next event
           } catch (err) {

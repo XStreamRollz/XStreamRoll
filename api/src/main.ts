@@ -3,6 +3,7 @@ import { ValidationPipe } from "@nestjs/common"
 import { HttpAdapterHost, NestFactory } from "@nestjs/core"
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger"
 import compression from "compression"
+import cookieParser from "cookie-parser"
 import helmet from "helmet"
 import * as cookieParser from "cookie-parser"
 import { AppModule } from "./app.module"
@@ -26,6 +27,9 @@ async function bootstrap() {
   validateJwtSecret()
 
   const app = await NestFactory.create(AppModule)
+
+  // Parse cookies for refresh-token handling.
+  app.use(cookieParser())
 
   // Issue #89: Apply Helmet middleware globally for secure HTTP headers
   app.use(

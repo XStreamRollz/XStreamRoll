@@ -1,10 +1,12 @@
 import { Pool } from "pg"
+
 import {
   resetDb,
   createTestApp,
   destroyTestApp,
   TestAppContext,
 } from "./database/test-utils"
+import { StreamsDbRepository } from "./streams/repository/streams-db.repository"
 
 describe("Database Integration Tests", () => {
   let ctx: TestAppContext
@@ -37,6 +39,8 @@ describe("Database Integration Tests", () => {
       expect(columns).toContain("email")
       expect(columns).toContain("password_hash")
       expect(columns).toContain("created_at")
+      // Issue #511: single admin bit, defaulting to non-admin.
+      expect(columns).toContain("is_admin")
     })
 
     it("has the streams table with foreign key to users", async () => {
@@ -332,6 +336,49 @@ describe("Database Integration Tests", () => {
         [userId],
       )
       expect(streams.rows).toHaveLength(0)
+    })
+  })
+
+  describe("Stream data ingestion (issue #514)", () => {
+    let streamsDb: StreamsDbRepository
+    let streamId: number
+
+    beforeEach(async () => {
+      streamsDb = new StreamsDbRepository(pool)
+      const user = await pool.query(
+        `INSERT INTO users (username, email, password_hash)
+         VALUES ('ingester', 'ingest@test.com', 'hash')
+         RETURNING id`,
+      )
+      const stream = await pool.query(
+        `INSERT INTO streams (user_id, name) VALUES ($1, 'Ingest Stream')
+         RETURNING id`,
+        [user.rows[0].id],
+      )
+      streamId = stream.rows[0].id
+    })
+
+    it("insertPendingEvent writes a row to stream_data that getPendingEvents returns", async () => {
+      const pending = await streamsDb.insertPendingEvent(
+        streamId,
+        { viewerId: "u1", kind: "data" },
+        new Date("2026-08-01T00:00:00Z"),
+      )
+
+      expect(pending.streamId).toBe(String(streamId))
+      expect(pending.data).toEqual({ viewerId: "u1", kind: "data" })
+      expect(pending.timestamp).toBe("2026-08-01T00:00:00.000Z")
+
+      // The row is visible to the worker's poll source.
+      const { data } = await streamsDb.getPendingEvents(100, 0)
+      expect(data).toHaveLength(1)
+      expect(data[0]).toEqual(pending)
+    })
+
+    it("insertPendingEvent throws NotFoundException for a nonexistent stream", async () => {
+      await expect(
+        streamsDb.insertPendingEvent(999999, { foo: "bar" }, new Date()),
+      ).rejects.toThrow(/not found/)
     })
   })
 

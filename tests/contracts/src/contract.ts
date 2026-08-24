@@ -13,6 +13,11 @@ export interface ContractRequest {
   body?: unknown
   /** Whether the request must carry a valid bearer token. */
   authenticated?: boolean
+  /**
+   * Whether the request must carry the STREAM_API_KEY via the
+   * `X-Stream-Api-Key` header (issue #514) instead of a bearer token.
+   */
+  apiKey?: boolean
 }
 
 export interface ContractResponse {
@@ -50,6 +55,9 @@ export interface Contract {
 export const PLACEHOLDER = {
   EXISTING_STREAM_ID: "__EXISTING_STREAM_ID__",
   MISSING_STREAM_ID: "__MISSING_STREAM_ID__",
+  EXISTING_WEBHOOK_ID: "__EXISTING_WEBHOOK_ID__",
+  MISSING_WEBHOOK_ID: "__MISSING_WEBHOOK_ID__",
+  EXISTING_DELIVERY_ID: "__EXISTING_DELIVERY_ID__",
 } as const
 
 /** Substitutes `:param` placeholders and appends the query string. */

@@ -1,6 +1,7 @@
 // ─── Generated types from OpenAPI spec ─────────────────────────────────────
 // Regenerate with `npm run generate:types` (requires API server running).
 import type { components } from "./generated/schema"
+import type { ApiErrorResponse, StreamEventType } from "@xstreamroll/types"
 
 export type { components }
 
@@ -36,6 +37,7 @@ export type {
   StreamVisibility,
   CreateStreamDto,
   UpdateStreamDto,
+  Tag,
   StreamEventType,
   StreamEvent,
   StreamEventRecord,
@@ -44,8 +46,6 @@ export type {
   ValidationError,
   ApiErrorResponse,
 } from "@xstreamroll/types"
-
-import type { ApiErrorResponse, StreamEventType } from "@xstreamroll/types"
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -58,6 +58,12 @@ export interface StreamConfig {
   env?: "development" | "staging" | "production"
   /** Explicit base URL. Takes precedence over `env` and `apiUrl`. */
   baseUrl?: string
+  /**
+   * The stream API key (`STREAM_API_KEY` on the server). Sent as the
+   * `X-Stream-Api-Key` header on {@link StreamingClient.publishEvent} so
+   * event ingestion authenticates without a per-user JWT (issue #514).
+   */
+  apiKey?: string
 }
 
 // ─── User ─────────────────────────────────────────────────────────────────────
@@ -71,10 +77,10 @@ export interface UpdateUserDto {
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 /** Response returned after a successful login or token refresh. */
-export interface AuthTokens {
+export interface AuthResponse {
+  user: User
   accessToken: string
   refreshToken: string
-  expiresIn: number
 }
 
 // ─── Webhooks ─────────────────────────────────────────────────────────────────
@@ -101,6 +107,33 @@ export interface WebhookSubscription {
   secret: string
   active: boolean
   createdAt: string
+}
+
+/**
+ * A webhook subscription as returned by every endpoint except creation
+ * (`GET /webhooks`, `PATCH /webhooks/:id`). Identical to
+ * {@link WebhookSubscription} minus the `secret`, which the API only
+ * ever returns once, from `subscribeWebhook()`.
+ */
+export interface WebhookSubscriptionSummary {
+  id: string | number
+  userId: string | number
+  streamId: string | number
+  url: string
+  events: StreamEventType[]
+  active: boolean
+  createdAt: string
+}
+
+/**
+ * Partial payload accepted by `updateWebhook()` / `PATCH /webhooks/:id`.
+ * The signing secret cannot be changed through this endpoint — it is
+ * creation-time-only.
+ */
+export interface UpdateWebhookDto {
+  url?: string
+  events?: StreamEventType[]
+  active?: boolean
 }
 
 /** A single delivery attempt, as returned by `GET /webhooks/:id/deliveries`. */

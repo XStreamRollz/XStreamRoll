@@ -1,6 +1,8 @@
 import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common"
-import type { Request } from "express"
+
 import { JwtExtractorService } from "./jwt-extractor.service"
+
+import type { Request } from "express"
 
 /**
  * Auth guard that validates a JWT access token from the Authorization header
@@ -15,7 +17,7 @@ export class AuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<Request>()
-    const userId = await this.jwtExtractor.authenticate(
+    const { userId, isAdmin } = await this.jwtExtractor.authenticate(
       req.header("authorization"),
     )
 
@@ -24,7 +26,10 @@ export class AuthGuard implements CanActivate {
       user?: { sub: number; roles: string[] }
     }
     authenticatedReq.auth = { userId }
-    authenticatedReq.user = { sub: userId, roles: [] }
+    // Issue #511: roles are derived exclusively from the token's isAdmin
+    // claim — never from request headers. A token without the claim yields
+    // an empty role set, so RolesGuard denies admin-gated routes.
+    authenticatedReq.user = { sub: userId, roles: isAdmin ? ["admin"] : [] }
     return true
   }
 }
