@@ -5,10 +5,11 @@ import {
 } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 import * as bcrypt from "bcrypt"
+
+import { AuditService } from "../audit/audit.service"
 import { SafeUser, toSafeUser } from "../auth/auth.service"
 import { TokenDenylistService } from "../auth/token-denylist.service"
 import { User, UsersRepository } from "../auth/users.repository"
-import { AuditService } from "../audit/audit.service"
 import { ChangePasswordDto } from "./dto/change-password.dto"
 import { UpdateProfileDto } from "./dto/update-profile.dto"
 
@@ -116,6 +117,9 @@ export class UsersService {
       username: user.username,
       passwordChangedAt:
         user.password_changed_at?.getTime() ?? user.created_at.getTime(),
+      // Issue #511: reissued tokens (email/password change) must keep the
+      // admin claim so a re-login does not silently drop admin access.
+      isAdmin: user.is_admin === true,
     })
   }
 

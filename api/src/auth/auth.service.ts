@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto"
+
 import {
   ConflictException,
   Injectable,
@@ -5,19 +7,21 @@ import {
   UnauthorizedException,
 } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
-import type { User as SharedUser } from "@xstreamroll/types"
 import * as bcrypt from "bcrypt"
-import { randomUUID } from "node:crypto"
-import type { Request } from "express"
-import { RegisterDto } from "./dto/register.dto"
-import { LoginDto } from "./dto/login.dto"
+
+
 import { ForgotPasswordDto } from "./dto/forgot-password.dto"
+import { LoginDto } from "./dto/login.dto"
+import { RegisterDto } from "./dto/register.dto"
 import { ResetPasswordDto } from "./dto/reset-password.dto"
+import { PasswordResetService } from "./password-reset.service"
 import { TokenDenylistService } from "./token-denylist.service"
 import { User, UsersRepository } from "./users.repository"
-import { PasswordResetService } from "./password-reset.service"
-import { AuditService } from "../audit/audit.service"
 import { AuditAction } from "../audit/audit-action.enum"
+import { AuditService } from "../audit/audit.service"
+
+import type { User as SharedUser } from "@xstreamroll/types"
+import type { Request } from "express"
 
 /** Rounds for bcrypt key derivation (auto-salt). */
 const BCRYPT_ROUNDS = 12
@@ -271,7 +275,14 @@ export class AuthService {
     return match[1]
   }
 
-  /** Create a short-lived JWT access token for the given user. */
+  /**
+   * Create a short-lived JWT access token for the given user.
+   *
+   * The `isAdmin` claim is read from the users row at issuance time, so
+   * a promotion/demotion takes effect on the user's next login — the
+   * same freshness model as `passwordChangedAt`. Tokens minted before
+   * this claim existed simply lack it and are treated as non-admin.
+   */
   private signAccessToken(user: User): string {
     return this.accessJwt.sign({
       sub: user.id,
@@ -279,6 +290,7 @@ export class AuthService {
       username: user.username,
       passwordChangedAt:
         user.password_changed_at?.getTime() ?? user.created_at.getTime(),
+      isAdmin: user.is_admin === true,
     })
   }
 

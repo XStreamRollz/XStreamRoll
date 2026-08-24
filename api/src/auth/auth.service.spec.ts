@@ -1,9 +1,10 @@
 import { ConflictException, UnauthorizedException } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 import * as bcrypt from "bcrypt"
+
 import { AuthService } from "./auth.service"
-import { User, UsersRepository } from "./users.repository"
 import { TokenDenylistService } from "./token-denylist.service"
+import { User, UsersRepository } from "./users.repository"
 
 jest.mock("bcrypt", () => ({
   hash: jest.fn(),
@@ -87,6 +88,7 @@ function dummyUser(overrides: Partial<User> = {}): User {
     password_hash:
       "$2b$10$abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ12",
     created_at: new Date("2026-01-01T00:00:00Z"),
+    is_admin: false,
     ...overrides,
   }
 }
@@ -142,7 +144,7 @@ describe("AuthService", () => {
       const result = await service.register(dto, {
         ip: "127.0.0.1",
         headers: { "user-agent": "test" },
-      } as any)
+      } as any) // eslint-disable-line @typescript-eslint/no-explicit-any -- partial request stub for test
 
       expect(users.findByEmail).toHaveBeenCalledWith(dto.email)
       expect(users.findByUsername).toHaveBeenCalledWith(dto.username)
@@ -156,6 +158,7 @@ describe("AuthService", () => {
         email: dto.email,
         username: dto.username,
         passwordChangedAt: expect.any(Number),
+        isAdmin: false,
       })
       expect(refreshJwt.sign).toHaveBeenCalledWith({
         sub: 1,
@@ -182,7 +185,7 @@ describe("AuthService", () => {
         service.register(dto, {
           ip: "127.0.0.1",
           headers: { "user-agent": "test" },
-        } as any),
+        } as any), // eslint-disable-line @typescript-eslint/no-explicit-any -- partial request stub for test
       ).rejects.toThrow(ConflictException)
       expect(users.create).not.toHaveBeenCalled()
     })
@@ -198,7 +201,7 @@ describe("AuthService", () => {
         service.register(dto, {
           ip: "127.0.0.1",
           headers: { "user-agent": "test" },
-        } as any),
+        } as any), // eslint-disable-line @typescript-eslint/no-explicit-any -- partial request stub for test
       ).rejects.toThrow(ConflictException)
       expect(users.create).not.toHaveBeenCalled()
     })
@@ -215,7 +218,7 @@ describe("AuthService", () => {
       await service.register(dto, {
         ip: "127.0.0.1",
         headers: { "user-agent": "test" },
-      } as any)
+      } as any) // eslint-disable-line @typescript-eslint/no-explicit-any -- partial request stub for test
 
       expect(bcrypt.hash).toHaveBeenCalledWith(dto.password, 12)
       const [storedUsername, storedEmail, storedHash] =
@@ -235,8 +238,8 @@ describe("AuthService", () => {
             email: "dup@x.com",
             password: "someOtherPassword",
           },
-          { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any,
-        ), // eslint-disable-line @typescript-eslint/no-explicit-any
+          { ip: "127.0.0.1", headers: { "user-agent": "test" } } as any, // eslint-disable-line @typescript-eslint/no-explicit-any -- partial request stub for test
+        ),
       ).rejects.toThrow(ConflictException)
     })
   })
@@ -289,7 +292,7 @@ describe("AuthService", () => {
       const result = await service.login(dto, {
         ip: "127.0.0.1",
         headers: { "user-agent": "test" },
-      } as any)
+      } as any) // eslint-disable-line @typescript-eslint/no-explicit-any -- partial request stub for test
 
       expect(users.findByEmail).toHaveBeenCalledWith(dto.email)
       expect(bcrypt.compare).toHaveBeenCalledWith(
@@ -301,6 +304,7 @@ describe("AuthService", () => {
         email: user.email,
         username: user.username,
         passwordChangedAt: expect.any(Number),
+        isAdmin: false,
       })
       expect(refreshJwt.sign).toHaveBeenCalledWith({
         sub: user.id,
@@ -327,7 +331,7 @@ describe("AuthService", () => {
         service.login(dto, {
           ip: "127.0.0.1",
           headers: { "user-agent": "test" },
-        } as any),
+        } as any), // eslint-disable-line @typescript-eslint/no-explicit-any -- partial request stub for test
       ).rejects.toThrow(UnauthorizedException)
       expect(accessJwt.sign).not.toHaveBeenCalled()
     })
@@ -342,7 +346,7 @@ describe("AuthService", () => {
         service.login({ email: dto.email, password: "wrongPassword" }, {
           ip: "127.0.0.1",
           headers: { "user-agent": "test" },
-        } as any),
+        } as any), // eslint-disable-line @typescript-eslint/no-explicit-any -- partial request stub for test
       ).rejects.toThrow(UnauthorizedException)
 
       expect(accessJwt.sign).not.toHaveBeenCalled()
@@ -356,7 +360,7 @@ describe("AuthService", () => {
         .login({ email: "no@user.com", password: "any" }, {
           ip: "127.0.0.1",
           headers: { "user-agent": "test" },
-        } as any)
+        } as any) // eslint-disable-line @typescript-eslint/no-explicit-any -- partial request stub for test
         .catch((e) => e)
       expect(e1).toBeInstanceOf(UnauthorizedException)
 
@@ -368,7 +372,7 @@ describe("AuthService", () => {
         .login({ email: dto.email, password: "bad" }, {
           ip: "127.0.0.1",
           headers: { "user-agent": "test" },
-        } as any)
+        } as any) // eslint-disable-line @typescript-eslint/no-explicit-any -- partial request stub for test
         .catch((e) => e)
       expect(e2).toBeInstanceOf(UnauthorizedException)
 
@@ -386,7 +390,7 @@ describe("AuthService", () => {
       await service.login(dto, {
         ip: "127.0.0.1",
         headers: { "user-agent": "test" },
-      } as any)
+      } as any) // eslint-disable-line @typescript-eslint/no-explicit-any -- partial request stub for test
 
       expect(bcrypt.compare).toHaveBeenCalledWith(
         dto.password,
@@ -397,6 +401,7 @@ describe("AuthService", () => {
         email: user.email,
         username: user.username,
         passwordChangedAt: expect.any(Number),
+        isAdmin: false,
       })
       expect(refreshJwt.sign).toHaveBeenCalledWith({
         sub: user.id,
@@ -405,6 +410,24 @@ describe("AuthService", () => {
         passwordChangedAt: expect.any(Number),
         jti: expect.any(String),
       })
+    })
+
+    it("carries isAdmin: true in the access token when the user is flagged admin", async () => {
+      const user = dummyUser({ email: dto.email, is_admin: true })
+      users.findByEmail.mockResolvedValue(user)
+      ;(bcrypt.compare as jest.Mock).mockResolvedValue(true)
+      accessJwt.sign.mockReturnValue("jwt.token.here")
+      refreshJwt.sign.mockReturnValue("refresh.token.here")
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- partial request stub for test
+      await service.login(dto, {
+        ip: "127.0.0.1",
+        headers: { "user-agent": "test" },
+      } as any) // eslint-disable-line @typescript-eslint/no-explicit-any -- partial request stub for test
+
+      expect(accessJwt.sign).toHaveBeenCalledWith(
+        expect.objectContaining({ isAdmin: true }),
+      )
     })
   })
 
