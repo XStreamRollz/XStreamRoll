@@ -401,9 +401,10 @@ describe("Database Integration Tests", () => {
       let cursor: string | null = null
 
       while (true) {
-        const parsed = cursor ? JSON.parse(cursor) : null
+        const parsed: { timestamp: string; id: number } | null =
+          cursor ? (JSON.parse(cursor) as { timestamp: string; id: number }) : null
         const params: unknown[] = [BATCH]
-        const afterClause = parsed
+        const afterClause: string = parsed
           ? `AND (timestamp, id) > ($2, $3)`
           : ""
         if (parsed) {
@@ -426,18 +427,17 @@ describe("Database Integration Tests", () => {
         }
 
         if (rows.length < BATCH) break
-        cursor = JSON.stringify({
-          timestamp: rows[rows.length - 1].id /* replaced below */,
-          id: rows[rows.length - 1].id,
-        })
-        // Fetch the actual timestamp from the row we just saw.
-        const { rows: tsRows } = await pool.query(
+        // Fetch the actual timestamp from the last row we saw.
+        const lastRow = rows[rows.length - 1]
+        const { rows: tsRows } = await pool.query<{
+          timestamp: Date
+        }>(
           `SELECT timestamp FROM stream_data WHERE id = $1`,
-          [rows[rows.length - 1].id],
+          [lastRow.id],
         )
         cursor = JSON.stringify({
           timestamp: tsRows[0].timestamp.toISOString(),
-          id: rows[rows.length - 1].id,
+          id: lastRow.id,
         })
       }
 
