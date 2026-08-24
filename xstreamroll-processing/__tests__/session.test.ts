@@ -1,7 +1,10 @@
+import * as fc from "fast-check"
+
+import { getMetrics } from "../src/metrics"
 import {
-  StreamSession,
-  type StreamEvent,
   type ProcessedStreamEvent,
+  type StreamEvent,
+  StreamSession,
 } from "../src/session"
 
 function makeEvent(streamId = "s1"): StreamEvent {
@@ -133,6 +136,77 @@ describe("StreamSession", () => {
     s.start()
     await s.stop()
     await expect(s.stop()).resolves.toBeUndefined()
+  })
+})
+
+// ============================================
+// ISSUE #521 — MESSAGES-PROCESSED METRIC
+// ============================================
+
+describe("StreamSession — messages-processed metric (issue #521)", () => {
+  async function waitUntil(
+    condition: () => boolean,
+    maxMs = 5_000,
+  ): Promise<void> {
+    const deadline = Date.now() + maxMs
+    while (!condition() && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 10))
+    }
+  }
+
+  it("increments messagesProcessed once per successfully published event", async () => {
+    const before = getMetrics().messagesProcessed
+    const s = new StreamSession("s1", "w1", { publish: async () => {} })
+    s.start()
+    s.enqueue(makeEvent())
+    s.enqueue(makeEvent())
+    await waitUntil(() => getMetrics().messagesProcessed >= before + 2)
+    expect(getMetrics().messagesProcessed).toBe(before + 2)
+  })
+
+  it("increments exactly once when a transient failure succeeds on retry", async () => {
+    const before = getMetrics().messagesProcessed
+    let calls = 0
+    const s = new StreamSession(
+      "s1",
+      "w1",
+      {
+        publish: async () => {
+          calls++
+          if (calls < 3) throw new Error("transient error")
+        },
+      },
+      1000,
+      3,
+    )
+    s.start()
+    s.enqueue(makeEvent())
+    await waitUntil(() => getMetrics().messagesProcessed >= before + 1)
+    // The counter moves exactly once even though publish was attempted 3 times.
+    expect(calls).toBe(3)
+    expect(getMetrics().messagesProcessed).toBe(before + 1)
+  })
+
+  it("does not increment messagesProcessed for dead-lettered events", async () => {
+    const before = getMetrics().messagesProcessed
+    const s = new StreamSession(
+      "s1",
+      "w1",
+      {
+        publish: async () => {
+          throw new Error("api down")
+        },
+      },
+      1000,
+      0,
+    )
+    const deadLettered: unknown[] = []
+    s.on("dead-letter", (event: unknown) => deadLettered.push(event))
+    s.start()
+    s.enqueue(makeEvent())
+    await waitUntil(() => deadLettered.length > 0)
+    expect(deadLettered).toHaveLength(1)
+    expect(getMetrics().messagesProcessed).toBe(before)
   })
 })
 
@@ -311,7 +385,6 @@ describe("StreamSession — publish retry and dead-letter (issue #343)", () => {
 // ============================================
 // PROPERTY-BASED TESTS FOR SESSION STATE TRANSITIONS
 // ============================================
-import * as fc from "fast-check"
 
 describe("StreamSession - Property-Based Tests", () => {
   const sessionStates = ["idle", "running", "stopped", "errored"] as const
