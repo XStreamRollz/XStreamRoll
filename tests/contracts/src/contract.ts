@@ -13,6 +13,11 @@ export interface ContractRequest {
   body?: unknown
   /** Whether the request must carry a valid bearer token. */
   authenticated?: boolean
+  /**
+   * Whether the request must carry the STREAM_API_KEY via the
+   * `X-Stream-Api-Key` header (issue #514) instead of a bearer token.
+   */
+  apiKey?: boolean
 }
 
 export interface ContractResponse {

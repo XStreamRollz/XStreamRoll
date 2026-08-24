@@ -1,6 +1,7 @@
 // ─── Generated types from OpenAPI spec ─────────────────────────────────────
 // Regenerate with `npm run generate:types` (requires API server running).
 import type { components } from "./generated/schema"
+import type { ApiErrorResponse, StreamEventType } from "@xstreamroll/types"
 
 export type { components }
 
@@ -45,8 +46,6 @@ export type {
   ApiErrorResponse,
 } from "@xstreamroll/types"
 
-import type { ApiErrorResponse, StreamEventType } from "@xstreamroll/types"
-
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 /** Configuration for the StreamingClient. */
@@ -58,6 +57,12 @@ export interface StreamConfig {
   env?: "development" | "staging" | "production"
   /** Explicit base URL. Takes precedence over `env` and `apiUrl`. */
   baseUrl?: string
+  /**
+   * The stream API key (`STREAM_API_KEY` on the server). Sent as the
+   * `X-Stream-Api-Key` header on {@link StreamingClient.publishEvent} so
+   * event ingestion authenticates without a per-user JWT (issue #514).
+   */
+  apiKey?: string
 }
 
 // ─── User ─────────────────────────────────────────────────────────────────────

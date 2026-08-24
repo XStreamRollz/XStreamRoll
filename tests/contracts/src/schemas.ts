@@ -1,4 +1,5 @@
 import { z, type ZodType } from "zod"
+
 import type {
   ApiErrorResponse,
   PaginatedResponse,
@@ -58,6 +59,17 @@ export const authResponseSchema = z.object({
   user: userSchema,
   accessToken: z.string(),
   refreshToken: z.string(),
+})
+
+/**
+ * Shape returned by `POST /streams/events` (issue #514) and, per row,
+ * by `GET /streams/pending` — the `stream_data` wire shape the worker
+ * consumes.
+ */
+export const pendingStreamEventSchema = z.object({
+  streamId: z.string(),
+  data: z.record(z.string(), z.unknown()),
+  timestamp: z.string(),
 })
 
 export const apiErrorSchema = typed<ApiErrorResponse>()(
