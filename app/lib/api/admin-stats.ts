@@ -3,7 +3,13 @@
  *
  * The shape mirrors the API contract in api/src/admin/admin-stats.service.ts:
  *   GET /admin/stats -> AdminStats
+ *
+ * Requests route through {@link fetchJson}, which attaches the access
+ * token (`Authorization: Bearer <jwt>`) and handles a 401 by refreshing
+ * the token once and retrying (issue #518).
  */
+
+import { ApiRequestError, fetchJson } from "./fetch-json"
 
 export interface AdminStats {
   totalUsers: number
@@ -26,32 +32,23 @@ function resolveApiBase(): string {
   return DEFAULT_API_BASE
 }
 
-export class AdminStatsError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-  ) {
-    super(message)
-    this.name = "AdminStatsError"
-  }
-}
+export class AdminStatsError extends ApiRequestError {}
 
 export async function fetchAdminStats(
   init: { signal?: AbortSignal; headers?: Record<string, string> } = {},
 ): Promise<AdminStats> {
-  const res = await fetch(`${resolveApiBase()}/admin/stats`, {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-      ...(init.headers ?? {}),
+  return fetchJson<AdminStats>(
+    `${resolveApiBase()}/admin/stats`,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        ...(init.headers ?? {}),
+      },
+      signal: init.signal,
+      // No browser-level caching — the API already enforces a 60s TTL.
+      cache: "no-store",
     },
-    signal: init.signal,
-    // No browser-level caching — the API already enforces a 60s TTL.
-    cache: "no-store",
-  })
-
-  if (!res.ok) {
-    throw new AdminStatsError(res.status, `admin/stats responded ${res.status}`)
-  }
-  return (await res.json()) as AdminStats
+    AdminStatsError,
+  )
 }

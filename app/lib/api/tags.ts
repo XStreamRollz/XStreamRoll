@@ -4,7 +4,13 @@
  *   GET    /tags                            -> PagedTags
  *   POST   /streams/:id/tags  { name }      -> Tag
  *   DELETE /streams/:id/tags/:tagId         -> 204
+ *
+ * All requests route through {@link fetchJson}, which attaches the
+ * access token (`Authorization: Bearer <jwt>`) and handles a 401 by
+ * refreshing the token once and retrying (issue #518).
  */
+
+import { ApiRequestError, fetchJson } from "./fetch-json"
 
 export interface Tag {
   id: number
@@ -35,25 +41,7 @@ function apiBase(): string {
   return DEFAULT_API_BASE
 }
 
-export class TagsApiError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-  ) {
-    super(message)
-    this.name = "TagsApiError"
-  }
-}
-
-async function readError(res: Response): Promise<string> {
-  try {
-    const body = (await res.json()) as { message?: string }
-    if (typeof body.message === "string") return body.message
-  } catch {
-    /* ignore */
-  }
-  return `request failed with ${res.status}`
-}
+export class TagsApiError extends ApiRequestError {}
 
 export async function listTags(
   params: { page?: number; limit?: number; signal?: AbortSignal } = {},
@@ -62,51 +50,50 @@ export async function listTags(
   if (params.page) url.searchParams.set("page", String(params.page))
   if (params.limit) url.searchParams.set("limit", String(params.limit))
 
-  const res = await fetch(url.toString(), {
-    method: "GET",
-    headers: { Accept: "application/json" },
-    signal: params.signal,
-    cache: "no-store",
-  })
-  if (!res.ok) throw new TagsApiError(res.status, await readError(res))
-  return (await res.json()) as PagedTags
+  return fetchJson<PagedTags>(
+    url.toString(),
+    {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: params.signal,
+      cache: "no-store",
+    },
+    TagsApiError,
+  )
 }
 
 export async function attachTagToStream(
   streamId: number,
   name: string,
-  init: { userId?: string | number; signal?: AbortSignal } = {},
+  init: { signal?: AbortSignal } = {},
 ): Promise<Tag> {
-  const res = await fetch(`${apiBase()}/streams/${streamId}/tags`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      ...(init.userId !== undefined
-        ? { "X-User-Id": String(init.userId) }
-        : {}),
+  return fetchJson<Tag>(
+    `${apiBase()}/streams/${streamId}/tags`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ name }),
+      signal: init.signal,
     },
-    body: JSON.stringify({ name }),
-    signal: init.signal,
-  })
-  if (!res.ok) throw new TagsApiError(res.status, await readError(res))
-  return (await res.json()) as Tag
+    TagsApiError,
+  )
 }
 
 export async function detachTagFromStream(
   streamId: number,
   tagId: number,
-  init: { userId?: string | number; signal?: AbortSignal } = {},
+  init: { signal?: AbortSignal } = {},
 ): Promise<void> {
-  const res = await fetch(`${apiBase()}/streams/${streamId}/tags/${tagId}`, {
-    method: "DELETE",
-    headers: {
-      Accept: "application/json",
-      ...(init.userId !== undefined
-        ? { "X-User-Id": String(init.userId) }
-        : {}),
+  await fetchJson<void>(
+    `${apiBase()}/streams/${streamId}/tags/${tagId}`,
+    {
+      method: "DELETE",
+      headers: { Accept: "application/json" },
+      signal: init.signal,
     },
-    signal: init.signal,
-  })
-  if (!res.ok) throw new TagsApiError(res.status, await readError(res))
+    TagsApiError,
+  )
 }

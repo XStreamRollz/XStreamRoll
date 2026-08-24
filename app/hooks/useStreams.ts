@@ -13,7 +13,9 @@ import {
   detachTagFromStream,
   type PagedTags,
   type Tag,
+  TagsApiError,
 } from "@/lib/api/tags"
+import { fetchJson } from "@/lib/api/fetch-json"
 import {
   getStream,
   listStreams,
@@ -80,14 +82,11 @@ export function useStreamTags(
     queryFn: ({ signal }) => {
       if (!id) throw new Error("useStreamTags requires a stream id")
       const url = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001"}/streams/${id}/tags`
-      return fetch(url, {
-        credentials: "include",
-        signal,
-        headers: { Accept: "application/json" },
-      }).then(async (res) => {
-        if (!res.ok) throw new Error(`stream tags responded ${res.status}`)
-        return (await res.json()) as PagedTags
-      })
+      return fetchJson<PagedTags>(
+        url,
+        { signal, headers: { Accept: "application/json" } },
+        TagsApiError,
+      )
     },
     enabled: id !== undefined,
     staleTime: DEFAULT_STALE_MS,
