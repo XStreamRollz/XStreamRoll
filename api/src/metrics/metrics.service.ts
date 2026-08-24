@@ -38,6 +38,16 @@ export class MetricsService implements OnModuleInit {
     registers: [this.registry],
   })
 
+  // Issue #530: audit writes are fail-open — a failed INSERT is logged
+  // and counted instead of failing the audited request. This counter
+  // makes audit gaps during DB outages visible to operators.
+  readonly auditLogWriteFailuresTotal = new Counter({
+    name: "audit_log_write_failures_total",
+    help: "Total number of audit log writes that failed and were absorbed by the fail-open policy",
+    labelNames: ["action"],
+    registers: [this.registry],
+  })
+
   // Issue #328: PostgreSQL connection pool metrics
   readonly dbPoolActive = new Gauge({
     name: "db_pool_active_connections",

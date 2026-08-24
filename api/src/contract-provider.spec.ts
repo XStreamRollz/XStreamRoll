@@ -167,7 +167,13 @@ describe("Contract provider verification (api)", () => {
         },
         { provide: UsersRepository, useClass: InMemoryUsersRepository },
         { provide: PasswordResetService, useValue: {} },
-        { provide: AuditService, useValue: { log: async () => undefined } },
+        {
+          provide: AuditService,
+          useValue: {
+            log: async () => undefined,
+            logSafely: async () => undefined,
+          },
+        },
       ],
     }).compile()
 

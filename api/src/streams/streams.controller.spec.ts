@@ -98,6 +98,7 @@ describe("StreamsController", () => {
     expect(mockService.create).toHaveBeenCalledWith({
       userId: 7,
       name: dto.name,
+      description: dto.description,
       visibility: undefined,
     })
   })

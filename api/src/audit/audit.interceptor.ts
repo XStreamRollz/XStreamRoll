@@ -61,21 +61,12 @@ export class AuditInterceptor implements NestInterceptor {
     const userId = req.auth?.userId ?? null
 
     return next.handle().pipe(
-      // Runs only on success. The interceptor has no access to the
-      // post-validation request body, so metadata here is limited to
-      // `req.params` (e.g. the deleted stream id). Actions that need
-      // richer metadata (e.g. AuthService.login) call auditService.log()
-      // directly at the service layer.
-      tap(() =>
-        this.auditService.log(
-          userId,
-          action,
-          action === AuditAction.STREAM_DELETE
-            ? { streamId: Number(req.params?.id) }
-            : {},
-          ip,
-        ),
-      ),
+      // metadata is empty here because the interceptor doesn't have access to
+      // the request body post-processing. Callers that need richer metadata
+      // (e.g. AuthService) call auditService.logSafely() directly.
+      // Fail-open policy (issue #530): logSafely never throws, so a failed
+      // audit INSERT cannot surface as a post-response error either.
+      tap(() => this.auditService.logSafely(userId, action, {}, ip)),
     )
   }
 }

@@ -13,12 +13,12 @@ import { Test, TestingModule } from "@nestjs/testing"
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler"
 import request from "supertest"
 
-import { AuditService } from "../audit/audit.service"
 import { AuthController } from "./auth.controller"
 import { AuthService } from "./auth.service"
 import { PasswordResetService } from "./password-reset.service"
 import { TokenDenylistService } from "./token-denylist.service"
 import { UsersRepository } from "./users.repository"
+import { AuditService } from "../audit/audit.service"
 
 describe("Auth Rate Limiting (Integration)", () => {
   let app: INestApplication
@@ -51,6 +51,7 @@ describe("Auth Rate Limiting (Integration)", () => {
 
   const mockAuditService = {
     log: jest.fn().mockResolvedValue(undefined),
+    logSafely: jest.fn().mockResolvedValue(undefined),
   }
 
   beforeEach(async () => {

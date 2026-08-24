@@ -191,18 +191,17 @@ export class StreamsController {
   ) {
     const page = query.page ?? 1
     const limit = query.limit ?? 20
-    const result = await this.streamsService.list(page, limit, req.auth!.userId, {
+    const paged = await this.streamsService.list(page, limit, req.auth!.userId, {
       status: query.status,
       visibility: query.visibility,
       ownerOnly: query.ownerOnly,
     })
-    // Single-stream endpoints serialize ids to strings via
-    // `toStreamResponse`; the list endpoint must do the same so the
-    // wire shape is consistent across the whole API (the shared
-    // `@xstreamroll/types#Stream` contract declares string ids).
+    // Serialize ids to strings at the API boundary, exactly like the
+    // single-stream endpoints — `GET /streams` must not leak the
+    // numeric Postgres ids (contract: `@xstreamroll/types#Stream`).
     return {
-      ...result,
-      data: result.data.map(toStreamResponse),
+      ...paged,
+      data: paged.data.map(toStreamResponse),
     }
   }
 
