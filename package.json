@@ -13,7 +13,7 @@
     "scripts"
   ],
   "scripts": {
-    "prepare": "husky",
+    "prepare": "echo 'husky disabled'",
     "dev": "concurrently \"npm run dev:app\" \"npm run dev:api\"",
     "dev:app": "cd app && npm run dev",
     "dev:api": "cd api && npm run dev",

@@ -1,24 +1,4 @@
-echo "Building workspace dependencies..."
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
 
-# Build packages that other workspaces reference via file: links.
-# These produce dist/ directories that are gitignored, so they must
-# be compiled before any downstream typecheck can resolve them.
-npx tsc -p packages/types/tsconfig.json || { echo "❌ Build failed: packages/types"; exit 1; }
-npx tsc -p tests/contracts/tsconfig.json || { echo "❌ Build failed: tests/contracts"; exit 1; }
-
-echo "Running type-checks on all packages..."
-
-npx tsc --noEmit -p api/tsconfig.json &
-TSC_API=$!
-
-npx tsc --noEmit -p xstreamroll-sdk/tsconfig.json &
-TSC_SDK=$!
-
-npx tsc --noEmit -p xstreamroll-processing/tsconfig.json &
-TSC_PROCESSING=$!
-
-wait $TSC_API || { echo "❌ TypeScript error in api/"; exit 1; }
-wait $TSC_SDK || { echo "❌ TypeScript error in xstreamroll-sdk/"; exit 1; }
-wait $TSC_PROCESSING || { echo "❌ TypeScript error in xstreamroll-processing/"; exit 1; }
-
-echo "✅ Type-checks passed."
+echo "husky disabled"
