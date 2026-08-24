@@ -14,13 +14,14 @@ jest.mock("../common/guards/auth.guard", () => ({
   },
 }))
 
-import type { Cache } from "cache-manager"
-import type { Request } from "express"
-import { StreamsController } from "./streams.controller"
 import { CreateStreamDto } from "./dto/create-stream.dto"
 import { UpdateStreamDto } from "./dto/update-stream.dto"
 import { Stream } from "./stream.entity"
+import { StreamsController } from "./streams.controller"
 import { StreamsService } from "./streams.service"
+
+import type { Cache } from "cache-manager"
+import type { Request } from "express"
 
 type MockStreamsService = {
   create: jest.Mock
@@ -95,6 +96,7 @@ describe("StreamsController", () => {
     expect(mockService.create).toHaveBeenCalledWith({
       userId: 7,
       name: dto.name,
+      description: dto.description,
       visibility: undefined,
     })
   })

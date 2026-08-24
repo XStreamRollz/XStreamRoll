@@ -23,7 +23,12 @@ describe("validateJwtSecret (Issue #318)", () => {
   })
 
   it("returns ok when no secret is configured", () => {
-    const result = validateJwtSecret(undefined, "production")
+    // Pass an empty string, not `undefined`: the function's default
+    // parameter (`secret = process.env.JWT_SECRET`) means an explicit
+    // `undefined` argument falls back to the environment, which is set
+    // in CI — so `undefined` would not exercise the "no secret" branch.
+    // An empty string is falsy and hits the same early return.
+    const result = validateJwtSecret("", "production")
     expect(result.ok).toBe(true)
     expect(exitSpy).not.toHaveBeenCalled()
   })
