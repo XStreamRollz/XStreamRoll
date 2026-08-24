@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto"
+
 import {
   ConflictException,
   Injectable,
@@ -68,7 +70,13 @@ export class UsersService {
 
     if (emailChanged) {
       const token = this.extractBearerToken(authorizationHeader)
-      await this.tokenDenylistService.revoke(token, 3600)
+      // Issue #510: revoke by the token's `jti` — the same key the guard
+      // reads. Revoking the raw JWT here hashed a different value and the
+      // revocation never took effect.
+      await this.tokenDenylistService.revoke(
+        this.tokenDenylistService.decodeJti(token),
+        3600,
+      )
 
       accessToken = this.signToken(updated)
     }
@@ -102,7 +110,11 @@ export class UsersService {
     )
 
     const token = this.extractBearerToken(authorizationHeader)
-    await this.tokenDenylistService.revoke(token, 3600)
+    // Issue #510: revoke by the token's `jti`, not the raw JWT string.
+    await this.tokenDenylistService.revoke(
+      this.tokenDenylistService.decodeJti(token),
+      3600,
+    )
 
     return {
       user: toSafeUser(updated),
@@ -110,6 +122,10 @@ export class UsersService {
     }
   }
 
+  /**
+   * Sign a fresh access token. Carries a `jti` so the token can be
+   * revoked via the denylist (issue #510).
+   */
   private signToken(user: User): string {
     return this.jwtService.sign({
       sub: user.id,
@@ -117,9 +133,7 @@ export class UsersService {
       username: user.username,
       passwordChangedAt:
         user.password_changed_at?.getTime() ?? user.created_at.getTime(),
-      // Issue #511: reissued tokens (email/password change) must keep the
-      // admin claim so a re-login does not silently drop admin access.
-      isAdmin: user.is_admin === true,
+      jti: randomUUID(),
     })
   }
 

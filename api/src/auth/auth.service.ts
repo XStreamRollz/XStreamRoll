@@ -15,7 +15,7 @@ import { LoginDto } from "./dto/login.dto"
 import { RegisterDto } from "./dto/register.dto"
 import { ResetPasswordDto } from "./dto/reset-password.dto"
 import { PasswordResetService } from "./password-reset.service"
-import { TokenDenylistService } from "./token-denylist.service"
+import { TokenDenylistService, TokenJti } from "./token-denylist.service"
 import { User, UsersRepository } from "./users.repository"
 import { AuditAction } from "../audit/audit-action.enum"
 import { AuditService } from "../audit/audit.service"
@@ -165,10 +165,26 @@ export class AuthService {
 
     const payload = this.refreshJwt.decode(refreshToken) as {
       sub?: number
+      jti?: string
     } | null
     const userId = payload?.sub
     if (!userId) {
       throw new UnauthorizedException("invalid refresh token")
+    }
+
+    // Issue #510: a revoked refresh token must not mint a new token pair.
+    // The refresh token always carries a `jti` (see signRefreshToken), so a
+    // missing jti here means a legacy token — which cannot have been
+    // revoked and is left to expire naturally.
+    const jti = payload.jti
+    if (
+      typeof jti === "string" &&
+      jti.length > 0 &&
+      (await this.tokenDenylistService.isRevoked(
+        jti as TokenJti,
+      ))
+    ) {
+      throw new UnauthorizedException("refresh token has been revoked")
     }
 
     const user = await this.usersRepository.findById(userId)
@@ -209,7 +225,13 @@ export class AuthService {
       throw new UnauthorizedException("access token has expired")
     }
 
-    await this.tokenDenylistService.revoke(token, ttlSeconds)
+    // Issue #510: revoke by the token's `jti` — the same key the guard's
+    // denylist lookup reads. Revoking the raw JWT string here was the bug:
+    // the two sides hashed different values and the entry never matched.
+    await this.tokenDenylistService.revoke(
+      this.tokenDenylistService.decodeJti(token),
+      ttlSeconds,
+    )
 
     if (refreshToken) {
       const refreshPayload = this.refreshJwt.decode(refreshToken) as {
@@ -220,7 +242,10 @@ export class AuthService {
       if (refreshExpiresAt) {
         const refreshTtl = Math.floor(refreshExpiresAt - Date.now() / 1000)
         if (refreshTtl > 0) {
-          await this.tokenDenylistService.revoke(refreshToken, refreshTtl)
+          await this.tokenDenylistService.revoke(
+            this.tokenDenylistService.decodeJti(refreshToken),
+            refreshTtl,
+          )
         }
       }
     }
@@ -278,10 +303,9 @@ export class AuthService {
   /**
    * Create a short-lived JWT access token for the given user.
    *
-   * The `isAdmin` claim is read from the users row at issuance time, so
-   * a promotion/demotion takes effect on the user's next login — the
-   * same freshness model as `passwordChangedAt`. Tokens minted before
-   * this claim existed simply lack it and are treated as non-admin.
+   * The token carries a `jti` so it can be revoked via the denylist
+   * (issue #510) — tokens minted before this claim existed cannot be
+   * revoked and simply expire naturally.
    */
   private signAccessToken(user: User): string {
     return this.accessJwt.sign({
@@ -290,7 +314,7 @@ export class AuthService {
       username: user.username,
       passwordChangedAt:
         user.password_changed_at?.getTime() ?? user.created_at.getTime(),
-      isAdmin: user.is_admin === true,
+      jti: randomUUID(),
     })
   }
 
