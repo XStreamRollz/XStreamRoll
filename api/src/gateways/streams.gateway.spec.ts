@@ -1,8 +1,8 @@
-import { JwtService } from "@nestjs/jwt"
 import { Test } from "@nestjs/testing"
 
 import { NOTIFICATION_EVENTS, STREAM_EVENTS } from "./stream-events"
 import { StreamsGateway, resolveCorsOrigins } from "./streams.gateway"
+import { JwtExtractorService } from "../common/guards/jwt-extractor.service"
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // NestJS gateway tests require socket mocks cast as any to satisfy the
@@ -124,18 +124,23 @@ describe("resolveCorsOrigins", () => {
 
 describe("StreamsGateway", () => {
   let gateway: StreamsGateway
-  let jwtService: { verifyAsync: jest.Mock }
+  let authExtractor: { authenticate: jest.Mock }
 
   beforeEach(async () => {
     const module = await Test.createTestingModule({
       providers: [
         StreamsGateway,
-        { provide: JwtService, useValue: { verifyAsync: jest.fn() } },
+        {
+          provide: JwtExtractorService,
+          useValue: { authenticate: jest.fn() },
+        },
       ],
     }).compile()
 
     gateway = module.get(StreamsGateway)
-    jwtService = module.get(JwtService) as unknown as { verifyAsync: jest.Mock }
+    authExtractor = module.get(
+      JwtExtractorService,
+    ) as unknown as { authenticate: jest.Mock }
   })
 
   describe("handleConnection", () => {
@@ -143,11 +148,15 @@ describe("StreamsGateway", () => {
       const socket = makeSocket({
         handshake: { auth: { token: "valid-token" } },
       })
-      jwtService.verifyAsync.mockResolvedValue({ sub: 42 })
+      authExtractor.authenticate.mockResolvedValue(42)
 
       await gateway.handleConnection(socket as unknown as any)
 
-      expect(jwtService.verifyAsync).toHaveBeenCalledWith("valid-token")
+      // Issue #510: socket auth routes through the same pipeline as the
+      // REST guards — revocation and password-change checks included.
+      expect(authExtractor.authenticate).toHaveBeenCalledWith(
+        "Bearer valid-token",
+      )
       expect(socket.data.userId).toBe(42)
       expect(socket.emit).toHaveBeenCalledWith("connected", { userId: 42 })
       expect(socket.disconnect).not.toHaveBeenCalled()
@@ -156,7 +165,7 @@ describe("StreamsGateway", () => {
 
     it("rejects a client with an invalid JWT", async () => {
       const socket = makeSocket({ handshake: { auth: { token: "bad-token" } } })
-      jwtService.verifyAsync.mockRejectedValue(new Error("jwt malformed"))
+      authExtractor.authenticate.mockRejectedValue(new Error("jwt malformed"))
 
       await gateway.handleConnection(socket as unknown as any)
 
@@ -168,6 +177,25 @@ describe("StreamsGateway", () => {
         }),
       )
       expect(socket.disconnect).toHaveBeenCalledWith(true)
+    })
+
+    it("rejects a client with a revoked token (issue #510)", async () => {
+      const socket = makeSocket({ handshake: { auth: { token: "revoked" } } })
+      authExtractor.authenticate.mockRejectedValue(
+        new Error("access token has been revoked"),
+      )
+
+      await gateway.handleConnection(socket as unknown as any)
+
+      expect(socket.emit).toHaveBeenCalledWith(
+        STREAM_EVENTS.ERROR,
+        expect.objectContaining({
+          code: "INVALID_TOKEN",
+          message: expect.stringContaining("JWT verification failed"),
+        }),
+      )
+      expect(socket.disconnect).toHaveBeenCalledWith(true)
+      expect(socket.join).not.toHaveBeenCalled()
     })
 
     it("rejects a client with no token", async () => {
@@ -183,7 +211,7 @@ describe("StreamsGateway", () => {
         }),
       )
       expect(socket.disconnect).toHaveBeenCalledWith(true)
-      expect(jwtService.verifyAsync).not.toHaveBeenCalled()
+      expect(authExtractor.authenticate).not.toHaveBeenCalled()
     })
 
     it("accepts a token from the Authorization header fallback", async () => {
@@ -193,14 +221,14 @@ describe("StreamsGateway", () => {
           headers: { authorization: "Bearer header-token" },
         },
       })
-      jwtService.verifyAsync.mockResolvedValue({ sub: "user-99" })
+      authExtractor.authenticate.mockResolvedValue(99)
 
       await gateway.handleConnection(socket as unknown as any)
 
-      expect(jwtService.verifyAsync).toHaveBeenCalledWith("header-token")
-      expect(socket.emit).toHaveBeenCalledWith("connected", {
-        userId: "user-99",
-      })
+      expect(authExtractor.authenticate).toHaveBeenCalledWith(
+        "Bearer header-token",
+      )
+      expect(socket.emit).toHaveBeenCalledWith("connected", { userId: 99 })
     })
 
     // Issue #319 acceptance criterion: a connection that supplies its
@@ -226,8 +254,8 @@ describe("StreamsGateway", () => {
       )
       expect(socket.disconnect).toHaveBeenCalledWith(true)
       // The query string token is never decoded — verification isn't
-      // attempted and the JWT signing path is never reached.
-      expect(jwtService.verifyAsync).not.toHaveBeenCalled()
+      // attempted and the token never reaches the extractor.
+      expect(authExtractor.authenticate).not.toHaveBeenCalled()
     })
 
     it("prefers auth.token handshake over an Authorization header token", async () => {
@@ -237,11 +265,16 @@ describe("StreamsGateway", () => {
           headers: { authorization: "Bearer header-token" },
         },
       })
-      jwtService.verifyAsync.mockResolvedValue({ sub: 7 })
+      authExtractor.authenticate.mockResolvedValue(7)
 
       await gateway.handleConnection(socket as unknown as any)
 
-      expect(jwtService.verifyAsync).toHaveBeenCalledWith("auth-token")
+      expect(authExtractor.authenticate).toHaveBeenCalledWith(
+        "Bearer auth-token",
+      )
+      expect(authExtractor.authenticate).not.toHaveBeenCalledWith(
+        "Bearer header-token",
+      )
     })
 
     // Defends against a regression that re-adds the ?token= fallback
@@ -255,12 +288,16 @@ describe("StreamsGateway", () => {
           query: { token: "decoy-token" },
         },
       })
-      jwtService.verifyAsync.mockResolvedValue({ sub: 11 })
+      authExtractor.authenticate.mockResolvedValue(11)
 
       await gateway.handleConnection(socket as unknown as any)
 
-      expect(jwtService.verifyAsync).toHaveBeenCalledWith("auth-token")
-      expect(jwtService.verifyAsync).not.toHaveBeenCalledWith("decoy-token")
+      expect(authExtractor.authenticate).toHaveBeenCalledWith(
+        "Bearer auth-token",
+      )
+      expect(authExtractor.authenticate).not.toHaveBeenCalledWith(
+        "Bearer decoy-token",
+      )
     })
   })
 

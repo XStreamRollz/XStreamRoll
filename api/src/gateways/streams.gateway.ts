@@ -1,5 +1,4 @@
 import { Logger, Optional } from "@nestjs/common"
-import { JwtService } from "@nestjs/jwt"
 import {
   ConnectedSocket,
   OnGatewayConnection,
@@ -9,8 +8,7 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from "@nestjs/websockets"
-import type { Server, Socket } from "socket.io"
-import { MetricsService } from "../metrics/metrics.service"
+
 import {
   NOTIFICATION_EVENTS,
   NotificationCreatedPayload,
@@ -19,6 +17,10 @@ import {
   StreamStartedPayload,
   StreamStoppedPayload,
 } from "./stream-events"
+import { JwtExtractorService } from "../common/guards/jwt-extractor.service"
+import { MetricsService } from "../metrics/metrics.service"
+
+import type { Server, Socket } from "socket.io"
 
 interface AuthenticatedSocket extends Socket {
   data: {
@@ -78,18 +80,16 @@ export function resolveCorsOrigins(
   return origins.length === 1 ? origins[0] : origins
 }
 
-interface JwtPayload {
-  sub: string | number
-  [key: string]: unknown
-}
-
 /**
  * WebSocket gateway that broadcasts real-time stream status events to
  * connected clients.
  *
  * Authentication: clients must present a JWT either via the `auth.token`
  * handshake payload or an `Authorization: Bearer <token>` header. Invalid
- * or missing tokens result in immediate disconnection.
+ * or missing tokens result in immediate disconnection. Verification runs
+ * through {@link JwtExtractorService} — the same pipeline as the REST
+ * guards — so revoked tokens and tokens minted before the user's last
+ * password change are rejected on socket connect too (issue #510).
  *
  * Issue #319 — the previous `?token=` query-string fallback has been
  * removed. Reverse proxies (nginx, CloudFront, etc.) routinely log the
@@ -122,7 +122,7 @@ export class StreamsGateway
   public server!: Server
 
   constructor(
-    private readonly jwtService: JwtService,
+    private readonly jwtExtractorService: JwtExtractorService,
     @Optional() private readonly metricsService?: MetricsService,
   ) {}
 
@@ -142,21 +142,25 @@ export class StreamsGateway
         return
       }
 
-      const payload = await this.jwtService.verifyAsync<JwtPayload>(token)
-      client.data.userId = payload.sub
+      // Issue #510: route through the same pipeline as the REST guards so
+      // revoked tokens and tokens minted before the user's last password
+      // change are rejected here too — the JWT's `jti` is checked against
+      // the denylist inside authenticate().
+      const userId = await this.jwtExtractorService.authenticate(
+        `Bearer ${token}`,
+      )
+      client.data.userId = userId
 
       // Every authenticated client joins its own per-user room so
       // server-initiated pushes (e.g. notifications) can target a user
       // without requiring an explicit subscribe handshake.
-      void client.join(this.userRoomFor(payload.sub))
+      void client.join(this.userRoomFor(userId))
 
       this.metricsService?.websocketConnectionsTotal.inc()
       this.metricsService?.websocketActiveConnections.inc()
 
-      this.logger.log(
-        `client ${client.id} connected (user=${String(payload.sub)})`,
-      )
-      client.emit("connected", { userId: payload.sub })
+      this.logger.log(`client ${client.id} connected (user=${userId})`)
+      client.emit("connected", { userId })
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "unknown verification error"

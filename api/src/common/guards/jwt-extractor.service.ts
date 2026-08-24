@@ -1,6 +1,10 @@
 import { Injectable, UnauthorizedException } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
-import { TokenDenylistService } from "../../auth/token-denylist.service"
+
+import {
+  TokenDenylistService,
+  TokenJti,
+} from "../../auth/token-denylist.service"
 import { UsersRepository } from "../../auth/users.repository"
 
 /**
@@ -39,7 +43,8 @@ export class JwtExtractorService {
     // expire naturally.
     const jti = payload.jti
     if (typeof jti === "string" && jti.length > 0) {
-      if (await this.tokenDenylistService.isRevoked(jti)) {
+      // The verified payload's jti is a TokenJti by construction.
+      if (await this.tokenDenylistService.isRevoked(jti as TokenJti)) {
         throw new UnauthorizedException("access token has been revoked")
       }
     }
