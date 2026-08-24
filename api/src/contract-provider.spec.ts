@@ -41,6 +41,7 @@ import { StreamsRepository } from "./streams/repository/streams.repository"
 import { StreamsController } from "./streams/streams.controller"
 import { StreamsService } from "./streams/streams.service"
 import { TagsRepository } from "./tags/repository/tags.repository"
+import { StreamTagsController } from "./tags/tags.controller"
 import { TagsService } from "./tags/tags.service"
 import { WebhooksService } from "./webhooks/webhooks.service"
 
@@ -110,7 +111,7 @@ describe("Contract provider verification (api)", () => {
         JwtModule.registerAsync({ useFactory: () => createJwtConfig() }),
         CacheModule.register(),
       ],
-      controllers: [StreamsController, AuthController],
+      controllers: [StreamsController, StreamTagsController, AuthController],
       providers: [
         StreamsService,
         TagsService,
@@ -178,6 +179,15 @@ describe("Contract provider verification (api)", () => {
       description: "Seeded for contract verification",
     })
     existingStreamId = String(stream.id)
+
+    // Attach one tag so `list-stream-tags` exercises a non-empty
+    // response (the schema pins the Tag shape, not just the empty case).
+    const tagsRepository = moduleFixture.get(TagsRepository)
+    const seededTag = await tagsRepository.upsertBySlug(
+      "Live Streaming",
+      "live-streaming",
+    )
+    await tagsRepository.attachToStream(stream.id, seededTag.id)
   })
 
   afterAll(async () => {

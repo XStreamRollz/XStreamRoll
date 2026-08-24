@@ -1,6 +1,9 @@
 // ─── Generated types from OpenAPI spec ─────────────────────────────────────
 // Regenerate with `npm run generate:types` (requires API server running).
 import type { components } from "./generated/schema"
+// Local type bindings for interfaces defined in this file (the
+// `export type { … } from` blocks below re-export but do not bind).
+import type { ApiErrorResponse, StreamEventType, Tag } from "@xstreamroll/types"
 
 export type { components }
 
@@ -36,6 +39,7 @@ export type {
   StreamVisibility,
   CreateStreamDto,
   UpdateStreamDto,
+  Tag,
   StreamEventType,
   StreamEvent,
   StreamEventRecord,
@@ -45,7 +49,17 @@ export type {
   ApiErrorResponse,
 } from "@xstreamroll/types"
 
-import type { ApiErrorResponse, StreamEventType } from "@xstreamroll/types"
+/**
+ * Paginated tags response — mirrors the API's `PagedTags` envelope
+ * returned by `GET /streams/:id/tags` and `GET /tags`.
+ */
+export interface PagedTags {
+  data: Tag[]
+  page: number
+  limit: number
+  total: number
+  hasMore: boolean
+}
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
