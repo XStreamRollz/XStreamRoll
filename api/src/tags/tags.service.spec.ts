@@ -163,6 +163,53 @@ describe("TagsService", () => {
     })
   })
 
+  // ── listForStream (issue #517) ──────────────────────────────────────────
+
+  describe("listForStream", () => {
+    it("returns the stream's tags in the PagedTags envelope via the batch path", async () => {
+      const tag = makeTag()
+      repo.listForStreamIds.mockResolvedValue(new Map([[7, [tag]]]))
+
+      const result = await service.listForStream(7)
+
+      // Reuses the batch loader with a single-element array — no per-tag
+      // query is issued.
+      expect(repo.listForStreamIds).toHaveBeenCalledWith([7])
+      expect(result).toEqual({
+        data: [tag],
+        page: 1,
+        limit: 50,
+        total: 1,
+        hasMore: false,
+      })
+    })
+
+    it("returns an empty list (not an error) for a stream with no tags", async () => {
+      repo.listForStreamIds.mockResolvedValue(new Map([[7, []]]))
+
+      const result = await service.listForStream(7)
+
+      expect(result.data).toEqual([])
+      expect(result.total).toBe(0)
+      expect(result.hasMore).toBe(false)
+    })
+
+    it("paginates the page slice and sets hasMore", async () => {
+      const tags = Array.from({ length: 3 }, (_, i) =>
+        makeTag({ id: i + 1, slug: `slug-${i + 1}` }),
+      )
+      repo.listForStreamIds.mockResolvedValue(new Map([[7, tags]]))
+
+      const page1 = await service.listForStream(7, 1, 2)
+      expect(page1.data).toHaveLength(2)
+      expect(page1.hasMore).toBe(true)
+
+      const page2 = await service.listForStream(7, 2, 2)
+      expect(page2.data).toHaveLength(1)
+      expect(page2.hasMore).toBe(false)
+    })
+  })
+
   // ── detachFromStream ─────────────────────────────────────────────────────
 
   describe("detachFromStream", () => {

@@ -1,7 +1,8 @@
-import * as React from "react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { renderHook, waitFor } from "@testing-library/react"
-import { useStreamList, streamKeys } from "@/hooks/useStreams"
+import * as React from "react"
+
+import { useStreamList, useStreamTags, streamKeys } from "@/hooks/useStreams"
 
 function createWrapper() {
   const client = new QueryClient({
@@ -68,5 +69,42 @@ describe("useStreamList (issue #345 phase B)", () => {
     expect(calledUrl).toMatch(/\/streams\?page=1&limit=20$/)
     expect(result.current.data?.data[0]?.name).toBe("First")
     expect(result.current.data?.data[0]?.tags).toEqual([])
+  })
+})
+
+describe("useStreamTags (issue #517)", () => {
+  it("fetches GET /streams/:id/tags and parses the PagedTags envelope", async () => {
+    const mockResponse = {
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({
+        data: [
+          {
+            id: 1,
+            name: "Live Streaming",
+            slug: "live-streaming",
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+        page: 1,
+        limit: 50,
+        total: 1,
+        hasMore: false,
+      }),
+    }
+    const mock = jest.fn().mockResolvedValue(mockResponse)
+    global.fetch = mock as unknown as typeof fetch
+
+    const { result } = renderHook(() => useStreamTags(42), {
+      wrapper: createWrapper(),
+    })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(mock).toHaveBeenCalledTimes(1)
+    const calledUrl = (mock.mock.calls[0]?.[0] as URL | string).toString()
+    expect(calledUrl).toMatch(/\/streams\/42\/tags$/)
+    expect(result.current.data?.data[0]?.name).toBe("Live Streaming")
+    expect(result.current.data?.hasMore).toBe(false)
   })
 })
