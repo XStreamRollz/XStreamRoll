@@ -55,6 +55,9 @@ export interface Contract {
 export const PLACEHOLDER = {
   EXISTING_STREAM_ID: "__EXISTING_STREAM_ID__",
   MISSING_STREAM_ID: "__MISSING_STREAM_ID__",
+  EXISTING_WEBHOOK_ID: "__EXISTING_WEBHOOK_ID__",
+  MISSING_WEBHOOK_ID: "__MISSING_WEBHOOK_ID__",
+  EXISTING_DELIVERY_ID: "__EXISTING_DELIVERY_ID__",
 } as const
 
 /** Substitutes `:param` placeholders and appends the query string. */

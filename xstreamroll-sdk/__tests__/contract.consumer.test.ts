@@ -20,8 +20,12 @@
 import {
   allContracts,
   authResponseSchema,
+  paginatedWebhookSubscriptionsSchema,
   pendingStreamEventSchema,
   streamSchema,
+  webhookDeliverySchema,
+  webhookSubscriptionSchema,
+  webhookSubscriptionSummarySchema,
   type Contract,
 } from "@xstreamroll/contract-tests"
 import nock from "nock"
@@ -57,6 +61,7 @@ describe("Consumer contract verification (xstreamroll-sdk)", () => {
       name: "Contract stream",
       description: null,
       status: "active",
+      visibility: "private",
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
     }
@@ -155,5 +160,126 @@ describe("Consumer contract verification (xstreamroll-sdk)", () => {
     expect(scope.isDone()).toBe(true)
     expect(result.accessToken).toBe(example.accessToken)
     expect(result.refreshToken).toBe(example.refreshToken)
+  })
+
+  // ── Webhooks (issue #531) ────────────────────────────────────────────────
+
+  it("subscribeWebhook() sends the body the create-webhook contract expects", async () => {
+    const c = contract("create-webhook")
+    const example = {
+      id: "1",
+      userId: "7",
+      streamId: "42",
+      url: "https://example.com/webhooks/contract",
+      events: ["stream:started"],
+      secret: "a1b2c3",
+      active: true,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    }
+    expect(() => webhookSubscriptionSchema.parse(example)).not.toThrow()
+
+    const scope = nock(BASE_URL)
+      .post(c.request.path, c.request.body as nock.DataMatcherMap)
+      .reply(c.response.status, example)
+
+    const result = await client.subscribeWebhook(
+      c.request.body as Parameters<typeof client.subscribeWebhook>[0],
+    )
+
+    expect(scope.isDone()).toBe(true)
+    expect(result).toEqual(example)
+  })
+
+  it("listWebhooks() requests the list-webhooks path and returns a contract-valid page", async () => {
+    const c = contract("list-webhooks")
+    const example = {
+      data: [
+        {
+          id: "1",
+          userId: "7",
+          streamId: "42",
+          url: "https://example.com/hook",
+          events: ["stream:started"],
+          active: true,
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      total: 1,
+      page: 1,
+      limit: 20,
+    }
+    expect(() => paginatedWebhookSubscriptionsSchema.parse(example)).not.toThrow()
+
+    const scope = nock(BASE_URL)
+      .get("/webhooks?page=1&limit=20")
+      .reply(c.response.status, example)
+
+    const result = await client.listWebhooks({ page: 1, limit: 20 })
+
+    expect(scope.isDone()).toBe(true)
+    expect(result.data).toHaveLength(1)
+    expect(result.data[0]).not.toHaveProperty("secret")
+  })
+
+  it("updateWebhook() PATCHes the update-webhook path and returns a summary", async () => {
+    const c = contract("update-webhook")
+    const example = {
+      id: "1",
+      userId: "7",
+      streamId: "42",
+      url: "https://example.com/hook",
+      events: ["stream:started"],
+      active: false,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    }
+    expect(() => webhookSubscriptionSummarySchema.parse(example)).not.toThrow()
+
+    const scope = nock(BASE_URL)
+      .patch("/webhooks/1", { active: false } as nock.DataMatcherMap)
+      .reply(c.response.status, example)
+
+    const result = await client.updateWebhook("1", { active: false })
+
+    expect(scope.isDone()).toBe(true)
+    expect(result.active).toBe(false)
+    expect(result).not.toHaveProperty("secret")
+  })
+
+  it("deleteWebhook() DELETEs the delete-webhook path and resolves on 204", async () => {
+    const c = contract("delete-webhook")
+    const scope = nock(BASE_URL).delete("/webhooks/1").reply(204)
+
+    await expect(client.deleteWebhook("1")).resolves.toBeUndefined()
+
+    expect(scope.isDone()).toBe(true)
+    expect(c.response.status).toBe(204)
+  })
+
+  it("retryWebhookDelivery() POSTs the retry path and returns a contract-valid delivery", async () => {
+    const c = contract("retry-webhook-delivery")
+    const example = {
+      id: "10",
+      webhookSubscriptionId: "1",
+      event: "stream:started",
+      payload: { streamId: 42 },
+      status: "pending",
+      attemptCount: 6,
+      lastStatusCode: null,
+      lastResponseBody: null,
+      lastError: "connection refused",
+      nextAttemptAt: "2026-01-01T00:05:00.000Z",
+      deliveredAt: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    }
+    expect(() => webhookDeliverySchema.parse(example)).not.toThrow()
+
+    const scope = nock(BASE_URL)
+      .post("/webhooks/1/deliveries/10/retry")
+      .reply(c.response.status, example)
+
+    const result = await client.retryWebhookDelivery("1", "10")
+
+    expect(scope.isDone()).toBe(true)
+    expect(result.status).toBe("pending")
   })
 })

@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common"
+
 import { WebhookDelivery } from "../webhook-delivery.entity"
 
 export interface RecordAttemptInput {
@@ -98,6 +99,21 @@ export class WebhookDeliveriesRepository {
     } else {
       delivery.status = result.nextAttemptAt ? "pending" : "failed"
     }
+    return delivery
+  }
+
+  /**
+   * Re-queues a delivery for a manual retry: marks it `pending` with
+   * `nextAttemptAt` set to now so the retry sweep picks it up
+   * immediately. `attemptCount` is deliberately kept — a manual retry
+   * must not silently grant a fresh retry budget beyond `MAX_RETRIES`.
+   */
+  async requeue(id: number): Promise<WebhookDelivery | undefined> {
+    const delivery = this.byId.get(id)
+    if (!delivery) return undefined
+
+    delivery.status = "pending"
+    delivery.nextAttemptAt = new Date()
     return delivery
   }
 }
