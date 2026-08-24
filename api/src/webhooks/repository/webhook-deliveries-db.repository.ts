@@ -5,6 +5,7 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common"
 import { Pool } from "pg"
+
 import { PG_POOL } from "../../database/database.module"
 import { WebhookDelivery } from "../webhook-delivery.entity"
 import { RecordAttemptInput } from "./webhook-deliveries.repository"
@@ -163,6 +164,29 @@ export class WebhookDeliveriesDbRepository {
       return rows[0] ? this.rowToDelivery(rows[0]) : undefined
     } catch (err) {
       this.handleDbError(err, "recordAttempt")
+    }
+  }
+
+  /**
+   * Re-queues a delivery for a manual retry: marks it `pending` with
+   * `nextAttemptAt` set to now so the retry sweep picks it up
+   * immediately. `attemptCount` is deliberately kept — a manual retry
+   * must not silently grant a fresh retry budget beyond `MAX_RETRIES`
+   * (the next `nextAttemptAfter` computation still applies the cap).
+   */
+  async requeue(id: number): Promise<WebhookDelivery | undefined> {
+    try {
+      const { rows } = await this.pool.query<Record<string, unknown>>(
+        `UPDATE webhook_deliveries
+         SET status = 'pending',
+             next_attempt_at = CURRENT_TIMESTAMP
+         WHERE id = $1
+         RETURNING ${WebhookDeliveriesDbRepository.SELECT_COLUMNS}`,
+        [id],
+      )
+      return rows[0] ? this.rowToDelivery(rows[0]) : undefined
+    } catch (err) {
+      this.handleDbError(err, "requeue")
     }
   }
 }

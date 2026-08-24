@@ -138,4 +138,40 @@ describe("HttpClient interceptors", () => {
       (init.headers as Record<string, string>)["Content-Type"],
     ).toBeUndefined()
   })
+
+  it("patch() issues a PATCH with a JSON-serialised body", async () => {
+    const mockFetch = makeFetchMock()
+    global.fetch = mockFetch
+    const http = new HttpClient("http://localhost:3001")
+
+    await http.patch("/webhooks/1", { active: false })
+    const init = mockFetch.mock.calls[0][1] as RequestInit
+    expect(init.method).toBe("PATCH")
+    expect(init.body).toBe(JSON.stringify({ active: false }))
+    expect((init.headers as Record<string, string>)["Content-Type"]).toBe(
+      "application/json",
+    )
+  })
+
+  it("delete() issues a DELETE without a body by default", async () => {
+    const mockFetch = makeFetchMock()
+    global.fetch = mockFetch
+    const http = new HttpClient("http://localhost:3001")
+
+    await http.delete("/webhooks/1")
+    const init = mockFetch.mock.calls[0][1] as RequestInit
+    expect(init.method).toBe("DELETE")
+    expect(init.body).toBeUndefined()
+  })
+
+  it("delete() with a body JSON-serialises it", async () => {
+    const mockFetch = makeFetchMock()
+    global.fetch = mockFetch
+    const http = new HttpClient("http://localhost:3001")
+
+    await http.delete("/webhooks/1", { reason: "cleanup" })
+    const init = mockFetch.mock.calls[0][1] as RequestInit
+    expect(init.method).toBe("DELETE")
+    expect(init.body).toBe(JSON.stringify({ reason: "cleanup" }))
+  })
 })

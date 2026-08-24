@@ -1,14 +1,15 @@
 import { Module } from "@nestjs/common"
 import { ScheduleModule } from "@nestjs/schedule"
+
 import { AuthModule } from "../auth/auth.module"
-import { AuthGuard } from "../common/guards/auth.guard"
-import { StreamOwnershipService } from "../common/guards/stream-ownership.service"
 import { WebhookDeliveriesDbRepository } from "./repository/webhook-deliveries-db.repository"
 import { WebhookDeliveriesRepository } from "./repository/webhook-deliveries.repository"
 import { WebhookSubscriptionsDbRepository } from "./repository/webhook-subscriptions-db.repository"
 import { WebhookSubscriptionsRepository } from "./repository/webhook-subscriptions.repository"
 import { WebhooksController } from "./webhooks.controller"
 import { WebhooksService } from "./webhooks.service"
+import { AuthGuard } from "../common/guards/auth.guard"
+import { StreamOwnershipService } from "../common/guards/stream-ownership.service"
 
 /**
  * Injection token used to swap the webhooks repository implementations.

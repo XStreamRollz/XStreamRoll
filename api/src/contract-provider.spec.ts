@@ -22,6 +22,7 @@ import {
   registerBody,
   resolvePath,
   streamsContracts,
+  webhooksContracts,
   type Contract,
 } from "@xstreamroll/contract-tests"
 import request from "supertest"
@@ -44,6 +45,9 @@ import { StreamsService } from "./streams/streams.service"
 import { TagsRepository } from "./tags/repository/tags.repository"
 import { StreamTagsController } from "./tags/tags.controller"
 import { TagsService } from "./tags/tags.service"
+import { WebhookDeliveriesRepository } from "./webhooks/repository/webhook-deliveries.repository"
+import { WebhookSubscriptionsRepository } from "./webhooks/repository/webhook-subscriptions.repository"
+import { WebhooksController } from "./webhooks/webhooks.controller"
 import { WebhooksService } from "./webhooks/webhooks.service"
 
 process.env.JWT_SECRET ??= "test-secret"
@@ -88,12 +92,18 @@ describe("Contract provider verification (api)", () => {
   let app: INestApplication
   let jwtService: JwtService
   let streamsRepository: StreamsRepository
+  let subscriptionsRepository: WebhookSubscriptionsRepository
+  let deliveriesRepository: WebhookDeliveriesRepository
   let accessToken: string
   let userId: number
   let existingStreamId: string
+  let existingWebhookId: string
+  let existingDeliveryId: string
 
   beforeAll(async () => {
     streamsRepository = new StreamsRepository()
+    subscriptionsRepository = new WebhookSubscriptionsRepository()
+    deliveriesRepository = new WebhookDeliveriesRepository()
 
     /** Checks ownership against the same in-memory repository StreamsService uses. */
     const streamOwnershipService = {
@@ -113,15 +123,25 @@ describe("Contract provider verification (api)", () => {
         JwtModule.registerAsync({ useFactory: () => createJwtConfig() }),
         CacheModule.register(),
       ],
-      controllers: [StreamsController, StreamTagsController, AuthController],
+      controllers: [
+        StreamsController,
+        StreamTagsController,
+        AuthController,
+        WebhooksController,
+      ],
       providers: [
         StreamsService,
         TagsService,
         TagsRepository,
         { provide: StreamsRepository, useValue: streamsRepository },
+        WebhooksService,
         {
-          provide: WebhooksService,
-          useValue: { dispatchStreamEvent: async () => undefined },
+          provide: WebhookSubscriptionsRepository,
+          useValue: subscriptionsRepository,
+        },
+        {
+          provide: WebhookDeliveriesRepository,
+          useValue: deliveriesRepository,
         },
         AuthGuard,
         JwtExtractorService,
@@ -158,8 +178,16 @@ describe("Contract provider verification (api)", () => {
     }).compile()
 
     app = moduleFixture.createNestApplication()
+    // Mirror the real bootstrap (api/src/main.ts) so DTO coercion behaves
+    // exactly as it does in production — e.g. `streamId: "1"` in a JSON
+    // body must satisfy `@IsInt()` after implicit conversion.
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+        transformOptions: { enableImplicitConversion: true },
+      }),
     )
     await app.init()
 
@@ -197,6 +225,30 @@ describe("Contract provider verification (api)", () => {
       "live-streaming",
     )
     await tagsRepository.attachToStream(stream.id, seededTag.id)
+
+    // Seed one webhook subscription + a terminally failed delivery so the
+    // update/delete/retry contracts have real ids. The subscription's
+    // events deliberately exclude `stream:started` so the `update-stream`
+    // contract (which dispatches that event) never fans out to it.
+    const webhook = await subscriptionsRepository.create({
+      userId,
+      streamId: stream.id,
+      url: "https://example.com/seed-hook",
+      events: ["stream:stopped"],
+      secret: "seed-secret",
+    })
+    existingWebhookId = String(webhook.id)
+
+    const delivery = await deliveriesRepository.create(
+      webhook.id,
+      "stream:stopped",
+      { streamId: stream.id },
+    )
+    delivery.status = "failed"
+    delivery.attemptCount = 6
+    delivery.nextAttemptAt = null
+    delivery.lastError = "connection refused"
+    existingDeliveryId = String(delivery.id)
   })
 
   afterAll(async () => {
@@ -209,8 +261,34 @@ describe("Contract provider verification (api)", () => {
       if (value === PLACEHOLDER.EXISTING_STREAM_ID)
         pathParams[key] = existingStreamId
       if (value === PLACEHOLDER.MISSING_STREAM_ID) pathParams[key] = "999999"
+      if (value === PLACEHOLDER.EXISTING_WEBHOOK_ID)
+        pathParams[key] = existingWebhookId
+      if (value === PLACEHOLDER.MISSING_WEBHOOK_ID) pathParams[key] = "999999"
+      if (value === PLACEHOLDER.EXISTING_DELIVERY_ID)
+        pathParams[key] = existingDeliveryId
     }
     return resolvePath({ ...contract.request, pathParams })
+  }
+
+  /** Recursively substitutes placeholders in body values (e.g. streamId). */
+  function resolveBodyPlaceholders(value: unknown): unknown {
+    if (typeof value === "string") {
+      if (value === PLACEHOLDER.EXISTING_STREAM_ID) return existingStreamId
+      if (value === PLACEHOLDER.MISSING_STREAM_ID) return "999999"
+      if (value === PLACEHOLDER.EXISTING_WEBHOOK_ID) return existingWebhookId
+      if (value === PLACEHOLDER.MISSING_WEBHOOK_ID) return "999999"
+      if (value === PLACEHOLDER.EXISTING_DELIVERY_ID) return existingDeliveryId
+      return value
+    }
+    if (Array.isArray(value)) return value.map(resolveBodyPlaceholders)
+    if (value !== null && typeof value === "object") {
+      return Object.fromEntries(
+        Object.entries(value as Record<string, unknown>).map(
+          ([k, v]) => [k, resolveBodyPlaceholders(v)],
+        ),
+      )
+    }
+    return value
   }
 
   async function execute(contract: Contract) {
@@ -225,17 +303,7 @@ describe("Contract provider verification (api)", () => {
       req = req.set("X-Stream-Api-Key", process.env.STREAM_API_KEY ?? "")
     }
     if (contract.request.body !== undefined) {
-      // Substitute stream-id placeholders inside the request body (e.g. the
-      // `streamId` field of the ingest contract) the same way path params are.
-      const body = JSON.parse(JSON.stringify(contract.request.body)) as Record<
-        string,
-        unknown
-      >
-      for (const [k, v] of Object.entries(body)) {
-        if (v === PLACEHOLDER.EXISTING_STREAM_ID) body[k] = existingStreamId
-        if (v === PLACEHOLDER.MISSING_STREAM_ID) body[k] = "999999"
-      }
-      req = req.send(body)
+      req = req.send(resolveBodyPlaceholders(contract.request.body) as object)
     }
     return req
   }
@@ -260,6 +328,22 @@ describe("Contract provider verification (api)", () => {
     it(contract.description, async () => {
       // `login` depends on `register` having already created the user in
       // `beforeAll`; both contracts share the same credentials fixture.
+      const res = await execute(contract)
+
+      expect(res.status).toBe(contract.response.status)
+      const result = contract.response.schema.safeParse(res.body)
+      if (!result.success) {
+        throw new Error(
+          `${contract.name}: response did not satisfy the contract schema\n` +
+            `${JSON.stringify(result.error.format(), null, 2)}\n` +
+            `body: ${JSON.stringify(res.body, null, 2)}`,
+        )
+      }
+    })
+  })
+
+  describe.each(webhooksContracts)("$name", (contract) => {
+    it(contract.description, async () => {
       const res = await execute(contract)
 
       expect(res.status).toBe(contract.response.status)

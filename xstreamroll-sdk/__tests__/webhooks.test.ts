@@ -1,4 +1,5 @@
 import * as crypto from "crypto"
+
 import { computeWebhookSignature, verifyWebhookSignature } from "../src/webhooks"
 
 /** Reference implementation using Node's crypto module, for cross-checking. */
