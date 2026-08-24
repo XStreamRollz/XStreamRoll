@@ -329,6 +329,14 @@ export class AuthService {
       jti: randomUUID(),
     })
   }
+
+  /** Create a long-lived JWT refresh token for the given user. */
+  private signRefreshToken(user: User): string {
+    return this.jwtService.sign(
+      { sub: user.id },
+      { expiresIn: "7d" },
+    )
+  }
 }
 
 /** Strip the password hash from a user row before returning to clients. */
