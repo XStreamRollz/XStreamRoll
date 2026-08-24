@@ -11,7 +11,6 @@ import { Tag } from "../tags/tag.entity"
 import { TagsService } from "../tags/tags.service"
 import { StreamsRepository } from "./repository/streams.repository"
 import { StreamsService } from "./streams.service"
-import { WebhooksService } from "../webhooks/webhooks.service"
 
 describe("StreamsService", () => {
   let service: StreamsService
@@ -28,6 +27,11 @@ describe("StreamsService", () => {
   }
   let mockWebhooksService: { dispatchStreamEvent: jest.Mock }
   let mockTagsService: { listForStreamIds: jest.Mock }
+  let mockGateway: {
+    emitStarted: jest.Mock
+    emitStopped: jest.Mock
+    emitError: jest.Mock
+  }
 
   /** Helper to build a fully-typed Stream with the new visibility field. */
   function streamFixture(overrides: Partial<Stream> = {}): Stream {
@@ -62,10 +66,16 @@ describe("StreamsService", () => {
     mockTagsService = {
       listForStreamIds: jest.fn().mockResolvedValue(new Map()),
     }
+    mockGateway = {
+      emitStarted: jest.fn(),
+      emitStopped: jest.fn(),
+      emitError: jest.fn(),
+    }
     service = new StreamsService(
       mockRepo as unknown as StreamsRepository,
       mockWebhooksService as unknown as WebhooksService,
       mockTagsService as unknown as TagsService,
+      mockGateway as unknown as StreamsGateway,
     )
   })
 
@@ -213,6 +223,117 @@ describe("StreamsService", () => {
       "stream:started",
       expect.objectContaining({ streamId: 1, userId: 7 }),
     )
+  })
+
+  // ── Issue #519 — socket broadcasts on status transitions ────────────────
+
+  it("update inactive -> active emits stream:started to the gateway", async () => {
+    const existing = streamFixture({ status: "inactive", userId: 7 })
+    const updated = { ...existing, status: "active" }
+    mockRepo.findById.mockResolvedValue(existing)
+    mockRepo.update.mockResolvedValue(updated)
+
+    await service.update(1, { status: "active" })
+
+    expect(mockGateway.emitStarted).toHaveBeenCalledWith({
+      streamId: 1,
+      userId: 7,
+      startedAt: expect.any(String),
+    })
+    expect(mockGateway.emitStopped).not.toHaveBeenCalled()
+    expect(mockGateway.emitError).not.toHaveBeenCalled()
+  })
+
+  it("update active -> inactive emits stream:stopped to the gateway", async () => {
+    const existing = streamFixture({ status: "active", userId: 7 })
+    const updated = { ...existing, status: "inactive" }
+    mockRepo.findById.mockResolvedValue(existing)
+    mockRepo.update.mockResolvedValue(updated)
+
+    await service.update(1, { status: "inactive" })
+
+    expect(mockGateway.emitStopped).toHaveBeenCalledWith({
+      streamId: 1,
+      userId: 7,
+      stoppedAt: expect.any(String),
+    })
+    expect(mockGateway.emitStarted).not.toHaveBeenCalled()
+    expect(mockGateway.emitError).not.toHaveBeenCalled()
+  })
+
+  it("update * -> error emits stream:error to the gateway with code and message", async () => {
+    const existing = streamFixture({ status: "inactive", userId: 7 })
+    const updated = { ...existing, status: "error" }
+    mockRepo.findById.mockResolvedValue(existing)
+    mockRepo.update.mockResolvedValue(updated)
+
+    await service.update(1, { status: "error" })
+
+    expect(mockGateway.emitError).toHaveBeenCalledWith({
+      streamId: 1,
+      userId: 7,
+      occurredAt: expect.any(String),
+      code: "STREAM_ERROR",
+      message: "stream 1 entered error state",
+    })
+    expect(mockGateway.emitStarted).not.toHaveBeenCalled()
+    expect(mockGateway.emitStopped).not.toHaveBeenCalled()
+  })
+
+  it("update error -> inactive emits stream:stopped to the gateway", async () => {
+    const existing = streamFixture({ status: "error", userId: 7 })
+    const updated = { ...existing, status: "inactive" }
+    mockRepo.findById.mockResolvedValue(existing)
+    mockRepo.update.mockResolvedValue(updated)
+
+    await service.update(1, { status: "inactive" })
+
+    expect(mockGateway.emitStopped).toHaveBeenCalledWith({
+      streamId: 1,
+      userId: 7,
+      stoppedAt: expect.any(String),
+    })
+  })
+
+  it("update without a status change emits nothing to the gateway", async () => {
+    const existing = streamFixture({ status: "active", userId: 7, name: "old" })
+    const updated = { ...existing, name: "renamed" }
+    mockRepo.findById.mockResolvedValue(existing)
+    mockRepo.update.mockResolvedValue(updated)
+
+    await service.update(1, { name: "renamed" })
+
+    expect(mockGateway.emitStarted).not.toHaveBeenCalled()
+    expect(mockGateway.emitStopped).not.toHaveBeenCalled()
+    expect(mockGateway.emitError).not.toHaveBeenCalled()
+  })
+
+  it("invalid transitions emit nothing to the gateway", async () => {
+    const existing = streamFixture({ status: "active" })
+    mockRepo.findById.mockResolvedValue(existing)
+
+    await expect(service.update(2, { status: "active" })).rejects.toThrow(
+      ConflictException,
+    )
+    expect(mockGateway.emitStarted).not.toHaveBeenCalled()
+    expect(mockGateway.emitStopped).not.toHaveBeenCalled()
+    expect(mockGateway.emitError).not.toHaveBeenCalled()
+  })
+
+  it("a rejected webhook dispatch does not suppress the socket emit", async () => {
+    const existing = streamFixture({ status: "inactive", userId: 7 })
+    const updated = { ...existing, status: "active" }
+    mockRepo.findById.mockResolvedValue(existing)
+    mockRepo.update.mockResolvedValue(updated)
+    mockWebhooksService.dispatchStreamEvent.mockRejectedValue(
+      new Error("subscriber unreachable"),
+    )
+
+    await service.update(1, { status: "active" })
+
+    // The webhook failure is swallowed (fire-and-forget) and the socket
+    // emit still fires — the two side effects are independent.
+    expect(mockGateway.emitStarted).toHaveBeenCalledTimes(1)
   })
 
   it("update status active -> inactive dispatches a stream:stopped webhook event", async () => {
