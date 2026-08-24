@@ -4,6 +4,8 @@ export type SessionState =
   "idle" | "running" | "draining" | "stopped" | "errored"
 
 export interface StreamEvent {
+  /** Stable row identifier (issue #524). */
+  id?: string
   streamId: string
   data: Record<string, unknown>
   timestamp: string

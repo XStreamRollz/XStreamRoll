@@ -231,33 +231,58 @@ export class StreamsDbRepository {
    * Returns a paginated slice of unprocessed stream-data rows ordered by
    * insertion time (oldest first) so the worker processes events in FIFO order.
    *
-   * `nextCursor` is the offset for the next page, or `null` when the returned
-   * batch is smaller than `limit` (i.e. there are no more rows to fetch).
+   * Issue #524: uses keyset pagination over `(timestamp, id)` instead of
+   * OFFSET to avoid skips and duplicates when events are inserted concurrently
+   * during a poll.  `cursor` is an opaque string returned by the previous
+   * page (null on the first page); `nextCursor` is null when the batch is
+   * smaller than `limit` (i.e. no more rows to fetch).
    */
   async getPendingEvents(
     limit: number,
-    offset: number,
-  ): Promise<{ data: PendingStreamEvent[]; nextCursor: number | null }> {
+    cursor: string | null,
+  ): Promise<{ data: PendingStreamEvent[]; nextCursor: string | null }> {
     try {
+      const parsed = cursor ? (JSON.parse(cursor) as { timestamp: string; id: number }) : null
+
+      // Build parameter list: $1 = LIMIT, $2/$3 = keyset cursor values (when present).
+      const params: unknown[] = [limit]
+      if (parsed) {
+        params.push(parsed.timestamp)
+        params.push(parsed.id)
+      }
+      const afterClause = parsed
+        ? `AND (timestamp, id) > ($${params.length - 1}, $${params.length})`
+        : ""
+
       const { rows } = await this.pool.query<{
+        id: number
         stream_id: number
         data: Record<string, unknown>
         timestamp: Date
       }>(
-        `SELECT stream_id, data, timestamp
+        `SELECT id, stream_id, data, timestamp
          FROM stream_data
-         ORDER BY timestamp ASC
-         LIMIT $1 OFFSET $2`,
-        [limit, offset],
+         WHERE 1=1 ${afterClause}
+         ORDER BY timestamp ASC, id ASC
+         LIMIT $1`,
+        params,
       )
 
       const data: PendingStreamEvent[] = rows.map((r) => ({
+        id: String(r.id),
         streamId: String(r.stream_id),
         data: r.data,
         timestamp: r.timestamp.toISOString(),
       }))
 
-      const nextCursor = data.length < limit ? null : offset + data.length
+      const nextCursor: string | null =
+        data.length < limit
+          ? null
+          : JSON.stringify({
+              timestamp: data[data.length - 1].timestamp,
+              id: Number(data[data.length - 1].id),
+            })
+
       return { data, nextCursor }
     } catch (err) {
       this.handleDbError(err, "getPendingEvents")

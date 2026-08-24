@@ -40,7 +40,7 @@ test("single event: polled -> session -> published", async () => {
   process.env.POLL_INTERVAL_MS = "50"
 
   const now = new Date().toISOString()
-  const event = { streamId: "s1", data: { type: "t1", v: 1 }, timestamp: now }
+  const event = { id: "1", streamId: "s1", data: { type: "t1", v: 1 }, timestamp: now }
 
   let sent = false
   nock("http://mock-api")
@@ -80,8 +80,8 @@ test("multiple events same stream -> routed to same session", async () => {
   process.env.POLL_INTERVAL_MS = "50"
 
   const now = new Date().toISOString()
-  const e1 = { streamId: "same", data: { type: "t1", i: 1 }, timestamp: now }
-  const e2 = { streamId: "same", data: { type: "t1", i: 2 }, timestamp: now }
+  const e1 = { id: "1", streamId: "same", data: { type: "t1", i: 1 }, timestamp: now }
+  const e2 = { id: "2", streamId: "same", data: { type: "t1", i: 2 }, timestamp: now }
 
   let sentOnce = false
   nock("http://mock-api")
@@ -121,8 +121,8 @@ test("capacity exceeded -> event dropped, not published", async () => {
   process.env.MAX_CONCURRENT_SESSIONS = "1"
 
   const now = new Date().toISOString()
-  const a = { streamId: "a", data: { type: "t" }, timestamp: now }
-  const b = { streamId: "b", data: { type: "t" }, timestamp: now }
+  const a = { id: "1", streamId: "a", data: { type: "t" }, timestamp: now }
+  const b = { id: "2", streamId: "b", data: { type: "t" }, timestamp: now }
 
   let once = false
   nock("http://mock-api")
@@ -159,7 +159,7 @@ test("graceful shutdown flushes pending publishes", async () => {
   process.env.POLL_INTERVAL_MS = "50"
 
   const now = new Date().toISOString()
-  const event = { streamId: "slow", data: { type: "t" }, timestamp: now }
+  const event = { id: "1", streamId: "slow", data: { type: "t" }, timestamp: now }
 
   let sent = false
   nock("http://mock-api")
@@ -197,7 +197,7 @@ test("api error then recovery -> worker retries next poll", async () => {
   process.env.POLL_INTERVAL_MS = "50"
 
   const now = new Date().toISOString()
-  const event = { streamId: "r1", data: { type: "t" }, timestamp: now }
+  const event = { id: "1", streamId: "r1", data: { type: "t" }, timestamp: now }
 
   let calls = 0
   nock("http://mock-api")

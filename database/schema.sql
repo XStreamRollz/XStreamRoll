@@ -46,6 +46,8 @@ CREATE INDEX idx_streams_user_id ON streams(user_id);
 CREATE INDEX idx_streams_visibility ON streams(visibility);
 CREATE INDEX idx_stream_data_stream_id ON stream_data(stream_id);
 CREATE INDEX idx_stream_data_timestamp ON stream_data(timestamp);
+-- Issue #524: composite index for keyset pagination ORDER BY (timestamp, id)
+CREATE INDEX IF NOT EXISTS idx_stream_data_cursor ON stream_data(timestamp, id);
 
 -- Index for efficient event querying
 -- The composite index idx_stream_events_stream_id_created_at_desc covers
