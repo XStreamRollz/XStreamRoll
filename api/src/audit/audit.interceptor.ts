@@ -4,18 +4,44 @@ import {
   ExecutionContext,
   CallHandler,
 } from "@nestjs/common"
-import { Observable, tap } from "rxjs"
 import { Request } from "express"
-import { AuditService } from "./audit.service"
-import { AuditAction } from "./audit-action.enum"
+import { Observable, tap } from "rxjs"
 
+import { AuditAction } from "./audit-action.enum"
+import { AuditService } from "./audit.service"
+
+/**
+ * Routes the interceptor audits, keyed by the exact `METHOD path` the
+ * router exposes. Only real routes may be listed here: a pattern for a
+ * route that does not exist (e.g. `DELETE /streams` or `POST
+ * /auth/password`) is dead configuration that silently records nothing
+ * (issue #523).
+ *
+ * `POST /auth/login` is deliberately absent: `AuthService.login()` already
+ * writes `AUTH_LOGIN_SUCCESS` / `AUTH_LOGIN_FAILURE` with full metadata,
+ * and a second bare `login` row would double-log every login attempt.
+ */
 const SENSITIVE_ACTIONS: Record<string, AuditAction> = {
-  "POST /auth/login": AuditAction.LOGIN,
-  "POST /auth/password": AuditAction.PASSWORD_CHANGE,
-  "DELETE /streams": AuditAction.STREAM_DELETE,
-  "PATCH /users/role": AuditAction.ROLE_CHANGE,
   "PATCH /users/me": AuditAction.PROFILE_UPDATE,
   "POST /users/me/change-password": AuditAction.PASSWORD_CHANGE,
+}
+
+/**
+ * The real stream-delete route is `DELETE /streams/:id`, which carries a
+ * path parameter and therefore cannot be an exact-match key above. The id
+ * is validated as an integer by `ParseIntPipe`, so a numeric regex mirrors
+ * the route precisely (a trailing slash is tolerated).
+ */
+const STREAM_DELETE_PATTERN = /^DELETE \/streams\/\d+\/?$/
+
+/**
+ * Actor contract set by `AuthGuard` (`req.auth = { userId }`) and read by
+ * every controller and guard in the API. The interceptor must read this
+ * shape — reading `req.user.id` previously wrote NULL user ids because
+ * `AuthGuard` exposes `req.user.sub`, never `req.user.id`.
+ */
+interface AuthenticatedRequest extends Request {
+  auth?: { userId: number }
 }
 
 @Injectable()
@@ -23,22 +49,33 @@ export class AuditInterceptor implements NestInterceptor {
   constructor(private readonly auditService: AuditService) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    const req = context.switchToHttp().getRequest<Request>()
+    const req = context.switchToHttp().getRequest<AuthenticatedRequest>()
     const key = `${req.method} ${req.path}`
-    const action = Object.entries(SENSITIVE_ACTIONS).find(([pattern]) =>
-      key.startsWith(pattern),
-    )?.[1]
+    const action =
+      SENSITIVE_ACTIONS[key] ??
+      (STREAM_DELETE_PATTERN.test(key) ? AuditAction.STREAM_DELETE : undefined)
 
     if (!action) return next.handle()
 
     const ip = (req.headers["x-forwarded-for"] as string) ?? req.ip ?? ""
-    const userId = (req as Request & { user?: { id: number } }).user?.id ?? null
+    const userId = req.auth?.userId ?? null
 
     return next.handle().pipe(
-      // metadata is empty here because the interceptor doesn't have access to
-      // the request body post-processing. Callers that need richer metadata
-      // (e.g. AuthService) call auditService.log() directly.
-      tap(() => this.auditService.log(userId, action, {}, ip)),
+      // Runs only on success. The interceptor has no access to the
+      // post-validation request body, so metadata here is limited to
+      // `req.params` (e.g. the deleted stream id). Actions that need
+      // richer metadata (e.g. AuthService.login) call auditService.log()
+      // directly at the service layer.
+      tap(() =>
+        this.auditService.log(
+          userId,
+          action,
+          action === AuditAction.STREAM_DELETE
+            ? { streamId: Number(req.params?.id) }
+            : {},
+          ip,
+        ),
+      ),
     )
   }
 }
