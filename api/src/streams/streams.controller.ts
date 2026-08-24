@@ -1,3 +1,4 @@
+import { CACHE_MANAGER } from "@nestjs/cache-manager"
 import {
   Body,
   Controller,
@@ -14,7 +15,6 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common"
-import { CACHE_MANAGER } from "@nestjs/cache-manager"
 import {
   ApiBearerAuth,
   ApiConflictResponse,
@@ -28,17 +28,19 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger"
-import type { PaginatedResponse, Stream } from "@xstreamroll/types"
-import type { Request } from "express"
 import { Cache } from "cache-manager"
-import { AuthGuard } from "../common/guards/auth.guard"
-import { StreamOwnershipGuard } from "../common/guards/stream-ownership.guard"
+
 import { CreateStreamDto } from "./dto/create-stream.dto"
 import { ListStreamsQueryDto } from "./dto/list-streams.query.dto"
 import { StreamAnalyticsDto } from "./dto/stream-analytics.dto"
 import { toStreamResponse } from "./dto/stream-response.dto"
 import { UpdateStreamDto } from "./dto/update-stream.dto"
 import { StreamsService } from "./streams.service"
+import { AuthGuard } from "../common/guards/auth.guard"
+import { StreamOwnershipGuard } from "../common/guards/stream-ownership.guard"
+
+import type { Stream } from "@xstreamroll/types"
+import type { Request } from "express"
 
 const STREAM_ANALYTICS_CACHE_TTL_MS = 60_000
 
@@ -148,17 +150,24 @@ export class StreamsController {
   })
   @ApiOkResponse({ description: "Paginated list of streams." })
   @ApiUnauthorizedResponse({ description: "Authentication required." })
-  list(
+  async list(
     @Query() query: ListStreamsQueryDto,
     @Req() req: Request & { auth?: { userId: number } },
   ) {
     const page = query.page ?? 1
     const limit = query.limit ?? 20
-    return this.streamsService.list(page, limit, req.auth!.userId, {
+    const paged = await this.streamsService.list(page, limit, req.auth!.userId, {
       status: query.status,
       visibility: query.visibility,
       ownerOnly: query.ownerOnly,
     })
+    // Serialize ids to strings at the API boundary, exactly like the
+    // single-stream endpoints — `GET /streams` must not leak the
+    // numeric Postgres ids (contract: `@xstreamroll/types#Stream`).
+    return {
+      ...paged,
+      data: paged.data.map(toStreamResponse),
+    }
   }
 
   /**
