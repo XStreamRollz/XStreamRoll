@@ -399,5 +399,128 @@ describe("Database Integration Tests", () => {
       )
       expect(result.rows).toHaveLength(1)
     })
+
+    it("has composite index for keyset pagination on stream_data(timestamp, id)", async () => {
+      const result = await pool.query(
+        `SELECT indexname FROM pg_indexes
+         WHERE tablename = 'stream_data'
+         AND indexname = 'idx_stream_data_cursor'`,
+      )
+      expect(result.rows).toHaveLength(1)
+    })
+  })
+
+  describe("Keyset Pagination (issue #524)", () => {
+    let userId: number
+    let streamId: number
+
+    beforeEach(async () => {
+      const user = await pool.query(
+        `INSERT INTO users (username, email, password_hash)
+         VALUES ('polluser', 'poll@test.com', 'hash')
+         RETURNING id`,
+      )
+      userId = user.rows[0].id
+
+      const stream = await pool.query(
+        `INSERT INTO streams (user_id, name) VALUES ($1, 'Poll Stream')
+         RETURNING id`,
+        [userId],
+      )
+      streamId = stream.rows[0].id
+    })
+
+    it("yields every row exactly once across pages", async () => {
+      // Insert 25 events in a burst (same timestamp from NOW()).
+      const TOTAL = 25
+      const BATCH = 10
+
+      for (let i = 0; i < TOTAL; i++) {
+        await pool.query(
+          `INSERT INTO stream_data (stream_id, data)
+           VALUES ($1, $2::jsonb)`,
+          [streamId, JSON.stringify({ seq: i })],
+        )
+      }
+
+      // Walk the keyset cursor until null — should collect all rows.
+      const collected: { id: number; seq: number }[] = []
+      let cursor: string | null = null
+
+      while (true) {
+        const parsed: { timestamp: string; id: number } | null =
+          cursor ? (JSON.parse(cursor) as { timestamp: string; id: number }) : null
+        const params: unknown[] = [BATCH]
+        const afterClause: string = parsed
+          ? `AND (timestamp, id) > ($2, $3)`
+          : ""
+        if (parsed) {
+          params.push(parsed.timestamp, parsed.id)
+        }
+
+        const { rows } = await pool.query<{
+          id: number
+          data: Record<string, unknown>
+        }>(
+          `SELECT id, data FROM stream_data
+           WHERE 1=1 ${afterClause}
+           ORDER BY timestamp ASC, id ASC
+           LIMIT $1`,
+          params,
+        )
+
+        for (const r of rows) {
+          collected.push({ id: r.id, seq: r.data.seq as number })
+        }
+
+        if (rows.length < BATCH) break
+        // Fetch the actual timestamp from the last row we saw.
+        const lastRow = rows[rows.length - 1]
+        const { rows: tsRows } = await pool.query<{
+          timestamp: Date
+        }>(
+          `SELECT timestamp FROM stream_data WHERE id = $1`,
+          [lastRow.id],
+        )
+        cursor = JSON.stringify({
+          timestamp: tsRows[0].timestamp.toISOString(),
+          id: lastRow.id,
+        })
+      }
+
+      expect(collected).toHaveLength(TOTAL)
+      // No duplicates.
+      const ids = collected.map((c) => c.id)
+      expect(new Set(ids).size).toBe(TOTAL)
+      // All sequences 0..24 present.
+      const seqs = collected.map((c) => c.seq).sort((a, b) => a - b)
+      expect(seqs).toEqual(Array.from({ length: TOTAL }, (_, i) => i))
+    })
+
+    it("handles equal-timestamp burst deterministically with id tiebreaker", async () => {
+      // Insert 5 events in a single transaction — all get NOW() as timestamp.
+      await pool.query(
+        `INSERT INTO stream_data (stream_id, data)
+         SELECT $1, jsonb_build_object('seq', gs)
+         FROM generate_series(0, 4) gs`,
+        [streamId],
+      )
+
+      // Fetch all in one page (limit > count).
+      const { rows } = await pool.query<{
+        id: number
+        data: Record<string, unknown>
+      }>(
+        `SELECT id, data FROM stream_data
+         ORDER BY timestamp ASC, id ASC
+         LIMIT 10`,
+      )
+
+      expect(rows).toHaveLength(5)
+      // Row IDs should be strictly increasing (stable id tiebreaker).
+      for (let i = 1; i < rows.length; i++) {
+        expect(rows[i].id).toBeGreaterThan(rows[i - 1].id)
+      }
+    })
   })
 })

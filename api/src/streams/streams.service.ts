@@ -204,9 +204,9 @@ export class StreamsService {
    */
   async getPendingEvents(
     limit: number,
-    offset: number,
-  ): Promise<{ data: PendingStreamEvent[]; nextCursor: number | null }> {
-    return this.repo.getPendingEvents(limit, offset)
+    cursor: string | null,
+  ): Promise<{ data: PendingStreamEvent[]; nextCursor: string | null }> {
+    return this.repo.getPendingEvents(limit, cursor)
   }
 
   /**

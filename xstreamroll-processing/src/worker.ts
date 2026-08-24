@@ -176,18 +176,19 @@ async function pollOnce(): Promise<void> {
 
   // Fetch events in bounded batches until the server signals there are no
   // more (nextCursor === null) or we reach the high-watermark mid-page.
-  let cursor = 0
+  let cursor: string | null = null
   let totalFetched = 0
 
   while (!shuttingDown) {
     let events: StreamEvent[] = []
-    let nextCursor: number | null = null
+    let nextCursor: string | null = null
 
     try {
+      const cursorParam = cursor === null ? "" : encodeURIComponent(cursor)
       const response = await axiosInstance.get<{
         data: StreamEvent[]
-        nextCursor: number | null
-      }>(`${API_URL}/streams/pending?limit=${POLL_BATCH_SIZE}&cursor=${cursor}`)
+        nextCursor: string | null
+      }>(`${API_URL}/streams/pending?limit=${POLL_BATCH_SIZE}${cursorParam ? `&cursor=${cursorParam}` : ""}`)
 
       // Support both the new paginated shape { data, nextCursor } and the
       // legacy plain-array response so tests that mock the old format keep
@@ -195,7 +196,7 @@ async function pollOnce(): Promise<void> {
       if (Array.isArray(response.data)) {
         events = response.data
         nextCursor =
-          events.length < POLL_BATCH_SIZE ? null : cursor + events.length
+          events.length < POLL_BATCH_SIZE ? null : "{}"
       } else {
         events = Array.isArray(response.data?.data) ? response.data.data : []
         nextCursor = response.data?.nextCursor ?? null
@@ -265,7 +266,7 @@ async function pollOnce(): Promise<void> {
       break
     }
 
-    cursor = nextCursor
+    cursor = nextCursor as string | null
   }
 }
 
