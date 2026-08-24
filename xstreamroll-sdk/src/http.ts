@@ -146,6 +146,36 @@ export class HttpClient {
     body?: unknown,
     init: RequestInit = {},
   ): Promise<Response> {
+    return this.sendWithBody("POST", path, body, init)
+  }
+
+  /**
+   * PATCH convenience wrapper with the same JSON-serialisation
+   * behaviour as {@link post}.
+   */
+  patch(
+    path: string,
+    body?: unknown,
+    init: RequestInit = {},
+  ): Promise<Response> {
+    return this.sendWithBody("PATCH", path, body, init)
+  }
+
+  /**
+   * DELETE convenience wrapper. Accepts an optional body for the rare
+   * DELETE-with-payload endpoints; usually called without one.
+   */
+  delete(path: string, body?: unknown, init: RequestInit = {}): Promise<Response> {
+    return this.sendWithBody("DELETE", path, body, init)
+  }
+
+  /** Shared body-serialising implementation for POST/PATCH/DELETE. */
+  private sendWithBody(
+    method: "POST" | "PATCH" | "DELETE",
+    path: string,
+    body: unknown,
+    init: RequestInit,
+  ): Promise<Response> {
     const headers: Record<string, string> = {
       ...(init.headers as Record<string, string> | undefined),
     }
@@ -156,7 +186,7 @@ export class HttpClient {
     }
     return this.request(path, {
       ...init,
-      method: "POST",
+      method,
       headers,
       body: requestBody,
     })

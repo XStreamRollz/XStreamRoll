@@ -17,10 +17,17 @@ export * from "./contract"
 export * from "./schemas"
 export * from "./streams.contract"
 export * from "./auth.contract"
+export * from "./webhooks.contract"
 
 import { authContracts } from "./auth.contract"
-import type { Contract } from "./contract"
 import { streamsContracts } from "./streams.contract"
+import { webhooksContracts } from "./webhooks.contract"
+
+import type { Contract } from "./contract"
 
 /** Every contract in the suite, across all resources. */
-export const allContracts: Contract[] = [...streamsContracts, ...authContracts]
+export const allContracts: Contract[] = [
+  ...streamsContracts,
+  ...authContracts,
+  ...webhooksContracts,
+]

@@ -109,6 +109,33 @@ export interface WebhookSubscription {
   createdAt: string
 }
 
+/**
+ * A webhook subscription as returned by every endpoint except creation
+ * (`GET /webhooks`, `PATCH /webhooks/:id`). Identical to
+ * {@link WebhookSubscription} minus the `secret`, which the API only
+ * ever returns once, from `subscribeWebhook()`.
+ */
+export interface WebhookSubscriptionSummary {
+  id: string | number
+  userId: string | number
+  streamId: string | number
+  url: string
+  events: StreamEventType[]
+  active: boolean
+  createdAt: string
+}
+
+/**
+ * Partial payload accepted by `updateWebhook()` / `PATCH /webhooks/:id`.
+ * The signing secret cannot be changed through this endpoint — it is
+ * creation-time-only.
+ */
+export interface UpdateWebhookDto {
+  url?: string
+  events?: StreamEventType[]
+  active?: boolean
+}
+
 /** A single delivery attempt, as returned by `GET /webhooks/:id/deliveries`. */
 export interface WebhookDelivery {
   id: string | number

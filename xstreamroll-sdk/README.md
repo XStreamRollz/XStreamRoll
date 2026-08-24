@@ -257,6 +257,59 @@ await client.publishEvent({
 
 ---
 
+## Webhooks
+
+Webhooks notify an external URL whenever a stream lifecycle event
+happens. The SDK covers the full subscription lifecycle: create, list,
+deactivate/reactivate, update, delete, and manual redelivery.
+
+```ts
+// 1. Subscribe — the only response that ever contains the signing secret.
+const created = await client.subscribeWebhook({
+  streamId: "stream_abc",
+  url: "https://example.com/webhooks/xstreamroll",
+  events: ["stream:started", "stream:stopped"],
+})
+// Store `created.secret` immediately — it is never returned again.
+
+// 2. Manage subscriptions (the secret is never included in these responses).
+const all = await client.listWebhooks()
+const onStream = await client.listWebhooks({ streamId: "stream_abc" }) // optional filter
+
+// 3. Deactivate (stops new deliveries and retries immediately)…
+const paused = await client.updateWebhook(created.id, { active: false })
+// …and reactivate later; the URL and event list can be changed too.
+const resumed = await client.updateWebhook(created.id, {
+  url: "https://example.com/webhooks/xstreamroll-v2",
+  events: ["stream:started"],
+  active: true,
+})
+
+// 4. Inspect deliveries and manually re-queue a failed one. The retry
+//    budget still applies — the attempt count is kept, not reset.
+const { data: deliveries } = await client.paginateAll<WebhookDelivery>(
+  "/webhooks/1/deliveries",
+)
+const failed = deliveries.find((d) => d.status === "failed")
+if (failed) {
+  await client.retryWebhookDelivery(created.id, failed.id)
+}
+
+// 5. Remove a subscription and its delivery history.
+await client.deleteWebhook(created.id)
+```
+
+Verify inbound deliveries with `verifyWebhookSignature(secret, rawBody,
+signature)` — the `X-Webhook-Signature` header must be checked against
+the **exact raw request body bytes**, not a re-serialized JSON object.
+
+> **Secret handling:** the signing secret is returned exactly once, by
+> `subscribeWebhook()`. Every other endpoint omits it, and there is no
+> way to change it — correcting a leaked secret means deleting the
+> subscription and registering a new one.
+
+---
+
 ## HTTP transport
 
 `HttpClient` is a small, `fetch`-based wrapper that:
@@ -400,6 +453,9 @@ The SDK ships full type definitions. The most useful are:
   — stream CRUD shapes.
 * `StreamEvent`, `StreamEventRecord`, `StreamEventType` — event
   shapes.
+* `WebhookSubscription`, `WebhookSubscriptionSummary`,
+  `UpdateWebhookDto`, `WebhookDelivery` — webhook shapes (the
+  subscription summary omits the creation-time-only `secret`).
 * `AuthTokens`, `User`, `CreateUserDto`, `UpdateUserDto` — auth
   shapes.
 * `PaginatedResponse<T>`, `PaginationParams` — list helpers.

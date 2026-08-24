@@ -96,6 +96,53 @@ export const pendingStreamEventSchema = z.object({
   timestamp: z.string(),
 })
 
+/**
+ * A webhook subscription as returned by `POST /webhooks` — the only
+ * response that includes the signing `secret`.
+ */
+export const webhookSubscriptionSchema = z.object({
+  id: z.union([z.string(), z.number()]),
+  userId: z.union([z.string(), z.number()]),
+  streamId: z.union([z.string(), z.number()]),
+  url: z.string(),
+  events: z.array(z.string()),
+  secret: z.string(),
+  active: z.boolean(),
+  createdAt: z.string(),
+})
+
+/**
+ * A webhook subscription on every non-creation endpoint (`GET /webhooks`,
+ * `PATCH /webhooks/:id`) — identical to `webhookSubscriptionSchema` minus
+ * the secret, which is creation-time-only.
+ */
+export const webhookSubscriptionSummarySchema = webhookSubscriptionSchema.omit({
+  secret: true,
+})
+
+export const paginatedWebhookSubscriptionsSchema = z.object({
+  data: z.array(webhookSubscriptionSummarySchema),
+  total: z.number(),
+  page: z.number(),
+  limit: z.number(),
+})
+
+/** A single webhook delivery, as returned by the deliveries endpoints. */
+export const webhookDeliverySchema = z.object({
+  id: z.union([z.string(), z.number()]),
+  webhookSubscriptionId: z.union([z.string(), z.number()]),
+  event: z.string(),
+  payload: z.record(z.string(), z.unknown()),
+  status: z.enum(["pending", "success", "failed"]),
+  attemptCount: z.number(),
+  lastStatusCode: z.number().nullable(),
+  lastResponseBody: z.string().nullable(),
+  lastError: z.string().nullable(),
+  nextAttemptAt: z.string().nullable(),
+  deliveredAt: z.string().nullable(),
+  createdAt: z.string(),
+})
+
 export const apiErrorSchema = typed<ApiErrorResponse>()(
   z.object({
     statusCode: z.number(),

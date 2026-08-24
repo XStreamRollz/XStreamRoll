@@ -7,11 +7,14 @@ import {
   type CreateUserDto,
   type CreateWebhookDto,
   type PagedTags,
+  type PaginatedResponse,
   type Stream,
   type StreamConfig,
   type StreamEvent,
-  type PaginatedResponse,
+  type UpdateWebhookDto,
+  type WebhookDelivery,
   type WebhookSubscription,
+  type WebhookSubscriptionSummary,
 } from "./types"
 
 /** Named environment presets for base URL resolution. */
@@ -159,6 +162,65 @@ export class StreamingClient {
     })
   }
 
+  /**
+   * Lists the caller's webhook subscriptions, newest first. Optionally
+   * narrows to a single stream via `streamId`. The signing `secret` is
+   * not included in list responses — it is creation-time-only.
+   */
+  async listWebhooks(params: {
+    streamId?: string | number
+    page?: number
+    limit?: number
+  } = {}): Promise<PaginatedResponse<WebhookSubscriptionSummary>> {
+    const qs = new URLSearchParams()
+    if (params.streamId !== undefined) qs.set("streamId", String(params.streamId))
+    if (params.page !== undefined) qs.set("page", String(params.page))
+    if (params.limit !== undefined) qs.set("limit", String(params.limit))
+    const query = qs.toString()
+    return this.requestJson<PaginatedResponse<WebhookSubscriptionSummary>>(
+      `/webhooks${query ? `?${query}` : ""}`,
+      { method: "GET" },
+    )
+  }
+
+  /**
+   * Partially updates a webhook subscription: URL, event list, and/or
+   * `active`. Deactivating (`active: false`) stops new deliveries and
+   * retries immediately; reactivating resumes them. The signing secret
+   * cannot be changed — it is creation-time-only.
+   */
+  async updateWebhook(
+    id: string | number,
+    changes: UpdateWebhookDto,
+  ): Promise<WebhookSubscriptionSummary> {
+    return this.requestJson<WebhookSubscriptionSummary>(`/webhooks/${id}`, {
+      method: "PATCH",
+      body: changes,
+    })
+  }
+
+  /**
+   * Deletes a webhook subscription and its entire delivery history.
+   */
+  async deleteWebhook(id: string | number): Promise<void> {
+    await this.requestJson<void>(`/webhooks/${id}`, { method: "DELETE" })
+  }
+
+  /**
+   * Manually re-queues a failed or pending delivery so the retry sweep
+   * picks it up immediately. The retry budget still applies — the
+   * attempt count is kept, not reset.
+   */
+  async retryWebhookDelivery(
+    webhookId: string | number,
+    deliveryId: string | number,
+  ): Promise<WebhookDelivery> {
+    return this.requestJson<WebhookDelivery>(
+      `/webhooks/${webhookId}/deliveries/${deliveryId}/retry`,
+      { method: "POST" },
+    )
+  }
+
   // ── Pagination (#390) ─────────────────────────────────────────────────────
 
   /**
@@ -207,16 +269,37 @@ export class StreamingClient {
    * Maps non-2xx responses (and exhausted HttpClient retries) to ApiError,
    * and optionally retries once after a token refresh on 401.
    */
+  /** Routes a request to the matching HttpClient convenience method. */
+  private async dispatch(
+    path: string,
+    method: string,
+    body: unknown,
+    headers?: Record<string, string>,
+  ): Promise<Response> {
+    switch (method) {
+      case "POST":
+        return this.http.post(path, body, { headers })
+      case "PATCH":
+        return this.http.patch(path, body, { headers })
+      case "DELETE":
+        return this.http.delete(path, body, { headers })
+      default:
+        return this.http.get(path, { headers })
+    }
+  }
+
   private async requestJson<T>(
     path: string,
     init: { method?: string; body?: unknown; headers?: Record<string, string> } = {},
     options: { skipAuthRefresh?: boolean; retried?: boolean } = {},
   ): Promise<T> {
     try {
-      const response =
-        init.method === "POST" || init.body !== undefined
-          ? await this.http.post(path, init.body, { headers: init.headers })
-          : await this.http.get(path, { headers: init.headers })
+      const response = await this.dispatch(
+        path,
+        init.method ?? (init.body !== undefined ? "POST" : "GET"),
+        init.body,
+        init.headers,
+      )
 
       if (
         response.status === 401 &&

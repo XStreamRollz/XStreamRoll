@@ -1,11 +1,18 @@
-import { Injectable, Logger, NotFoundException } from "@nestjs/common"
-import { Interval } from "@nestjs/schedule"
 import * as crypto from "crypto"
-import { PaginatedResult } from "../common/dto/pagination.dto"
-import { WebhookDelivery } from "./webhook-delivery.entity"
-import { WebhookSubscription } from "./webhook-subscription.entity"
+
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common"
+import { Interval } from "@nestjs/schedule"
+
 import { WebhookDeliveriesRepository } from "./repository/webhook-deliveries.repository"
 import { WebhookSubscriptionsRepository } from "./repository/webhook-subscriptions.repository"
+import { WebhookDelivery } from "./webhook-delivery.entity"
+import { WebhookSubscription } from "./webhook-subscription.entity"
+import { PaginatedResult } from "../common/dto/pagination.dto"
 
 const WEBHOOK_SECRET_BYTES = 32
 const WEBHOOK_DELIVERY_TIMEOUT_MS = 10_000
@@ -76,6 +83,95 @@ export class WebhooksService {
       limit,
     )
     return { data: items, page, limit, total }
+  }
+
+  /**
+   * Paginated list of a caller's own subscriptions, newest first. The
+   * `userId` filter makes the listing inherently owner-scoped — there is
+   * no way to enumerate another user's webhooks.
+   */
+  async listByUser(
+    userId: number,
+    page: number,
+    limit: number,
+    streamId?: number,
+  ): Promise<PaginatedResult<WebhookSubscription>> {
+    const { items, total } = await this.subscriptions.listByUser(
+      userId,
+      page,
+      limit,
+      streamId,
+    )
+    return { data: items, page, limit, total }
+  }
+
+  /**
+   * Partially updates a subscription (URL, events, and/or `active`).
+   * The signing secret is deliberately not updatable — it is
+   * creation-time-only (see `WebhooksController`). Returns the updated
+   * subscription or throws 404 when the webhook does not exist.
+   */
+  async update(
+    id: number,
+    changes: { url?: string; events?: string[]; active?: boolean },
+  ): Promise<WebhookSubscription> {
+    await this.findById(id)
+    const updated = await this.subscriptions.update(id, changes)
+    if (!updated) {
+      // The findById above succeeded, so this can only be a race with a
+      // concurrent delete; surface the same 404 the caller expects.
+      throw new NotFoundException(`webhook ${id} not found`)
+    }
+    return updated
+  }
+
+  /**
+   * Deletes a subscription and (via the schema's ON DELETE CASCADE) all
+   * of its deliveries. Throws 404 when the webhook does not exist.
+   */
+  async delete(id: number): Promise<void> {
+    const deleted = await this.subscriptions.delete(id)
+    if (!deleted) {
+      throw new NotFoundException(`webhook ${id} not found`)
+    }
+  }
+
+  /**
+   * Manually re-queues a failed or pending delivery so the retry sweep
+   * picks it up on its next pass. `attemptCount` is kept, so the manual
+   * retry still operates inside the `MAX_RETRIES` budget — once the
+   * budget is exhausted the delivery goes terminally failed again after
+   * this one extra attempt.
+   *
+   * @throws NotFoundException  when the webhook or delivery does not exist,
+   *                            or the delivery belongs to another webhook.
+   * @throws ConflictException  when the delivery already succeeded.
+   */
+  async retryDelivery(
+    webhookId: number,
+    deliveryId: number,
+  ): Promise<WebhookDelivery> {
+    await this.findById(webhookId)
+
+    const delivery = await this.deliveries.findById(deliveryId)
+    if (!delivery || delivery.webhookSubscriptionId !== webhookId) {
+      throw new NotFoundException(
+        `delivery ${deliveryId} not found for webhook ${webhookId}`,
+      )
+    }
+    if (delivery.status === "success") {
+      throw new ConflictException(
+        `delivery ${deliveryId} was already delivered`,
+      )
+    }
+
+    const requeued = await this.deliveries.requeue(deliveryId)
+    if (!requeued) {
+      throw new NotFoundException(
+        `delivery ${deliveryId} not found for webhook ${webhookId}`,
+      )
+    }
+    return requeued
   }
 
   /**

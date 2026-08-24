@@ -43,7 +43,7 @@ import { StreamsService } from "./streams.service"
 import { AuthGuard } from "../common/guards/auth.guard"
 import { StreamOwnershipGuard } from "../common/guards/stream-ownership.guard"
 
-import type { PaginatedResponse, Stream } from "@xstreamroll/types"
+import type { Stream } from "@xstreamroll/types"
 import type { Request } from "express"
 
 const STREAM_ANALYTICS_CACHE_TTL_MS = 60_000
@@ -185,17 +185,25 @@ export class StreamsController {
   })
   @ApiOkResponse({ description: "Paginated list of streams." })
   @ApiUnauthorizedResponse({ description: "Authentication required." })
-  list(
+  async list(
     @Query() query: ListStreamsQueryDto,
     @Req() req: Request & { auth?: { userId: number } },
   ) {
     const page = query.page ?? 1
     const limit = query.limit ?? 20
-    return this.streamsService.list(page, limit, req.auth!.userId, {
+    const result = await this.streamsService.list(page, limit, req.auth!.userId, {
       status: query.status,
       visibility: query.visibility,
       ownerOnly: query.ownerOnly,
     })
+    // Single-stream endpoints serialize ids to strings via
+    // `toStreamResponse`; the list endpoint must do the same so the
+    // wire shape is consistent across the whole API (the shared
+    // `@xstreamroll/types#Stream` contract declares string ids).
+    return {
+      ...result,
+      data: result.data.map(toStreamResponse),
+    }
   }
 
   /**

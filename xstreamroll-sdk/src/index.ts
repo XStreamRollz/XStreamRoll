@@ -27,7 +27,9 @@ export type {
   StreamEventRecord,
   // Webhooks
   CreateWebhookDto,
+  UpdateWebhookDto,
   WebhookSubscription,
+  WebhookSubscriptionSummary,
   WebhookDelivery,
   // Pagination
   PaginatedResponse,
