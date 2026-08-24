@@ -76,17 +76,19 @@ import { StreamingClient, HttpClient, ApiError } from "@stellar/streaming-sdk"
 
 const client = new StreamingClient({
   env: "production", // or "staging" | "development", or a custom baseUrl
+  apiKey: process.env.STREAM_API_KEY, // required for publishEvent()
 })
 
 // 1. Log in
-const { accessToken, refreshToken } = await client.login(
+const { user, accessToken, refreshToken } = await client.login(
   "alice@example.com",
   "super-secret-password",
 )
+// user: { id, email, displayName, role, createdAt, updatedAt }
 
 // 2. Publish an event to an existing stream.
-//    `clientId` is auto-filled with a stable per-instance id; pass
-//    `eventType` and `data` and the client adds a timestamp for you.
+//    Requires a stream API key (`STREAM_API_KEY` on the server), sent as
+//    the `X-Stream-Api-Key` header. The server stamps the timestamp.
 try {
   await client.publishEvent({
     streamId: "stream_abc",
@@ -150,6 +152,11 @@ const registerTokens = await client.register({
   password: "super-secret-password",
   displayName: "Alice",
 })
+// tokens: { user, accessToken, refreshToken }
+
+// Refresh an expired access token
+const freshTokens = await client.refreshToken()
+// freshTokens: { user, accessToken, refreshToken }
 ```
 
 `StreamingClient` keeps the active tokens on the instance and:

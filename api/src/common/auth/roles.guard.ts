@@ -7,6 +7,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common"
 import { Reflector } from "@nestjs/core"
+
 import type { Request } from "express"
 
 export const ROLES_METADATA_KEY = "auth:roles"
@@ -16,7 +17,7 @@ export const ROLES_METADATA_KEY = "auth:roles"
  * to invoke the annotated endpoint.
  *
  *   @Roles("admin")
- *   @UseGuards(RolesGuard)
+ *   @UseGuards(AdminGuard)
  *   @Get("stats")
  *   stats() { ... }
  */
@@ -29,17 +30,15 @@ interface AuthenticatedRequest extends Request {
 /**
  * Role-based access control.
  *
- * The guard expects an upstream auth layer (JWT strategy, session, etc.)
- * to populate `req.user.roles`. Until that lands the guard supports a
- * dev-only fallback: if the request is missing `req.user` it inspects
- * the `X-Roles` header (comma-separated list) so endpoints can still be
- * exercised locally. Production deployments MUST set
- * \`ALLOW_HEADER_ROLES=0\` to disable this fallback.
+ * Roles are read exclusively from `req.user.roles`, which an upstream
+ * auth guard ({@link AuthGuard}) populates from the verified JWT's
+ * `isAdmin` claim. A request without `req.user` is rejected with 401 —
+ * there is no header-based fallback, so a bare `X-Roles: admin` header
+ * can never grant access. Compose with {@link AdminGuard} (or an
+ * `AuthGuard` + this guard pair) on any handler that declares `@Roles`.
  */
 @Injectable()
 export class RolesGuard implements CanActivate {
-  private readonly headerFallbackEnabled = process.env.ALLOW_HEADER_ROLES !== "0"
-
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
@@ -53,31 +52,21 @@ export class RolesGuard implements CanActivate {
     if (!required || required.length === 0) return true
 
     const req = context.switchToHttp().getRequest<AuthenticatedRequest>()
-    const roles = this.extractRoles(req)
-    if (!roles) {
+
+    // Authentication must have run first (AuthGuard). Without an
+    // authenticated user there is no identity to authorize — treat this
+    // as 401, not 403, so unauthenticated callers can't probe role
+    // requirements.
+    if (!req.user) {
       throw new UnauthorizedException("authentication required")
     }
 
-    const granted = required.some((r) => roles.includes(r))
+    const granted = required.some((r) => req.user?.roles?.includes(r))
     if (!granted) {
       throw new ForbiddenException(
         `requires one of role(s): ${required.join(", ")}`,
       )
     }
     return true
-  }
-
-  private extractRoles(req: AuthenticatedRequest): string[] | null {
-    if (req.user && Array.isArray(req.user.roles)) {
-      return req.user.roles
-    }
-    if (!this.headerFallbackEnabled) return null
-
-    const header = req.header("x-roles")
-    if (!header) return null
-    return header
-      .split(",")
-      .map((r) => r.trim().toLowerCase())
-      .filter(Boolean)
   }
 }

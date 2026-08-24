@@ -31,6 +31,7 @@ type MockStreamsService = {
   update: jest.Mock
   delete: jest.Mock
   listEvents: jest.Mock
+  ingestEvent: jest.Mock
 }
 
 type MockCache = {
@@ -66,6 +67,7 @@ describe("StreamsController", () => {
       update: jest.fn(),
       delete: jest.fn(),
       listEvents: jest.fn(),
+      ingestEvent: jest.fn(),
     }
     mockCache = {
       get: jest.fn(),
@@ -186,6 +188,23 @@ describe("StreamsController", () => {
     const res = await controller.update(9, dto)
     expect(mockService.update).toHaveBeenCalledWith(9, dto)
     expect(res).toEqual(expect.objectContaining({ visibility: "public" }))
+  })
+
+  it("ingest delegates to service and returns the queued event (issue #514)", async () => {
+    const pending = {
+      streamId: "42",
+      data: { viewerId: "u1" },
+      timestamp: "2026-08-01T00:00:00.000Z",
+    }
+    mockService.ingestEvent.mockResolvedValue(pending)
+
+    const res = await controller.ingest({ streamId: "42", data: { viewerId: "u1" } })
+
+    expect(mockService.ingestEvent).toHaveBeenCalledWith({
+      streamId: "42",
+      data: { viewerId: "u1" },
+    })
+    expect(res).toEqual(pending)
   })
 
   it("delete delegates to service and returns void", async () => {

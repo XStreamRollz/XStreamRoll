@@ -25,16 +25,20 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiQuery,
+  ApiResponse,
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger"
 import { Cache } from "cache-manager"
 
 import { CreateStreamDto } from "./dto/create-stream.dto"
+import { IngestStreamEventDto } from "./dto/ingest-stream-event.dto"
 import { ListStreamsQueryDto } from "./dto/list-streams.query.dto"
 import { StreamAnalyticsDto } from "./dto/stream-analytics.dto"
 import { toStreamResponse } from "./dto/stream-response.dto"
 import { UpdateStreamDto } from "./dto/update-stream.dto"
+import { PendingStreamEvent } from "./repository/streams.repository"
+import { StreamApiKeyGuard } from "./stream-api-key.guard"
 import { StreamsService } from "./streams.service"
 import { AuthGuard } from "../common/guards/auth.guard"
 import { StreamOwnershipGuard } from "../common/guards/stream-ownership.guard"
@@ -100,6 +104,37 @@ export class StreamsController {
     const limit = Math.min(Math.max(1, Number(limitStr ?? 100)), 1000)
     const offset = Math.max(0, Number(cursorStr ?? 0))
     return this.streamsService.getPendingEvents(limit, offset)
+  }
+
+  /**
+   * Ingest a single event into the worker queue (issue #514). This is
+   * the HTTP surface for events to enter the system — the row lands in
+   * `stream_data`, the table the processing worker polls.
+   *
+   * Authenticated via the `X-Stream-Api-Key` header (the `STREAM_API_KEY`
+   * env var), not a user JWT.
+   */
+  @Post("events")
+  @HttpCode(HttpStatus.CREATED)
+  @UseGuards(StreamApiKeyGuard)
+  @ApiOperation({
+    summary: "Ingest a stream event",
+    description:
+      "Appends an event to the processing queue (stream_data) for the worker to consume. " +
+      "Authenticated with the STREAM_API_KEY via the X-Stream-Api-Key header.",
+  })
+  @ApiCreatedResponse({
+    description: "Event accepted and queued for processing.",
+  })
+  @ApiUnauthorizedResponse({
+    description: "Missing or invalid X-Stream-Api-Key.",
+  })
+  @ApiNotFoundResponse({ description: "Stream not found." })
+  @ApiResponse({ status: 413, description: "Event payload too large." })
+  async ingest(
+    @Body() body: IngestStreamEventDto,
+  ): Promise<PendingStreamEvent> {
+    return this.streamsService.ingestEvent(body)
   }
 
   /**

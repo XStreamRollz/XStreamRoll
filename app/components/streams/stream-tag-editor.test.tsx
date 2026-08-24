@@ -84,7 +84,6 @@ describe("StreamTagEditor", () => {
       <StreamTagEditor
         streamId={123}
         initialTags={initialTags}
-        actingUserId="user-1"
       />,
     )
 
@@ -102,7 +101,6 @@ describe("StreamTagEditor", () => {
       <StreamTagEditor
         streamId={123}
         initialTags={initialTags}
-        actingUserId="user-1"
       />,
     )
 
@@ -133,7 +131,6 @@ describe("StreamTagEditor", () => {
       <StreamTagEditor
         streamId={123}
         initialTags={initialTags}
-        actingUserId="user-1"
       />,
     )
 
@@ -181,7 +178,6 @@ describe("StreamTagEditor", () => {
       <StreamTagEditor
         streamId={123}
         initialTags={initialTags}
-        actingUserId="user-1"
       />,
     )
 
@@ -220,7 +216,6 @@ describe("StreamTagEditor", () => {
       <StreamTagEditor
         streamId={123}
         initialTags={initialTags}
-        actingUserId="user-1"
       />,
     )
 

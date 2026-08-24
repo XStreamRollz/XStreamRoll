@@ -27,8 +27,6 @@ export interface StreamTagEditorProps {
   streamId: number | string
   /** Tags currently attached on the server. Used as SSR initial value. */
   initialTags?: Tag[]
-  /** Identity of the actor making the change (placeholder for JWT). */
-  actingUserId?: string | number
 }
 
 /**
@@ -47,7 +45,6 @@ export interface StreamTagEditorProps {
 export function StreamTagEditor({
   streamId,
   initialTags = [],
-  actingUserId: _actingUserId,
 }: StreamTagEditorProps) {
   const qc = useQueryClient()
   const tagsQuery = useStreamTags(streamId)

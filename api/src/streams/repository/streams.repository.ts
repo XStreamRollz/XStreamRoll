@@ -1,8 +1,10 @@
-import { Injectable } from "@nestjs/common"
-import type { StreamEventRecord } from "@xstreamroll/types"
+import { Injectable, NotFoundException } from "@nestjs/common"
+
 import { StreamAnalyticsDto } from "../dto/stream-analytics.dto"
-import type { StreamVisibility } from "../dto/visibility"
 import { Stream } from "../stream.entity"
+
+import type { StreamVisibility } from "../dto/visibility"
+import type { StreamEventRecord } from "@xstreamroll/types"
 
 export interface StreamCreateParams {
   userId: number
@@ -71,6 +73,8 @@ export class StreamsRepository {
   /** Per-stream append-only event log, mirroring the `stream_events` table. */
   private readonly eventsByStream = new Map<number, StreamEventRecord[]>()
   private nextEventId = 1
+  /** Pending (unprocessed) events, mirroring the `stream_data` table (issue #514). */
+  private readonly pendingEvents: PendingStreamEvent[] = []
 
   async findById(id: number): Promise<Stream | undefined> {
     return this.streamsById.get(id)
@@ -162,15 +166,41 @@ export class StreamsRepository {
   }
 
   /**
-   * Returns a paginated slice of pending (unprocessed) stream events.
-   * In-memory stub: always returns an empty array because the in-memory
-   * repository has no stream_data store. Used only in unit tests.
+   * Append an ingested event to the pending queue (issue #514). Mirrors
+   * the `INSERT INTO stream_data …` query a Postgres-backed repository
+   * runs; the server stamps the timestamp.
+   */
+  async insertPendingEvent(
+    streamId: number,
+    data: Record<string, unknown>,
+    timestamp: Date,
+  ): Promise<PendingStreamEvent> {
+    if (!this.streamsById.has(streamId)) {
+      throw new NotFoundException(`stream ${streamId} not found`)
+    }
+    const event: PendingStreamEvent = {
+      streamId: String(streamId),
+      data,
+      timestamp: timestamp.toISOString(),
+    }
+    this.pendingEvents.push(event)
+    return event
+  }
+
+  /**
+   * Returns a paginated slice of pending (unprocessed) stream events in
+   * FIFO order. Backed by the in-memory pending queue so tests and local
+   * development can exercise the full ingest → poll flow.
    */
   async getPendingEvents(
-    _limit: number,
-    _offset: number,
+    limit: number,
+    offset: number,
   ): Promise<{ data: PendingStreamEvent[]; nextCursor: number | null }> {
-    return { data: [], nextCursor: null }
+    const data = this.pendingEvents.slice(offset, offset + limit)
+    return {
+      data,
+      nextCursor: data.length < limit ? null : offset + data.length,
+    }
   }
 
   async getAnalytics(streamId: number): Promise<StreamAnalyticsDto> {

@@ -1,9 +1,9 @@
 import { Test, TestingModule } from "@nestjs/testing"
 
-import { StreamOwnershipGuard } from "../common/guards/stream-ownership.guard"
 import { Tag } from "./tag.entity"
 import { StreamTagsController, TagsListController } from "./tags.controller"
 import { TagsService } from "./tags.service"
+import { StreamOwnershipGuard } from "../common/guards/stream-ownership.guard"
 
 // Mock the env config before any imports that transitively load it.
 // StreamOwnershipGuard → StreamOwnershipService → config/env → validateEnv()
@@ -89,11 +89,12 @@ describe("TagsListController", () => {
 describe("StreamTagsController", () => {
   let controller: StreamTagsController
   let tagsService: jest.Mocked<
-    Pick<TagsService, "attachToStream" | "detachFromStream">
+    Pick<TagsService, "listForStream" | "attachToStream" | "detachFromStream">
   >
 
   beforeEach(async () => {
     tagsService = {
+      listForStream: jest.fn(),
       attachToStream: jest.fn(),
       detachFromStream: jest.fn(),
     }
@@ -107,6 +108,44 @@ describe("StreamTagsController", () => {
       .compile()
 
     controller = module.get(StreamTagsController)
+  })
+
+  // ── list (issue #517) ──────────────────────────────────────────────────
+
+  it("delegates list to tagsService.listForStream with defaults", async () => {
+    const tag = makeTag()
+    tagsService.listForStream.mockResolvedValue({
+      data: [tag],
+      page: 1,
+      limit: 50,
+      total: 1,
+      hasMore: false,
+    })
+
+    const result = await controller.list(1, {})
+
+    expect(tagsService.listForStream).toHaveBeenCalledWith(1, 1, 50)
+    expect(result).toEqual({
+      data: [tag],
+      page: 1,
+      limit: 50,
+      total: 1,
+      hasMore: false,
+    })
+  })
+
+  it("forwards explicit page and limit from query", async () => {
+    tagsService.listForStream.mockResolvedValue({
+      data: [],
+      page: 2,
+      limit: 10,
+      total: 0,
+      hasMore: false,
+    })
+
+    await controller.list(1, { page: 2, limit: 10 })
+
+    expect(tagsService.listForStream).toHaveBeenCalledWith(1, 2, 10)
   })
 
   // ── @UseGuards reflection ─────────────────────────────────────────────

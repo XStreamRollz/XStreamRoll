@@ -1,8 +1,10 @@
 import { z, type ZodType } from "zod"
+
 import type {
   ApiErrorResponse,
   PaginatedResponse,
   Stream,
+  Tag,
   User,
 } from "@xstreamroll/types"
 
@@ -44,6 +46,29 @@ export const paginatedStreamsSchema = typed<PaginatedResponse<Stream>>()(
   }),
 )
 
+export const tagSchema = typed<Tag>()(
+  z.object({
+    id: z.number(),
+    name: z.string(),
+    slug: z.string(),
+    createdAt: z.string(),
+  }),
+)
+
+/**
+ * Envelope returned by `GET /streams/:id/tags` (issue #517). Uses the
+ * `PagedTags` shape (with `hasMore`) that the app's `useStreamTags`
+ * hook parses — deliberately not pinned via `typed<>` because no
+ * shared `@xstreamroll/types` interface carries `hasMore` yet.
+ */
+export const pagedTagsSchema = z.object({
+  data: z.array(tagSchema),
+  page: z.number(),
+  limit: z.number(),
+  total: z.number(),
+  hasMore: z.boolean(),
+})
+
 export const userSchema = typed<User>()(
   z.object({
     id: z.string(),
@@ -58,6 +83,17 @@ export const authResponseSchema = z.object({
   user: userSchema,
   accessToken: z.string(),
   refreshToken: z.string(),
+})
+
+/**
+ * Shape returned by `POST /streams/events` (issue #514) and, per row,
+ * by `GET /streams/pending` — the `stream_data` wire shape the worker
+ * consumes.
+ */
+export const pendingStreamEventSchema = z.object({
+  streamId: z.string(),
+  data: z.record(z.string(), z.unknown()),
+  timestamp: z.string(),
 })
 
 export const apiErrorSchema = typed<ApiErrorResponse>()(
