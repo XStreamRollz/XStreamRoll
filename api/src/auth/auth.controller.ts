@@ -4,6 +4,8 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Req,
+  UnauthorizedException,
 } from "@nestjs/common"
 import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger"
 import { AuthResponse, AuthService } from "./auth.service"
@@ -42,5 +44,28 @@ export class AuthController {
   })
   login(@Body() dto: LoginDto): Promise<AuthResponse> {
     return this.authService.login(dto)
+  }
+
+  @Post("refresh")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Refresh an expired access token",
+    description:
+      "Accepts a refresh token via the request body (`refreshToken`) or via " +
+      "the `refresh_token` httpOnly cookie. Returns a fresh access token, " +
+      "refresh token, and the user profile.",
+  })
+  @ApiOkResponse({
+    description: "Token refresh successful. New token pair returned.",
+  })
+  refresh(
+    @Body("refreshToken") bodyToken?: string,
+    @Req() req?: { cookies?: Record<string, string> },
+  ): Promise<AuthResponse> {
+    const token = bodyToken ?? req?.cookies?.refresh_token
+    if (!token) {
+      throw new UnauthorizedException("refresh token is required")
+    }
+    return this.authService.refresh(token)
   }
 }

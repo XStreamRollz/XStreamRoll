@@ -2,6 +2,7 @@ import { ValidationPipe } from "@nestjs/common"
 import { NestFactory } from "@nestjs/core"
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger"
 import compression from "compression"
+import cookieParser from "cookie-parser"
 import helmet from "helmet"
 import { AppModule } from "./app.module"
 import { SanitizeStringsPipe } from "./common/sanitization/sanitize-strings.pipe"
@@ -14,6 +15,9 @@ const COMPRESSION_THRESHOLD_BYTES = 1024
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule)
+
+  // Parse cookies for refresh-token handling.
+  app.use(cookieParser())
 
   // Issue #89: Apply Helmet middleware globally for secure HTTP headers
   app.use(

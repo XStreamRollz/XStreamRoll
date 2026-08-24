@@ -12,6 +12,7 @@ export type {
   UpdateUserDto,
   // Auth
   AuthTokens,
+  AuthResponse,
   // Stream
   StreamStatus,
   StreamVisibility,

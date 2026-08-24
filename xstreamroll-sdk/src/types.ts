@@ -42,11 +42,17 @@ export interface UpdateUserDto {
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 /** Response returned after a successful login or token refresh. */
-export interface AuthTokens {
+export interface AuthResponse {
+  user: User
   accessToken: string
   refreshToken: string
-  expiresIn: number
 }
+
+/**
+ * @deprecated Use `AuthResponse` instead. This alias is kept for
+ * backward compatibility but will be removed in a future major version.
+ */
+export type AuthTokens = AuthResponse
 
 // ─── Stream ───────────────────────────────────────────────────────────────────
 

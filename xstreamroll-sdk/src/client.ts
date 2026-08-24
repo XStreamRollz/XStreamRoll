@@ -1,5 +1,5 @@
 import axios, { type AxiosInstance } from "axios"
-import type { StreamEvent, StreamConfig, Stream, AuthTokens, CreateUserDto } from "./types"
+import type { StreamEvent, StreamConfig, Stream, AuthResponse, CreateUserDto } from "./types"
 
 /** Named environment presets for base URL resolution. */
 export type ClientEnv = "development" | "staging" | "production"
@@ -14,7 +14,7 @@ export class StreamingClient {
   private apiUrl: string
   private clientId: string
   private http: AxiosInstance
-  private tokens: AuthTokens | null = null
+  private tokens: AuthResponse | null = null
 
   constructor(config: StreamConfig) {
     if (config.baseUrl) {
@@ -54,14 +54,14 @@ export class StreamingClient {
 
   // ── Auth ──────────────────────────────────────────────────────────────────
 
-  async login(email: string, password: string): Promise<AuthTokens> {
-    const { data } = await this.http.post<AuthTokens>("/auth/login", { email, password })
+  async login(email: string, password: string): Promise<AuthResponse> {
+    const { data } = await this.http.post<AuthResponse>("/auth/login", { email, password })
     this.tokens = data
     return data
   }
 
-  async register(dto: CreateUserDto): Promise<AuthTokens> {
-    const { data } = await this.http.post<AuthTokens>("/auth/register", dto)
+  async register(dto: CreateUserDto): Promise<AuthResponse> {
+    const { data } = await this.http.post<AuthResponse>("/auth/register", dto)
     this.tokens = data
     return data
   }
@@ -73,9 +73,12 @@ export class StreamingClient {
     this.tokens = null
   }
 
-  async refreshToken(): Promise<AuthTokens> {
-    const { data } = await this.http.post<AuthTokens>("/auth/refresh", {
-      refreshToken: this.tokens?.refreshToken,
+  async refreshToken(): Promise<AuthResponse> {
+    if (!this.tokens?.refreshToken) {
+      throw new Error("No refresh token available. Call login() or register() first.")
+    }
+    const { data } = await this.http.post<AuthResponse>("/auth/refresh", {
+      refreshToken: this.tokens.refreshToken,
     })
     this.tokens = data
     return data

@@ -15,17 +15,20 @@ jest.mock("bcrypt", () => ({
 
 interface MockJwtService {
   sign: jest.Mock<string>
+  verify: jest.Mock<{ sub: number }>
 }
 
 interface MockUsersRepository {
   findByEmail: jest.Mock<Promise<User | null>>
   findByUsername: jest.Mock<Promise<User | null>>
+  findById: jest.Mock<Promise<User | null>>
   create: jest.Mock<Promise<User>>
 }
 
 function mockJwtService(): MockJwtService {
   return {
     sign: jest.fn(),
+    verify: jest.fn(),
   }
 }
 
@@ -33,6 +36,7 @@ function mockUsersRepository(): MockUsersRepository {
   return {
     findByEmail: jest.fn(),
     findByUsername: jest.fn(),
+    findById: jest.fn(),
     create: jest.fn(),
   }
 }
@@ -106,6 +110,7 @@ describe("AuthService", () => {
         username: dto.username,
       })
       expect(result.accessToken).toBe("jwt.token.here")
+      expect(result.refreshToken).toBe("jwt.token.here")
       expect(result.user).toEqual({
         id: 1,
         username: dto.username,
@@ -175,6 +180,7 @@ describe("AuthService", () => {
         username: user.username,
       })
       expect(result.accessToken).toBe("jwt.token.here")
+      expect(result.refreshToken).toBe("jwt.token.here")
       expect(result.user).toEqual({
         id: user.id,
         username: user.username,
@@ -235,6 +241,75 @@ describe("AuthService", () => {
         email: dto.email,
         username: user.username,
       })
+    })
+  })
+
+  // -- refresh -----------------------------------------------------------
+
+  describe("refresh", () => {
+    it("returns new token pair for a valid refresh token", async () => {
+      const user = dummyUser()
+      jwt.verify.mockReturnValue({ sub: user.id })
+      users.findById.mockResolvedValue(user)
+      jwt.sign.mockReturnValueOnce("new.access.token").mockReturnValueOnce("new.refresh.token")
+
+      const result = await service.refresh("valid.refresh.token")
+
+      expect(jwt.verify).toHaveBeenCalledWith("valid.refresh.token")
+      expect(users.findById).toHaveBeenCalledWith(user.id)
+      expect(result.accessToken).toBe("new.access.token")
+      expect(result.refreshToken).toBe("new.refresh.token")
+      expect(result.user).toEqual({
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        createdAt: user.created_at,
+      })
+    })
+
+    it("throws UnauthorizedException when the refresh token is invalid or expired", async () => {
+      jwt.verify.mockImplementation(() => {
+        throw new Error("jwt expired")
+      })
+
+      await expect(service.refresh("expired.token")).rejects.toThrow(
+        UnauthorizedException,
+      )
+      expect(users.findById).not.toHaveBeenCalled()
+    })
+
+    it("throws UnauthorizedException when the user no longer exists", async () => {
+      jwt.verify.mockReturnValue({ sub: 999 })
+      users.findById.mockResolvedValue(null)
+
+      await expect(service.refresh("valid.for.deleted.user")).rejects.toThrow(
+        UnauthorizedException,
+      )
+      expect(jwt.sign).not.toHaveBeenCalled()
+    })
+
+    it("signs the access token with the standard short-lived payload", async () => {
+      const user = dummyUser()
+      jwt.verify.mockReturnValue({ sub: user.id })
+      users.findById.mockResolvedValue(user)
+      jwt.sign
+        .mockReturnValueOnce("access")
+        .mockReturnValueOnce("refresh")
+
+      await service.refresh("token")
+
+      // First call: access token (short-lived, full claims)
+      expect(jwt.sign).toHaveBeenNthCalledWith(1, {
+        sub: user.id,
+        email: user.email,
+        username: user.username,
+      })
+      // Second call: refresh token (long-lived, sub only)
+      expect(jwt.sign).toHaveBeenNthCalledWith(
+        2,
+        { sub: user.id },
+        { expiresIn: "7d" },
+      )
     })
   })
 })

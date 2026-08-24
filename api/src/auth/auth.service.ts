@@ -23,6 +23,7 @@ export interface SafeUser {
 export interface AuthResponse {
   user: SafeUser
   accessToken: string
+  refreshToken: string
 }
 
 @Injectable()
@@ -62,6 +63,7 @@ export class AuthService {
     return {
       user: toSafeUser(user),
       accessToken: this.signToken(user),
+      refreshToken: this.signRefreshToken(user),
     }
   }
 
@@ -85,6 +87,34 @@ export class AuthService {
     return {
       user: toSafeUser(user),
       accessToken: this.signToken(user),
+      refreshToken: this.signRefreshToken(user),
+    }
+  }
+
+  /**
+   * Refresh an access token using a valid refresh token.
+   *
+   * Accepts the refresh token either from the request body (SDK path) or
+   * from the httpOnly cookie (browser proxy path). Validates the token,
+   * looks up the user, and returns a fresh token pair.
+   */
+  async refresh(refreshToken: string): Promise<AuthResponse> {
+    let payload: { sub: number }
+    try {
+      payload = this.jwtService.verify<{ sub: number }>(refreshToken)
+    } catch {
+      throw new UnauthorizedException("invalid or expired refresh token")
+    }
+
+    const user = await this.usersRepository.findById(payload.sub)
+    if (!user) {
+      throw new UnauthorizedException("user not found")
+    }
+
+    return {
+      user: toSafeUser(user),
+      accessToken: this.signToken(user),
+      refreshToken: this.signRefreshToken(user),
     }
   }
 
@@ -95,6 +125,14 @@ export class AuthService {
       email: user.email,
       username: user.username,
     })
+  }
+
+  /** Create a long-lived JWT refresh token for the given user. */
+  private signRefreshToken(user: User): string {
+    return this.jwtService.sign(
+      { sub: user.id },
+      { expiresIn: "7d" },
+    )
   }
 }
 

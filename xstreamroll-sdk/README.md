@@ -61,10 +61,11 @@ const client = new StreamingClient({
 })
 
 // 1. Log in
-const { accessToken, refreshToken } = await client.login(
+const { user, accessToken, refreshToken } = await client.login(
   "alice@example.com",
   "super-secret-password"
 )
+// user: { id, email, displayName, role, createdAt, updatedAt }
 
 // 2. Create a stream
 // (auth tokens are attached automatically after login)
@@ -117,11 +118,18 @@ The full URL presets are:
 
 ```ts
 const tokens = await client.login(email, password)
+// tokens: { user, accessToken, refreshToken }
+
 const tokens = await client.register({
   email: "alice@example.com",
   password: "super-secret-password",
   displayName: "Alice",
 })
+// tokens: { user, accessToken, refreshToken }
+
+// Refresh an expired access token
+const freshTokens = await client.refreshToken()
+// freshTokens: { user, accessToken, refreshToken }
 ```
 
 `StreamingClient` keeps the active tokens on the instance and:
@@ -281,7 +289,7 @@ The SDK ships full type definitions. The most useful are:
 
 * `Stream`, `CreateStreamDto`, `UpdateStreamDto` — stream CRUD shapes.
 * `StreamEvent`, `StreamEventRecord`, `StreamEventType` — event shapes.
-* `AuthTokens`, `User`, `CreateUserDto`, `UpdateUserDto` — auth shapes.
+* `AuthTokens`, `AuthResponse`, `User`, `CreateUserDto`, `UpdateUserDto` — auth shapes.
 * `PaginatedResponse<T>`, `PaginationParams` — list helpers.
 * `ApiError`, `ApiErrorResponse`, `ValidationError` — error shapes.
 
