@@ -1,6 +1,7 @@
 'use client'
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
+import { setAccessToken as setStoredAccessToken } from '@/lib/api/token-store'
 
 interface User { id: number; username: string; email: string }
 interface AuthContextValue { user: User | null; accessToken: string | null; isAuthenticated: boolean }
@@ -23,8 +24,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const data = await res.json()
         setUser(data.user)
         setAccessToken(data.accessToken)
+        setStoredAccessToken(data.accessToken)
         setState('authenticated')
       } catch {
+        setStoredAccessToken(null)
         setState('unauthenticated')
         if (!pathname.startsWith('/auth/')) router.replace('/auth/login')
       }
