@@ -6,11 +6,14 @@ import {
   type AuthTokens,
   type CreateUserDto,
   type CreateWebhookDto,
+  type NotificationsPage,
   type PagedTags,
   type PaginatedResponse,
   type Stream,
+  type StreamAnalytics,
   type StreamConfig,
   type StreamEvent,
+  type StreamEventRecord,
   type UpdateWebhookDto,
   type WebhookDelivery,
   type WebhookSubscription,
@@ -146,6 +149,53 @@ export class StreamingClient {
     })
   }
 
+  /**
+   * Replays a stream's historical event log (issue #396), newest first.
+   * Owner-only: the API returns 403 for streams the caller does not own.
+   */
+  async listStreamEvents(
+    streamId: string | number,
+    params: { page?: number; limit?: number } = {},
+  ): Promise<PaginatedResponse<StreamEventRecord>> {
+    const qs = new URLSearchParams()
+    if (params.page !== undefined) qs.set("page", String(params.page))
+    if (params.limit !== undefined) qs.set("limit", String(params.limit))
+    const query = qs.toString()
+    return this.requestJson<PaginatedResponse<StreamEventRecord>>(
+      `/streams/${streamId}/events${query ? `?${query}` : ""}`,
+      { method: "GET" },
+    )
+  }
+
+  /**
+   * Returns aggregate analytics for a stream: event counts, error rate,
+   * processing latency, and per-minute volume. Owner-only.
+   */
+  async getStreamAnalytics(streamId: string | number): Promise<StreamAnalytics> {
+    return this.requestJson<StreamAnalytics>(`/streams/${streamId}/analytics`, {
+      method: "GET",
+    })
+  }
+
+  /**
+   * Lists the caller's unread notifications (paginated). The API returns
+   * `unreadCount` alongside the page so the app can badge the bell icon
+   * without a second request.
+   */
+  async listNotifications(params: {
+    page?: number
+    limit?: number
+  } = {}): Promise<NotificationsPage> {
+    const qs = new URLSearchParams()
+    if (params.page !== undefined) qs.set("page", String(params.page))
+    if (params.limit !== undefined) qs.set("limit", String(params.limit))
+    const query = qs.toString()
+    return this.requestJson<NotificationsPage>(
+      `/notifications${query ? `?${query}` : ""}`,
+      { method: "GET" },
+    )
+  }
+
   // ── Webhooks ──────────────────────────────────────────────────────────────
 
   /**
@@ -204,6 +254,25 @@ export class StreamingClient {
    */
   async deleteWebhook(id: string | number): Promise<void> {
     await this.requestJson<void>(`/webhooks/${id}`, { method: "DELETE" })
+  }
+
+  /**
+   * Lists the delivery log for a webhook subscription (paginated).
+   * Requires ownership of the webhook. `WebhookDelivery` is the same
+   * shape `retryWebhookDelivery()` returns.
+   */
+  async listDeliveries(
+    webhookId: string | number,
+    params: { page?: number; limit?: number } = {},
+  ): Promise<PaginatedResponse<WebhookDelivery>> {
+    const qs = new URLSearchParams()
+    if (params.page !== undefined) qs.set("page", String(params.page))
+    if (params.limit !== undefined) qs.set("limit", String(params.limit))
+    const query = qs.toString()
+    return this.requestJson<PaginatedResponse<WebhookDelivery>>(
+      `/webhooks/${webhookId}/deliveries${query ? `?${query}` : ""}`,
+      { method: "GET" },
+    )
   }
 
   /**

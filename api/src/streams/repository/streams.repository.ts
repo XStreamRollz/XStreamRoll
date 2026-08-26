@@ -77,6 +77,7 @@ export class StreamsRepository {
   private nextEventId = 1
   /** Pending (unprocessed) events, mirroring the `stream_data` table (issue #514). */
   private readonly pendingEvents: PendingStreamEvent[] = []
+  private nextPendingEventId = 1
 
   async findById(id: number): Promise<Stream | undefined> {
     return this.streamsById.get(id)
@@ -181,6 +182,7 @@ export class StreamsRepository {
       throw new NotFoundException(`stream ${streamId} not found`)
     }
     const event: PendingStreamEvent = {
+      id: String(this.nextPendingEventId++),
       streamId: String(streamId),
       data,
       timestamp: timestamp.toISOString(),

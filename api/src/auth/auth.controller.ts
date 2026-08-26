@@ -6,8 +6,8 @@ import {
   Post,
   Req,
   Res,
+  UnauthorizedException,
 } from "@nestjs/common"
-import { Throttle } from "@nestjs/throttler"
 import {
   ApiCreatedResponse,
   ApiNoContentResponse,
@@ -15,12 +15,16 @@ import {
   ApiOperation,
   ApiTags,
 } from "@nestjs/swagger"
-import type { Request, Response } from "express"
+import { Throttle } from "@nestjs/throttler"
+
+
 import { AuthResponse, AuthService } from "./auth.service"
+import { ForgotPasswordDto } from "./dto/forgot-password.dto"
 import { LoginDto } from "./dto/login.dto"
 import { RegisterDto } from "./dto/register.dto"
-import { ForgotPasswordDto } from "./dto/forgot-password.dto"
 import { ResetPasswordDto } from "./dto/reset-password.dto"
+
+import type { Request, Response } from "express"
 
 const REFRESH_COOKIE_NAME = "refresh_token"
 const COOKIE_OPTIONS = {
@@ -84,17 +88,24 @@ export class AuthController {
   @Post("refresh")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: "Refresh the access token",
+    summary: "Refresh an expired access token",
     description:
-      "Reads the refresh token from the httpOnly cookie and returns a new access token.",
+      "Accepts a refresh token via the request body (`refreshToken`) or via " +
+      "the `refresh_token` httpOnly cookie. Returns a fresh access token, " +
+      "refresh token, and the user profile.",
   })
   @ApiOkResponse({
-    description: "Access token refreshed.",
+    description: "Token refresh successful. New token pair returned.",
   })
-  async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<AuthResponse> {
-    const result = await this.authService.refresh(req)
-    res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, COOKIE_OPTIONS)
-    return result
+  refresh(
+    @Body("refreshToken") bodyToken?: string,
+    @Req() req?: { cookies?: Record<string, string> },
+  ): Promise<AuthResponse> {
+    const token = bodyToken ?? req?.cookies?.refresh_token
+    if (!token) {
+      throw new UnauthorizedException("refresh token is required")
+    }
+    return this.authService.refresh(token)
   }
 
   @Post("logout")
@@ -160,26 +171,4 @@ export class AuthController {
     }
   }
 
-  @Post("refresh")
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: "Refresh an expired access token",
-    description:
-      "Accepts a refresh token via the request body (`refreshToken`) or via " +
-      "the `refresh_token` httpOnly cookie. Returns a fresh access token, " +
-      "refresh token, and the user profile.",
-  })
-  @ApiOkResponse({
-    description: "Token refresh successful. New token pair returned.",
-  })
-  refresh(
-    @Body("refreshToken") bodyToken?: string,
-    @Req() req?: { cookies?: Record<string, string> },
-  ): Promise<AuthResponse> {
-    const token = bodyToken ?? req?.cookies?.refresh_token
-    if (!token) {
-      throw new UnauthorizedException("refresh token is required")
-    }
-    return this.authService.refresh(token)
-  }
 }

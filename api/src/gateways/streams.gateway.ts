@@ -146,7 +146,7 @@ export class StreamsGateway
       // revoked tokens and tokens minted before the user's last password
       // change are rejected here too — the JWT's `jti` is checked against
       // the denylist inside authenticate().
-      const userId = await this.jwtExtractorService.authenticate(
+      const { userId } = await this.jwtExtractorService.authenticate(
         `Bearer ${token}`,
       )
       client.data.userId = userId

@@ -242,16 +242,18 @@ export class StreamsDbRepository {
   ): Promise<PendingStreamEvent> {
     try {
       const { rows } = await this.pool.query<{
+        id: number
         stream_id: number
         data: Record<string, unknown>
         timestamp: Date
       }>(
         `INSERT INTO stream_data (stream_id, data, timestamp)
          VALUES ($1, $2, $3)
-         RETURNING stream_id, data, timestamp`,
+         RETURNING id, stream_id, data, timestamp`,
         [streamId, data, timestamp],
       )
       return {
+        id: String(rows[0].id),
         streamId: String(rows[0].stream_id),
         data: rows[0].data,
         timestamp: rows[0].timestamp.toISOString(),

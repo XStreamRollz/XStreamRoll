@@ -42,14 +42,20 @@ describe("JwtExtractorService", () => {
     jwtService.verifyAsync.mockResolvedValue({ sub: 1, jti: JTI })
     denylist.isRevoked.mockResolvedValue(false)
 
-    await expect(extractor.authenticate("Bearer a.b.c")).resolves.toBe(1)
+    await expect(extractor.authenticate("Bearer a.b.c")).resolves.toEqual({
+      userId: 1,
+      isAdmin: false,
+    })
     expect(denylist.isRevoked).toHaveBeenCalledWith(JTI)
   })
 
   it("skips the denylist lookup for legacy tokens without a jti", async () => {
     jwtService.verifyAsync.mockResolvedValue({ sub: 1 })
 
-    await expect(extractor.authenticate("Bearer a.b.c")).resolves.toBe(1)
+    await expect(extractor.authenticate("Bearer a.b.c")).resolves.toEqual({
+      userId: 1,
+      isAdmin: false,
+    })
     expect(denylist.isRevoked).not.toHaveBeenCalled()
   })
 
@@ -78,7 +84,10 @@ describe("JwtExtractorService", () => {
       created_at: new Date("2026-01-01T00:00:00Z"),
     })
 
-    await expect(extractor.authenticate("Bearer a.b.c")).resolves.toBe(1)
+    await expect(extractor.authenticate("Bearer a.b.c")).resolves.toEqual({
+      userId: 1,
+      isAdmin: false,
+    })
   })
 
   it("throws UnauthorizedException for a missing or malformed header", async () => {

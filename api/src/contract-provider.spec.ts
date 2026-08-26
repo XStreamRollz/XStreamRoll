@@ -18,6 +18,7 @@ import { Test, TestingModule } from "@nestjs/testing"
 import {
   authContracts,
   loginBody,
+  notificationsContracts,
   PLACEHOLDER,
   registerBody,
   resolvePath,
@@ -38,6 +39,9 @@ import { JwtExtractorService } from "./common/guards/jwt-extractor.service"
 import { StreamOwnershipGuard } from "./common/guards/stream-ownership.guard"
 import { StreamOwnershipService } from "./common/guards/stream-ownership.service"
 import createJwtConfig, { createRefreshJwtConfig } from "./config/jwt.config"
+import { NotificationsController } from "./notifications/notifications.controller"
+import { NotificationsService } from "./notifications/notifications.service"
+import { NotificationsRepository } from "./notifications/repository/notifications.repository"
 import { StreamsRepository } from "./streams/repository/streams.repository"
 import { StreamApiKeyGuard } from "./streams/stream-api-key.guard"
 import { StreamsController } from "./streams/streams.controller"
@@ -128,6 +132,7 @@ describe("Contract provider verification (api)", () => {
         StreamTagsController,
         AuthController,
         WebhooksController,
+        NotificationsController,
       ],
       providers: [
         StreamsService,
@@ -143,6 +148,8 @@ describe("Contract provider verification (api)", () => {
           provide: WebhookDeliveriesRepository,
           useValue: deliveriesRepository,
         },
+        NotificationsService,
+        NotificationsRepository,
         AuthGuard,
         JwtExtractorService,
         StreamOwnershipGuard,
@@ -249,6 +256,20 @@ describe("Contract provider verification (api)", () => {
     delivery.nextAttemptAt = null
     delivery.lastError = "connection refused"
     existingDeliveryId = String(delivery.id)
+
+    // Record one processed event so `list-stream-events` validates the
+    // non-empty shape — most importantly the stringified id/streamId.
+    await streamsRepository.recordEvent(stream.id, {
+      eventType: "stream:started",
+      payload: { streamId: stream.id },
+      occurredAt: "2026-08-01T00:00:00.000Z",
+    })
+
+    // Seed one unread notification so `list-notifications` validates the
+    // non-empty shape (numeric ids, ISO timestamps).
+    await moduleFixture
+      .get(NotificationsRepository)
+      .create(userId, "stream:started", { streamId: stream.id })
   })
 
   afterAll(async () => {
@@ -343,6 +364,22 @@ describe("Contract provider verification (api)", () => {
   })
 
   describe.each(webhooksContracts)("$name", (contract) => {
+    it(contract.description, async () => {
+      const res = await execute(contract)
+
+      expect(res.status).toBe(contract.response.status)
+      const result = contract.response.schema.safeParse(res.body)
+      if (!result.success) {
+        throw new Error(
+          `${contract.name}: response did not satisfy the contract schema\n` +
+            `${JSON.stringify(result.error.format(), null, 2)}\n` +
+            `body: ${JSON.stringify(res.body, null, 2)}`,
+        )
+      }
+    })
+  })
+
+  describe.each(notificationsContracts)("$name", (contract) => {
     it(contract.description, async () => {
       const res = await execute(contract)
 

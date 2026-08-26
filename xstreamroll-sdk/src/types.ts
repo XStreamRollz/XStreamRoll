@@ -1,7 +1,13 @@
 // ─── Generated types from OpenAPI spec ─────────────────────────────────────
 // Regenerate with `npm run generate:types` (requires API server running).
+import type {
+  ApiErrorResponse,
+  PaginatedResponse,
+  StreamEventType,
+  Tag,
+  User,
+} from "@xstreamroll/types"
 import type { components } from "./generated/schema"
-import type { ApiErrorResponse, StreamEventType } from "@xstreamroll/types"
 
 export type { components }
 
@@ -47,6 +53,17 @@ export type {
   ApiErrorResponse,
 } from "@xstreamroll/types"
 
+// ─── Tags ────────────────────────────────────────────────────────────────────
+
+/**
+ * Paginated tag envelope returned by `GET /streams/:id/tags` (issue #517).
+ * Same shape as the API's `PagedTags` wire contract: the standard
+ * pagination envelope plus the legacy `hasMore` boolean.
+ */
+export interface PagedTags extends PaginatedResponse<Tag> {
+  hasMore: boolean
+}
+
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 /** Configuration for the StreamingClient. */
@@ -81,6 +98,66 @@ export interface AuthResponse {
   user: User
   accessToken: string
   refreshToken: string
+}
+
+/**
+ * The token pair returned by login/register/refresh. Kept as a separate
+ * alias (rather than using {@link AuthResponse} directly) because the
+ * client stores only the tokens — the `user` object rides along on the
+ * auth responses but isn't persisted by {@link StreamingClient}.
+ */
+export type AuthTokens = AuthResponse
+
+// ─── Streams: analytics & event replay ───────────────────────────────────────
+
+/**
+ * Aggregate analytics returned by `GET /streams/:id/analytics`. Mirrors
+ * the API's `StreamAnalyticsDto` exactly (issue #534).
+ */
+export interface StreamAnalytics {
+  streamId: number
+  totalEventsProcessed: {
+    last24h: number
+    last7d: number
+    last30d: number
+  }
+  errorRate: {
+    window: "30d"
+    totalEvents: number
+    errorEvents: number
+    percentage: number
+  }
+  processingLatency: {
+    window: "30d"
+    averageMs: number | null
+    p99Ms: number | null
+  }
+  eventsPerMinute: Array<{
+    minute: string
+    count: number
+  }>
+  generatedAt: string
+}
+
+// ─── Notifications ───────────────────────────────────────────────────────────
+
+/**
+ * A single unread notification, as returned by `GET /notifications`
+ * (issue #534). Numeric ids and ISO-string timestamps on the wire.
+ */
+export interface Notification {
+  id: number
+  userId: number
+  type: string
+  payload: Record<string, unknown>
+  readAt: string | null
+  createdAt: string
+  expiresAt: string
+}
+
+/** Paginated unread-notification envelope from `GET /notifications`. */
+export interface NotificationsPage extends PaginatedResponse<Notification> {
+  unreadCount: number
 }
 
 // ─── Webhooks ─────────────────────────────────────────────────────────────────

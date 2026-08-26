@@ -287,12 +287,16 @@ const resumed = await client.updateWebhook(created.id, {
 
 // 4. Inspect deliveries and manually re-queue a failed one. The retry
 //    budget still applies — the attempt count is kept, not reset.
-const { data: deliveries } = await client.paginateAll<WebhookDelivery>(
-  "/webhooks/1/deliveries",
-)
-const failed = deliveries.find((d) => d.status === "failed")
+const page = await client.listDeliveries(created.id, { page: 1, limit: 20 })
+const failed = page.data.find((d) => d.status === "failed")
 if (failed) {
   await client.retryWebhookDelivery(created.id, failed.id)
+}
+// Or walk every delivery with the pagination helper:
+for await (const d of client.paginateAll<WebhookDelivery>(
+  `/webhooks/${created.id}/deliveries`,
+)) {
+  console.log("delivery", d.id, d.status)
 }
 
 // 5. Remove a subscription and its delivery history.
@@ -307,6 +311,30 @@ the **exact raw request body bytes**, not a re-serialized JSON object.
 > `subscribeWebhook()`. Every other endpoint omits it, and there is no
 > way to change it — correcting a leaked secret means deleting the
 > subscription and registering a new one.
+
+---
+
+## Stream analytics & event replay
+
+```ts
+// Replay the stream's historical event log, newest first (owner-only).
+const events = await client.listStreamEvents("stream_abc", { page: 1, limit: 50 })
+// events: { data: StreamEventRecord[], page, limit, total, hasMore }
+
+// Aggregate analytics: event counts, error rate, processing latency,
+// and per-minute volume (owner-only).
+const analytics = await client.getStreamAnalytics("stream_abc")
+// analytics: StreamAnalytics
+```
+
+## Notifications
+
+```ts
+// List the caller's unread notifications (paginated). `unreadCount` is
+// returned alongside the page so the app can badge its bell icon.
+const inbox = await client.listNotifications({ page: 1, limit: 20 })
+// inbox: { data: Notification[], page, limit, total, unreadCount }
+```
 
 ---
 
@@ -453,6 +481,9 @@ The SDK ships full type definitions. The most useful are:
   — stream CRUD shapes.
 * `StreamEvent`, `StreamEventRecord`, `StreamEventType` — event
   shapes.
+* `StreamAnalytics` — the `GET /streams/:id/analytics` shape.
+* `Notification`, `NotificationsPage` — the `GET /notifications`
+  shapes (page includes `unreadCount`).
 * `WebhookSubscription`, `WebhookSubscriptionSummary`,
   `UpdateWebhookDto`, `WebhookDelivery` — webhook shapes (the
   subscription summary omits the creation-time-only `secret`).

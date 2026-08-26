@@ -5,10 +5,11 @@ import {
 } from "@nestjs/common"
 import * as fc from "fast-check"
 
-
 import { Stream } from "./stream.entity"
+import { StreamsGateway } from "../gateways/streams.gateway"
 import { Tag } from "../tags/tag.entity"
 import { TagsService } from "../tags/tags.service"
+import { WebhooksService } from "../webhooks/webhooks.service"
 import { StreamsRepository } from "./repository/streams.repository"
 import { StreamsService } from "./streams.service"
 
@@ -415,9 +416,9 @@ describe("StreamsService", () => {
       nextCursor: null,
     })
 
-    await service.getPendingEvents(100, 0)
+    await service.getPendingEvents(100, null)
 
-    expect(mockRepo.getPendingEvents).toHaveBeenCalledWith(100, 0)
+    expect(mockRepo.getPendingEvents).toHaveBeenCalledWith(100, null)
   })
 
   it("delete existing stream resolves", async () => {

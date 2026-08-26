@@ -148,7 +148,7 @@ describe("StreamsGateway", () => {
       const socket = makeSocket({
         handshake: { auth: { token: "valid-token" } },
       })
-      authExtractor.authenticate.mockResolvedValue(42)
+      authExtractor.authenticate.mockResolvedValue({ userId: 42, isAdmin: false })
 
       await gateway.handleConnection(socket as unknown as any)
 
@@ -221,7 +221,7 @@ describe("StreamsGateway", () => {
           headers: { authorization: "Bearer header-token" },
         },
       })
-      authExtractor.authenticate.mockResolvedValue(99)
+      authExtractor.authenticate.mockResolvedValue({ userId: 99, isAdmin: false })
 
       await gateway.handleConnection(socket as unknown as any)
 
@@ -265,7 +265,7 @@ describe("StreamsGateway", () => {
           headers: { authorization: "Bearer header-token" },
         },
       })
-      authExtractor.authenticate.mockResolvedValue(7)
+      authExtractor.authenticate.mockResolvedValue({ userId: 7, isAdmin: false })
 
       await gateway.handleConnection(socket as unknown as any)
 
@@ -288,7 +288,7 @@ describe("StreamsGateway", () => {
           query: { token: "decoy-token" },
         },
       })
-      authExtractor.authenticate.mockResolvedValue(11)
+      authExtractor.authenticate.mockResolvedValue({ userId: 11, isAdmin: false })
 
       await gateway.handleConnection(socket as unknown as any)
 

@@ -121,7 +121,7 @@ describe("AuthService", () => {
     refreshJwt = mockJwtService()
     users = mockUsersRepository()
     passwordReset = mockPasswordResetService()
-    tokenDenylist = { revoke: jest.fn() }
+    tokenDenylist = { revoke: jest.fn(), decodeJti: jest.fn(), isRevoked: jest.fn() }
     audit = { log: jest.fn(), logSafely: jest.fn() }
     service = makeService(
       accessJwt,
@@ -178,6 +178,7 @@ describe("AuthService", () => {
         email: dto.email,
         username: dto.username,
         passwordChangedAt: expect.any(Number),
+        isAdmin: false,
         jti: expect.any(String),
       })
       expect(refreshJwt.sign).toHaveBeenCalledWith({
@@ -373,6 +374,7 @@ describe("AuthService", () => {
         email: user.email,
         username: user.username,
         passwordChangedAt: expect.any(Number),
+        isAdmin: false,
         jti: expect.any(String),
       })
       expect(refreshJwt.sign).toHaveBeenCalledWith({
@@ -516,6 +518,7 @@ describe("AuthService", () => {
         email: user.email,
         username: user.username,
         passwordChangedAt: expect.any(Number),
+        isAdmin: false,
         jti: expect.any(String),
       })
       expect(refreshJwt.sign).toHaveBeenCalledWith({
@@ -644,9 +647,7 @@ describe("AuthService", () => {
       refreshJwt.sign.mockReturnValue("new.refresh.token")
       tokenDenylist.isRevoked.mockResolvedValue(false)
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- partial request stub for test
-      const req = { cookies: { refresh_token: refreshToken } } as any
-      const result = await service.refresh(req)
+      const result = await service.refresh(refreshToken)
 
       expect(result.accessToken).toBe("new.access.token")
       expect(result.refreshToken).toBe("new.refresh.token")
@@ -661,28 +662,21 @@ describe("AuthService", () => {
       refreshJwt.decode.mockReturnValue({ sub: 1, jti: "revoked-refresh-jti" })
       tokenDenylist.isRevoked.mockResolvedValue(true)
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- partial request stub for test
-      const req = { cookies: { refresh_token: refreshToken } } as any
-
-      await expect(service.refresh(req)).rejects.toThrow(UnauthorizedException)
-      await expect(service.refresh(req)).rejects.toThrow(
+      await expect(service.refresh(refreshToken)).rejects.toThrow(UnauthorizedException)
+      await expect(service.refresh(refreshToken)).rejects.toThrow(
         "refresh token has been revoked",
       )
       expect(users.findById).not.toHaveBeenCalled()
     })
 
     it("throws UnauthorizedException when refresh token is missing", async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- partial request stub for test
-      const req = { cookies: {} } as any
-      await expect(service.refresh(req)).rejects.toThrow(UnauthorizedException)
+      await expect(service.refresh("")).rejects.toThrow(UnauthorizedException)
     })
 
     it("throws UnauthorizedException when refresh token is invalid", async () => {
       refreshJwt.verifyAsync.mockRejectedValue(new Error("invalid"))
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- partial request stub for test
-      const req = { cookies: { refresh_token: refreshToken } } as any
-      await expect(service.refresh(req)).rejects.toThrow(UnauthorizedException)
+      await expect(service.refresh(refreshToken)).rejects.toThrow(UnauthorizedException)
     })
 
     it("throws UnauthorizedException when user is not found", async () => {
@@ -690,78 +684,7 @@ describe("AuthService", () => {
       refreshJwt.decode.mockReturnValue({ sub: 999 })
       users.findById.mockResolvedValue(null)
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- partial request stub for test
-      const req = { cookies: { refresh_token: refreshToken } } as any
-      await expect(service.refresh(req)).rejects.toThrow(UnauthorizedException)
-    })
-  })
-
-  // -- refresh -----------------------------------------------------------
-
-  describe("refresh", () => {
-    it("returns new token pair for a valid refresh token", async () => {
-      const user = dummyUser()
-      jwt.verify.mockReturnValue({ sub: user.id })
-      users.findById.mockResolvedValue(user)
-      jwt.sign.mockReturnValueOnce("new.access.token").mockReturnValueOnce("new.refresh.token")
-
-      const result = await service.refresh("valid.refresh.token")
-
-      expect(jwt.verify).toHaveBeenCalledWith("valid.refresh.token")
-      expect(users.findById).toHaveBeenCalledWith(user.id)
-      expect(result.accessToken).toBe("new.access.token")
-      expect(result.refreshToken).toBe("new.refresh.token")
-      expect(result.user).toEqual({
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        createdAt: user.created_at,
-      })
-    })
-
-    it("throws UnauthorizedException when the refresh token is invalid or expired", async () => {
-      jwt.verify.mockImplementation(() => {
-        throw new Error("jwt expired")
-      })
-
-      await expect(service.refresh("expired.token")).rejects.toThrow(
-        UnauthorizedException,
-      )
-      expect(users.findById).not.toHaveBeenCalled()
-    })
-
-    it("throws UnauthorizedException when the user no longer exists", async () => {
-      jwt.verify.mockReturnValue({ sub: 999 })
-      users.findById.mockResolvedValue(null)
-
-      await expect(service.refresh("valid.for.deleted.user")).rejects.toThrow(
-        UnauthorizedException,
-      )
-      expect(jwt.sign).not.toHaveBeenCalled()
-    })
-
-    it("signs the access token with the standard short-lived payload", async () => {
-      const user = dummyUser()
-      jwt.verify.mockReturnValue({ sub: user.id })
-      users.findById.mockResolvedValue(user)
-      jwt.sign
-        .mockReturnValueOnce("access")
-        .mockReturnValueOnce("refresh")
-
-      await service.refresh("token")
-
-      // First call: access token (short-lived, full claims)
-      expect(jwt.sign).toHaveBeenNthCalledWith(1, {
-        sub: user.id,
-        email: user.email,
-        username: user.username,
-      })
-      // Second call: refresh token (long-lived, sub only)
-      expect(jwt.sign).toHaveBeenNthCalledWith(
-        2,
-        { sub: user.id },
-        { expiresIn: "7d" },
-      )
+      await expect(service.refresh(refreshToken)).rejects.toThrow(UnauthorizedException)
     })
   })
 })

@@ -18,8 +18,10 @@ export * from "./schemas"
 export * from "./streams.contract"
 export * from "./auth.contract"
 export * from "./webhooks.contract"
+export * from "./notifications.contract"
 
 import { authContracts } from "./auth.contract"
+import { notificationsContracts } from "./notifications.contract"
 import { streamsContracts } from "./streams.contract"
 import { webhooksContracts } from "./webhooks.contract"
 
@@ -30,4 +32,5 @@ export const allContracts: Contract[] = [
   ...streamsContracts,
   ...authContracts,
   ...webhooksContracts,
+  ...notificationsContracts,
 ]

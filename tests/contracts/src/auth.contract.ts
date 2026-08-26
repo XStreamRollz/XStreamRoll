@@ -1,6 +1,7 @@
-import type { CreateUserDto } from "@xstreamroll/types"
-import type { Contract } from "./contract"
 import { authResponseSchema } from "./schemas"
+
+import type { Contract } from "./contract"
+import type { CreateUserDto } from "@xstreamroll/types"
 
 export const registerBody: CreateUserDto = {
   username: "contractuser",
