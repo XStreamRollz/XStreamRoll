@@ -33,7 +33,7 @@ jest.mock("bcrypt", () => ({
 describe("Login audit (integration)", () => {
   let app: INestApplication
 
-  const auditService = { log: jest.fn().mockResolvedValue(undefined) }
+  const auditService = { logSafely: jest.fn().mockResolvedValue(undefined) }
   const usersRepository = {
     findByEmail: jest.fn(),
     findByUsername: jest.fn(),
@@ -58,6 +58,7 @@ describe("Login audit (integration)", () => {
     password_hash:
       "$2b$10$abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ12",
     created_at: new Date("2026-01-01T00:00:00Z"),
+    is_admin: false,
   }
 
   beforeAll(async () => {
@@ -96,8 +97,8 @@ describe("Login audit (integration)", () => {
       .send({ email: user.email, password: "correctPassword" })
 
     expect(res.status).toBe(200)
-    expect(auditService.log).toHaveBeenCalledTimes(1)
-    expect(auditService.log).toHaveBeenCalledWith(
+    expect(auditService.logSafely).toHaveBeenCalledTimes(1)
+    expect(auditService.logSafely).toHaveBeenCalledWith(
       user.id,
       AuditAction.AUTH_LOGIN_SUCCESS,
       { email: user.email },
@@ -114,8 +115,8 @@ describe("Login audit (integration)", () => {
       .send({ email: user.email, password: "wrongPassword" })
 
     expect(res.status).toBe(401)
-    expect(auditService.log).toHaveBeenCalledTimes(1)
-    expect(auditService.log).toHaveBeenCalledWith(
+    expect(auditService.logSafely).toHaveBeenCalledTimes(1)
+    expect(auditService.logSafely).toHaveBeenCalledWith(
       user.id,
       AuditAction.AUTH_LOGIN_FAILURE,
       { reason: "invalid_password", email: user.email },
@@ -131,8 +132,8 @@ describe("Login audit (integration)", () => {
       .send({ email: "nobody@example.com", password: "whatever" })
 
     expect(res.status).toBe(401)
-    expect(auditService.log).toHaveBeenCalledTimes(1)
-    expect(auditService.log).toHaveBeenCalledWith(
+    expect(auditService.logSafely).toHaveBeenCalledTimes(1)
+    expect(auditService.logSafely).toHaveBeenCalledWith(
       null,
       AuditAction.AUTH_LOGIN_FAILURE,
       { reason: "user_not_found", email: "nobody@example.com" },

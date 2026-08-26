@@ -101,7 +101,11 @@ describe("Contract provider verification (api)", () => {
   let existingDeliveryId: string
 
   beforeAll(async () => {
-    streamsRepository = new StreamsRepository()
+    // The in-memory StreamsRepository consults the same TagsRepository
+    // instance the service uses, so the `tag` list filter (issue #532)
+    // resolves against the associations seeded below.
+    const tagsRepository = new TagsRepository()
+    streamsRepository = new StreamsRepository(tagsRepository)
     subscriptionsRepository = new WebhookSubscriptionsRepository()
     deliveriesRepository = new WebhookDeliveriesRepository()
 
@@ -132,7 +136,7 @@ describe("Contract provider verification (api)", () => {
       providers: [
         StreamsService,
         TagsService,
-        TagsRepository,
+        { provide: TagsRepository, useValue: tagsRepository },
         { provide: StreamsRepository, useValue: streamsRepository },
         WebhooksService,
         {
@@ -218,8 +222,8 @@ describe("Contract provider verification (api)", () => {
     existingStreamId = String(stream.id)
 
     // Attach one tag so `list-stream-tags` exercises a non-empty
-    // response (the schema pins the Tag shape, not just the empty case).
-    const tagsRepository = moduleFixture.get(TagsRepository)
+    // response (the schema pins the Tag shape, not just the empty case)
+    // and so `list-streams-by-tag` has a real association to filter on.
     const seededTag = await tagsRepository.upsertBySlug(
       "Live Streaming",
       "live-streaming",

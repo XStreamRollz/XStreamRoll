@@ -1,11 +1,19 @@
 import { ApiPropertyOptional } from "@nestjs/swagger"
 import { Transform } from "class-transformer"
-import { IsBoolean, IsIn, IsOptional, IsString } from "class-validator"
-import { PaginationQueryDto } from "../../common/dto/pagination.dto"
+import {
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Matches,
+} from "class-validator"
+
 import {
   STREAM_VISIBILITY_VALUES,
   type StreamVisibility,
 } from "./visibility"
+import { PaginationQueryDto } from "../../common/dto/pagination.dto"
 
 /**
  * Query parameters for `GET /streams`.
@@ -68,4 +76,40 @@ export class ListStreamsQueryDto extends PaginationQueryDto {
   })
   @IsBoolean({ message: "ownerOnly must be a boolean" })
   ownerOnly?: boolean
+
+  @ApiPropertyOptional({
+    description:
+      "Case-insensitive substring search over stream name and description. '%' and '_' are matched literally, never as wildcards.",
+    example: "football",
+  })
+  @IsOptional()
+  @Transform(({ value }) =>
+    value === undefined || value === null || value === ""
+      ? undefined
+      : typeof value === "string"
+        ? value.trim()
+        : value,
+  )
+  @IsString({ message: "q must be a string" })
+  @MaxLength(200, { message: "q must be at most 200 characters" })
+  q?: string
+
+  @ApiPropertyOptional({
+    description:
+      "Restrict results to streams carrying this tag. Accepts a tag slug (e.g. 'live') or a numeric tag id. Unknown tags return an empty page.",
+    example: "live",
+  })
+  @IsOptional()
+  @Transform(({ value }) =>
+    value === undefined || value === null || value === ""
+      ? undefined
+      : typeof value === "string"
+        ? value.trim()
+        : value,
+  )
+  @IsString({ message: "tag must be a string" })
+  @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
+    message: "tag must be a slug (lowercase alphanumeric with hyphens) or a numeric id",
+  })
+  tag?: string
 }

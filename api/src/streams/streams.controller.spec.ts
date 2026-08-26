@@ -126,6 +126,8 @@ describe("StreamsController", () => {
       status: undefined,
       visibility: undefined,
       ownerOnly: undefined,
+      q: undefined,
+      tag: undefined,
     })
     expect(res.data).toBeDefined()
   })
@@ -141,6 +143,21 @@ describe("StreamsController", () => {
       status: "active",
       visibility: "private",
       ownerOnly: true,
+      q: undefined,
+      tag: undefined,
+    })
+  })
+
+  it("list forwards the q search and tag filter (issue #532)", async () => {
+    mockService.list.mockResolvedValue({ data: [], page: 1, limit: 20, total: 0, hasMore: false })
+    const req = { auth: { userId: 9 } } as Request & { auth: { userId: number } }
+    await controller.list({ q: "football", tag: "live" }, req)
+    expect(mockService.list).toHaveBeenCalledWith(1, 20, 9, {
+      status: undefined,
+      visibility: undefined,
+      ownerOnly: undefined,
+      q: "football",
+      tag: "live",
     })
   })
 

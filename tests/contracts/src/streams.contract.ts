@@ -109,6 +109,45 @@ export const streamsContracts: Contract[] = [
     },
   },
   {
+    // Runs after the seed stream exists (created in the provider suite's
+    // beforeAll). `q=seed` matches the seed stream's name
+    // case-insensitively; the response is the standard paginated
+    // envelope over the filtered set (issue #532).
+    name: "list-streams-search",
+    description: "GET /streams?q=… returns only streams matching the search, in the paginated envelope",
+    consumer: "xstreamroll-sdk",
+    provider: "api",
+    request: {
+      method: "GET",
+      path: "/streams",
+      query: { page: 1, limit: 20, q: "seed" },
+      authenticated: true,
+    },
+    response: {
+      status: 200,
+      schema: paginatedStreamsSchema,
+    },
+  },
+  {
+    // `tag=live-streaming` matches the seed stream, which the provider
+    // suite tags in beforeAll. Unknown tags return an empty page, so the
+    // shape contract holds either way (issue #532).
+    name: "list-streams-by-tag",
+    description: "GET /streams?tag=… returns only streams carrying the tag, in the paginated envelope",
+    consumer: "xstreamroll-sdk",
+    provider: "api",
+    request: {
+      method: "GET",
+      path: "/streams",
+      query: { page: 1, limit: 20, tag: "live-streaming" },
+      authenticated: true,
+    },
+    response: {
+      status: 200,
+      schema: paginatedStreamsSchema,
+    },
+  },
+  {
     name: "update-stream",
     description: "PATCH /streams/:id updates a stream owned by the caller",
     consumer: "xstreamroll-sdk",

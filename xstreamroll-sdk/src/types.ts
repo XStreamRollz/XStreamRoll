@@ -1,7 +1,14 @@
 // ─── Generated types from OpenAPI spec ─────────────────────────────────────
 // Regenerate with `npm run generate:types` (requires API server running).
+import type {
+  ApiErrorResponse,
+  PaginatedResponse,
+  PaginationParams,
+  StreamEventType,
+  Tag,
+  User,
+} from "@xstreamroll/types"
 import type { components } from "./generated/schema"
-import type { ApiErrorResponse, StreamEventType } from "@xstreamroll/types"
 
 export type { components }
 
@@ -47,6 +54,39 @@ export type {
   ApiErrorResponse,
 } from "@xstreamroll/types"
 
+// ─── Streams ─────────────────────────────────────────────────────────────────
+
+/**
+ * Query parameters for `GET /streams` (issue #532). Extends the shared
+ * pagination params with the server-side search and tag filters so the
+ * dashboard search box can pass them through without client-side
+ * post-filtering.
+ */
+export interface StreamListParams extends PaginationParams {
+  /**
+   * Case-insensitive substring matched against stream name and
+   * description. `%`/`_` are treated literally by the server, never as
+   * wildcards.
+   */
+  q?: string
+  /**
+   * Tag slug or numeric id. Only streams carrying that tag are
+   * returned; an unknown tag yields an empty page.
+   */
+  tag?: string
+}
+
+// ─── Tags ────────────────────────────────────────────────────────────────────
+
+/**
+ * Paginated tag envelope returned by `GET /streams/:id/tags` (issue #517).
+ * Same shape as the API's `PagedTags` wire contract: the standard
+ * pagination envelope plus the legacy `hasMore` boolean.
+ */
+export interface PagedTags extends PaginatedResponse<Tag> {
+  hasMore: boolean
+}
+
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 /** Configuration for the StreamingClient. */
@@ -82,6 +122,14 @@ export interface AuthResponse {
   accessToken: string
   refreshToken: string
 }
+
+/**
+ * The token pair returned by login/register/refresh. Kept as a separate
+ * alias (rather than using {@link AuthResponse} directly) because the
+ * client stores only the tokens — the `user` object rides along on the
+ * auth responses but isn't persisted by {@link StreamingClient}.
+ */
+export type AuthTokens = AuthResponse
 
 // ─── Webhooks ─────────────────────────────────────────────────────────────────
 

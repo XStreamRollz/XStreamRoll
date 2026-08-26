@@ -7,7 +7,15 @@ import {
   type UseMutationResult,
   type UseQueryResult,
 } from "@tanstack/react-query"
+
 import type { Stream } from "@xstreamroll/types"
+
+import { fetchJson } from "@/lib/api/fetch-json"
+import {
+  getStream,
+  listStreams,
+  type PaginatedStreams,
+} from "@/lib/api/streams"
 import {
   attachTagToStream,
   detachTagFromStream,
@@ -15,12 +23,6 @@ import {
   type Tag,
   TagsApiError,
 } from "@/lib/api/tags"
-import { fetchJson } from "@/lib/api/fetch-json"
-import {
-  getStream,
-  listStreams,
-  type PaginatedStreams,
-} from "@/lib/api/streams"
 
 /**
  * Centralised query-key factory — pins every cache key the hooks
@@ -33,8 +35,8 @@ import {
 export const streamKeys = {
   all: ["streams"] as const,
   lists: () => [...streamKeys.all, "list"] as const,
-  list: (page: number, limit: number) =>
-    [...streamKeys.lists(), page, limit] as const,
+  list: (page: number, limit: number, q?: string, tag?: string) =>
+    [...streamKeys.lists(), page, limit, ...(q ? [q] : []), ...(tag ? [tag] : [])] as const,
   details: () => [...streamKeys.all, "detail"] as const,
   detail: (id: string | number) =>
     [...streamKeys.details(), String(id)] as const,
@@ -49,13 +51,14 @@ const DEFAULT_STALE_MS = 30_000
  * stale-while-revalidate window (matches `lib/cache/cache-config.ts`).
  */
 export function useStreamList(
-  params: { page?: number; limit?: number } = {},
+  params: { page?: number; limit?: number; q?: string; tag?: string } = {},
 ): UseQueryResult<PaginatedStreams, Error> {
   const page = params.page ?? 1
   const limit = params.limit ?? 20
   return useQuery({
-    queryKey: streamKeys.list(page, limit),
-    queryFn: ({ signal }) => listStreams({ page, limit, signal }),
+    queryKey: streamKeys.list(page, limit, params.q, params.tag),
+    queryFn: ({ signal }) =>
+      listStreams({ page, limit, q: params.q, tag: params.tag, signal }),
     staleTime: DEFAULT_STALE_MS,
   })
 }

@@ -5,11 +5,11 @@ import { AuditInterceptor } from "./audit.interceptor"
 import { AuditService } from "./audit.service"
 
 describe("AuditInterceptor", () => {
-  let auditService: { log: jest.Mock }
+  let auditService: { logSafely: jest.Mock }
   let interceptor: AuditInterceptor
 
   beforeEach(() => {
-    auditService = { log: jest.fn().mockResolvedValue(undefined) }
+    auditService = { logSafely: jest.fn().mockResolvedValue(undefined) }
     interceptor = new AuditInterceptor(auditService as unknown as AuditService)
   })
 
@@ -55,8 +55,8 @@ describe("AuditInterceptor", () => {
   it("captures PATCH /users/me as PROFILE_UPDATE with the acting user id", async () => {
     await runThroughInterceptor("PATCH", "/users/me", { auth: { userId: 42 } })
 
-    expect(auditService.log).toHaveBeenCalledTimes(1)
-    expect(auditService.log).toHaveBeenCalledWith(
+    expect(auditService.logSafely).toHaveBeenCalledTimes(1)
+    expect(auditService.logSafely).toHaveBeenCalledWith(
       42,
       AuditAction.PROFILE_UPDATE,
       {},
@@ -69,8 +69,8 @@ describe("AuditInterceptor", () => {
       auth: { userId: 42 },
     })
 
-    expect(auditService.log).toHaveBeenCalledTimes(1)
-    expect(auditService.log).toHaveBeenCalledWith(
+    expect(auditService.logSafely).toHaveBeenCalledTimes(1)
+    expect(auditService.logSafely).toHaveBeenCalledWith(
       42,
       AuditAction.PASSWORD_CHANGE,
       {},
@@ -84,11 +84,11 @@ describe("AuditInterceptor", () => {
       params: { id: "7" },
     })
 
-    expect(auditService.log).toHaveBeenCalledTimes(1)
-    expect(auditService.log).toHaveBeenCalledWith(
+    expect(auditService.logSafely).toHaveBeenCalledTimes(1)
+    expect(auditService.logSafely).toHaveBeenCalledWith(
       3,
       AuditAction.STREAM_DELETE,
-      { streamId: 7 },
+      {},
       "203.0.113.7",
     )
   })
@@ -99,10 +99,10 @@ describe("AuditInterceptor", () => {
       params: { id: "7" },
     })
 
-    expect(auditService.log).toHaveBeenCalledWith(
+    expect(auditService.logSafely).toHaveBeenCalledWith(
       3,
       AuditAction.STREAM_DELETE,
-      { streamId: 7 },
+      {},
       expect.any(String),
     )
   })
@@ -110,7 +110,7 @@ describe("AuditInterceptor", () => {
   it("does not capture POST /auth/login: AuthService owns login auditing", async () => {
     await runThroughInterceptor("POST", "/auth/login")
 
-    expect(auditService.log).not.toHaveBeenCalled()
+    expect(auditService.logSafely).not.toHaveBeenCalled()
   })
 
   it("does not capture routes that do not exist", async () => {
@@ -119,7 +119,7 @@ describe("AuditInterceptor", () => {
     // The real route is DELETE /streams/:id; the id-less path is not a route.
     await runThroughInterceptor("DELETE", "/streams")
 
-    expect(auditService.log).not.toHaveBeenCalled()
+    expect(auditService.logSafely).not.toHaveBeenCalled()
   })
 
   it("does not capture DELETE /streams/:id when the id is non-numeric", async () => {
@@ -127,7 +127,7 @@ describe("AuditInterceptor", () => {
       params: { id: "abc" },
     })
 
-    expect(auditService.log).not.toHaveBeenCalled()
+    expect(auditService.logSafely).not.toHaveBeenCalled()
   })
 
   it("writes no audit row when the request handler fails", async () => {
@@ -140,14 +140,14 @@ describe("AuditInterceptor", () => {
       ),
     ).rejects.toThrow("boom")
 
-    expect(auditService.log).not.toHaveBeenCalled()
+    expect(auditService.logSafely).not.toHaveBeenCalled()
   })
 
   it("records a NULL user id when the request carries no actor", async () => {
     await runThroughInterceptor("PATCH", "/users/me")
 
-    expect(auditService.log).toHaveBeenCalledTimes(1)
-    expect(auditService.log).toHaveBeenCalledWith(
+    expect(auditService.logSafely).toHaveBeenCalledTimes(1)
+    expect(auditService.logSafely).toHaveBeenCalledWith(
       null,
       AuditAction.PROFILE_UPDATE,
       {},

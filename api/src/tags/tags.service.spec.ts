@@ -66,6 +66,55 @@ describe("TagsService", () => {
     })
   })
 
+  // ── resolveTag (issue #532) ─────────────────────────────────────────────
+
+  describe("resolveTag", () => {
+    it("looks up a non-numeric value by slug", async () => {
+      const tag = makeTag({ id: 7, slug: "live" })
+      repo.findBySlug.mockResolvedValue(tag)
+
+      const result = await service.resolveTag("live")
+
+      expect(repo.findBySlug).toHaveBeenCalledWith("live")
+      expect(repo.findById).not.toHaveBeenCalled()
+      expect(result).toBe(tag)
+    })
+
+    it("treats a numeric value as an id", async () => {
+      const tag = makeTag({ id: 42 })
+      repo.findById.mockResolvedValue(tag)
+
+      const result = await service.resolveTag("42")
+
+      expect(repo.findById).toHaveBeenCalledWith(42)
+      expect(repo.findBySlug).not.toHaveBeenCalled()
+      expect(result).toBe(tag)
+    })
+
+    it("returns undefined for an unknown slug", async () => {
+      repo.findBySlug.mockResolvedValue(undefined)
+
+      const result = await service.resolveTag("nope")
+
+      expect(result).toBeUndefined()
+    })
+
+    it("returns undefined for empty or whitespace-only input", async () => {
+      expect(await service.resolveTag("")).toBeUndefined()
+      expect(await service.resolveTag("   ")).toBeUndefined()
+      expect(await service.resolveTag(undefined)).toBeUndefined()
+      expect(repo.findBySlug).not.toHaveBeenCalled()
+      expect(repo.findById).not.toHaveBeenCalled()
+    })
+
+    it("does not slugify raw names — resolution is a lookup only", async () => {
+      await service.resolveTag("Live Streaming")
+      // A raw name is looked up as-is (it won't match a slug) rather
+      // than being transformed — slug logic stays in one place.
+      expect(repo.findBySlug).toHaveBeenCalledWith("Live Streaming")
+    })
+  })
+
   // ── attachToStream ───────────────────────────────────────────────────────
 
   describe("attachToStream", () => {
