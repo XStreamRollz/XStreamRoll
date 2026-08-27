@@ -1,4 +1,5 @@
 import { UnauthorizedException } from "@nestjs/common"
+
 import { AuthController } from "./auth.controller"
 import { AuthResponse, AuthService } from "./auth.service"
 
@@ -23,10 +24,10 @@ function makeController(service: MockAuthService): AuthController {
 function authResponse(): AuthResponse {
   return {
     user: {
-      id: 1,
+      id: "1",
       username: "testuser",
       email: "test@example.com",
-      createdAt: new Date("2026-01-01T00:00:00Z"),
+      createdAt: "2026-01-01T00:00:00.000Z",
     },
     accessToken: "access.token",
     refreshToken: "refresh.token",

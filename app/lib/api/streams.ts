@@ -15,8 +15,9 @@
  * refreshing the token once and retrying (issue #518).
  */
 
-import type { PaginatedResponse, Stream } from "@xstreamroll/types"
 import { ApiRequestError, fetchJson } from "./fetch-json"
+
+import type { PaginatedResponse, Stream } from "@xstreamroll/types"
 
 export interface PaginatedStreams {
   data: Stream[]
@@ -38,11 +39,21 @@ function apiBase(): string {
 }
 
 export async function listStreams(
-  params: { page?: number; limit?: number; signal?: AbortSignal } = {},
+  params: {
+    page?: number
+    limit?: number
+    /** Case-insensitive name/description search (issue #532). */
+    q?: string
+    /** Tag slug or id to filter by (issue #532). */
+    tag?: string
+    signal?: AbortSignal
+  } = {},
 ): Promise<PaginatedStreams> {
   const url = new URL(`${apiBase()}/streams`)
   if (params.page) url.searchParams.set("page", String(params.page))
   if (params.limit) url.searchParams.set("limit", String(params.limit))
+  if (params.q) url.searchParams.set("q", params.q)
+  if (params.tag) url.searchParams.set("tag", params.tag)
 
   const json = await fetchJson<
     | PaginatedResponse<Stream>

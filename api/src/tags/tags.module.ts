@@ -1,12 +1,13 @@
 import { Module } from "@nestjs/common"
+
 import { AuthModule } from "../auth/auth.module"
-import { AuthGuard } from "../common/guards/auth.guard"
-import { StreamOwnershipGuard } from "../common/guards/stream-ownership.guard"
-import { StreamOwnershipService } from "../common/guards/stream-ownership.service"
 import { TagsDbRepository } from "./repository/tags-db.repository"
 import { TagsRepository } from "./repository/tags.repository"
 import { StreamTagsController, TagsListController } from "./tags.controller"
 import { TagsService } from "./tags.service"
+import { AuthGuard } from "../common/guards/auth.guard"
+import { StreamOwnershipGuard } from "../common/guards/stream-ownership.guard"
+import { StreamOwnershipService } from "../common/guards/stream-ownership.service"
 
 /**
  * Injection token used to swap the tags repository implementation.
@@ -37,6 +38,9 @@ const isTest = process.env.NODE_ENV === "test"
     StreamOwnershipService,
     AuthGuard,
   ],
-  exports: [TagsService],
+  // TagsRepository is exported so StreamsModule's in-memory
+  // StreamsRepository can resolve the same tag-association store and
+  // apply the `tag` list filter (issue #532).
+  exports: [TagsService, TagsRepository],
 })
 export class TagsModule {}

@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common"
+
 import { StreamTag, Tag } from "../tag.entity"
 
 /**
@@ -116,6 +117,19 @@ export class TagsRepository {
 
     for (const tags of result.values()) {
       tags.sort((a, b) => a.slug.localeCompare(b.slug))
+    }
+    return result
+  }
+
+  /**
+   * Returns the set of stream ids carrying `tagId` (issue #532). Used by
+   * the in-memory {@link StreamsRepository} so its `tag` filter behaves
+   * the same as the SQL `EXISTS (SELECT 1 FROM stream_tags …)` path.
+   */
+  async listStreamIdsForTag(tagId: number): Promise<Set<number>> {
+    const result = new Set<number>()
+    for (const { streamId, tagId: attached } of this.streamTags.values()) {
+      if (attached === tagId) result.add(streamId)
     }
     return result
   }

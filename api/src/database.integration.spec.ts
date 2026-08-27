@@ -370,7 +370,7 @@ describe("Database Integration Tests", () => {
       expect(pending.timestamp).toBe("2026-08-01T00:00:00.000Z")
 
       // The row is visible to the worker's poll source.
-      const { data } = await streamsDb.getPendingEvents(100, 0)
+      const { data } = await streamsDb.getPendingEvents(100, null)
       expect(data).toHaveLength(1)
       expect(data[0]).toEqual(pending)
     })
@@ -474,16 +474,20 @@ describe("Database Integration Tests", () => {
         }
 
         if (rows.length < BATCH) break
-        // Fetch the actual timestamp from the last row we saw.
+        // Fetch the actual timestamp from the last row we saw. The cursor is
+        // serialized as `timestamp::text` (microsecond precision) rather than
+        // a JS `Date`/ISO string: node-postgres truncates `timestamptz` to
+        // milliseconds, and with a burst of inserts sharing one millisecond
+        // the truncated cursor would re-fetch rows already seen.
         const lastRow = rows[rows.length - 1]
         const { rows: tsRows } = await pool.query<{
-          timestamp: Date
+          timestamp: string
         }>(
-          `SELECT timestamp FROM stream_data WHERE id = $1`,
+          `SELECT timestamp::text AS timestamp FROM stream_data WHERE id = $1`,
           [lastRow.id],
         )
         cursor = JSON.stringify({
-          timestamp: tsRows[0].timestamp.toISOString(),
+          timestamp: tsRows[0].timestamp,
           id: lastRow.id,
         })
       }

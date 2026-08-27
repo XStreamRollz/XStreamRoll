@@ -19,6 +19,7 @@ export type {
   StreamStatus,
   StreamVisibility,
   Stream,
+  StreamListParams,
   CreateStreamDto,
   UpdateStreamDto,
   // Stream Events

@@ -47,6 +47,14 @@ export interface PaginateAllOptions {
   maxPages?: number
   /** Optional AbortSignal that cancels the iteration immediately. */
   signal?: AbortSignal
+  /**
+   * Extra query params appended to every page request (e.g. the
+   * `q`/`tag` search filters on `GET /streams`, issue #532). How the
+   * params reach the wire is the fetcher's job — `StreamingClient`'s
+   * built-in fetcher serializes them after `page`/`limit`. Injected
+   * fetchers (tests) may ignore them.
+   */
+  query?: Record<string, string | number>
 }
 
 /**

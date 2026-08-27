@@ -11,6 +11,7 @@ import {
   type Stream,
   type StreamConfig,
   type StreamEvent,
+  type StreamListParams,
   type UpdateWebhookDto,
   type WebhookDelivery,
   type WebhookSubscription,
@@ -146,6 +147,25 @@ export class StreamingClient {
     })
   }
 
+  /**
+   * Lists streams visible to the caller (issue #532). Beyond paging,
+   * supports `q` (case-insensitive name/description search) and `tag`
+   * (slug or id) — both applied server-side so `total`/`hasMore` stay
+   * correct and the client never has to post-filter fetched pages.
+   */
+  async listStreams(params: StreamListParams = {}): Promise<PaginatedResponse<Stream>> {
+    const qs = new URLSearchParams()
+    if (params.page !== undefined) qs.set("page", String(params.page))
+    if (params.limit !== undefined) qs.set("limit", String(params.limit))
+    if (params.q !== undefined) qs.set("q", params.q)
+    if (params.tag !== undefined) qs.set("tag", params.tag)
+    const query = qs.toString()
+    return this.requestJson<PaginatedResponse<Stream>>(
+      `/streams${query ? `?${query}` : ""}`,
+      { method: "GET" },
+    )
+  }
+
   // ── Webhooks ──────────────────────────────────────────────────────────────
 
   /**
@@ -238,14 +258,23 @@ export class StreamingClient {
    */
   paginateAll<T>(
     path: string,
-    params: { limit?: number; startPage?: number; maxPages?: number } = {},
+    params: {
+      limit?: number
+      startPage?: number
+      maxPages?: number
+      query?: Record<string, string | number>
+    } = {},
     signal?: AbortSignal,
   ): AsyncIterable<T> {
     const fetcher: PaginatedFetcher<T> = async (
       { page, limit }: { page: number; limit: number },
       sig?: AbortSignal,
     ): Promise<PaginatedResponse<T>> => {
-      const url = `${path}?page=${page}&limit=${limit}`
+      const qs = new URLSearchParams({ page: String(page), limit: String(limit) })
+      for (const [key, value] of Object.entries(params.query ?? {})) {
+        qs.set(key, String(value))
+      }
+      const url = `${path}?${qs.toString()}`
       const response = sig
         ? await this.http.get(url, { signal: sig })
         : await this.http.get(url)

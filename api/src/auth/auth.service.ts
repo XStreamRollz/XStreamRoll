@@ -15,7 +15,7 @@ import { LoginDto } from "./dto/login.dto"
 import { RegisterDto } from "./dto/register.dto"
 import { ResetPasswordDto } from "./dto/reset-password.dto"
 import { PasswordResetService } from "./password-reset.service"
-import { TokenDenylistService } from "./token-denylist.service"
+import { TokenDenylistService, TokenJti } from "./token-denylist.service"
 import { User, UsersRepository } from "./users.repository"
 import { AuditAction } from "../audit/audit-action.enum"
 import { AuditService } from "../audit/audit.service"
@@ -155,8 +155,15 @@ export class AuthService {
     }
   }
 
-  async refresh(req: Request): Promise<AuthResponse> {
-    const refreshToken = req.cookies?.refresh_token
+  /**
+   * Refresh an access token using a valid refresh token.
+   *
+   * The refresh token is extracted by the controller from either the request
+   * body (`refreshToken`) or the `refresh_token` httpOnly cookie. This method
+   * validates the token, consults the denylist for its `jti` (issue #510),
+   * and returns a fresh token pair.
+   */
+  async refresh(refreshToken: string): Promise<AuthResponse> {
     if (!refreshToken) {
       throw new UnauthorizedException("missing refresh token")
     }
@@ -314,6 +321,7 @@ export class AuthService {
       username: user.username,
       passwordChangedAt:
         user.password_changed_at?.getTime() ?? user.created_at.getTime(),
+      isAdmin: user.is_admin === true,
       jti: randomUUID(),
     })
   }
@@ -328,14 +336,6 @@ export class AuthService {
         user.password_changed_at?.getTime() ?? user.created_at.getTime(),
       jti: randomUUID(),
     })
-  }
-
-  /** Create a long-lived JWT refresh token for the given user. */
-  private signRefreshToken(user: User): string {
-    return this.jwtService.sign(
-      { sub: user.id },
-      { expiresIn: "7d" },
-    )
   }
 }
 
