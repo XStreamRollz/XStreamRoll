@@ -182,7 +182,7 @@ export class StreamsController {
   @ApiOperation({
     summary: "List streams",
     description:
-      "Returns a paginated list of streams visible to the caller. Public streams are returned to every authenticated user; private streams are returned only to their owner. Use `visibility` and `ownerOnly` to narrow further.",
+      "Returns a paginated list of streams visible to the caller. Public streams are returned to every authenticated user; private streams are returned only to their owner. Use `visibility`, `ownerOnly`, `q` (name/description search), and `tag` to narrow further.",
   })
   @ApiOkResponse({ description: "Paginated list of streams." })
   @ApiUnauthorizedResponse({ description: "Authentication required." })
@@ -196,6 +196,8 @@ export class StreamsController {
       status: query.status,
       visibility: query.visibility,
       ownerOnly: query.ownerOnly,
+      q: query.q,
+      tag: query.tag,
     })
     // Serialize ids to strings at the API boundary, exactly like the
     // single-stream endpoints — `GET /streams` must not leak the

@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException } from "@nestjs/common"
+import { Inject, Injectable, NotFoundException, Optional } from "@nestjs/common"
 
+import { TagsRepository } from "../../tags/repository/tags.repository"
 import { StreamAnalyticsDto } from "../dto/stream-analytics.dto"
 import { Stream } from "../stream.entity"
 
@@ -21,9 +22,10 @@ export interface StreamUpdateChanges {
 }
 
 /**
- * Filter passed to listing endpoints. The repository applies visibility
- * semantics so the service layer is a pass-through; it never has to
- * reason about who can see what.
+ * Filter passed from the controller/service into the listing endpoints.
+ * `tag` is the raw, unvalidated query value (a slug or numeric id) —
+ * the service resolves it to a `StreamListPredicate.tagId` before the
+ * repository ever sees it.
  */
 export interface StreamListFilter {
   status?: string
@@ -33,6 +35,27 @@ export interface StreamListFilter {
    * regardless of the stream's own visibility. Defaults to false.
    */
   ownerOnly?: boolean
+  /**
+   * Case-insensitive substring matched against stream name and
+   * description. `%`/`_` are treated literally, never as wildcards.
+   */
+  q?: string
+  /** Raw tag filter value: a tag slug or numeric id (issue #532). */
+  tag?: string
+}
+
+/**
+ * Repository-level listing predicate. `tag` has already been resolved
+ * to a concrete tag id by the service (via `TagsService.findBySlug`/
+ * `findById`), so the SQL/in-memory implementations never duplicate
+ * slugification or tag-lookup logic.
+ */
+export interface StreamListPredicate {
+  status?: string
+  visibility?: StreamVisibility
+  ownerOnly?: boolean
+  q?: string
+  tagId?: number
 }
 
 /**
@@ -72,6 +95,19 @@ export interface PendingStreamEvent {
 export class StreamsRepository {
   private readonly streamsById = new Map<number, Stream>()
   private nextId = 1
+
+  constructor(
+    /**
+     * Injected so `tagId` filtering can resolve against the same tag
+     * associations the service attaches via `TagsService`. Optional so
+     * the in-memory repo stays constructible without a DI container
+     * (e.g. `new StreamsRepository()`); when absent a `tagId` filter
+     * simply matches nothing.
+     */
+    @Optional()
+    @Inject(TagsRepository)
+    private readonly tagsRepository?: TagsRepository,
+  ) {}
   /** Per-stream append-only event log, mirroring the `stream_events` table. */
   private readonly eventsByStream = new Map<number, StreamEventRecord[]>()
   private nextEventId = 1
@@ -85,13 +121,14 @@ export class StreamsRepository {
 
   /**
    * Returns all streams visible to `viewerUserId`, optionally further
-   * narrowed by status, visibility, and an owner-only flag. Sorted
-   * newest-first (createdAt DESC).
+   * narrowed by status, visibility, an owner-only flag, a case-insensitive
+   * `q` search (name + description), and a resolved `tagId` (issue #532).
+   * Sorted newest-first (createdAt DESC).
    */
-  private listFiltered(
+  private async listFiltered(
     viewerUserId: number,
-    filter?: StreamListFilter,
-  ): Stream[] {
+    filter?: StreamListPredicate,
+  ): Promise<Stream[]> {
     let results = Array.from(this.streamsById.values())
     if (filter?.status) {
       results = results.filter((s) => s.status === filter.status)
@@ -110,6 +147,26 @@ export class StreamsRepository {
     if (filter?.visibility) {
       results = results.filter((s) => s.visibility === filter.visibility)
     }
+    // Case-insensitive substring search. `includes` is literal by
+    // construction, so `%`/`_` are never treated as wildcards —
+    // behaviourally identical to the SQL `ILIKE` path's escaping.
+    if (filter?.q) {
+      const needle = filter.q.toLowerCase()
+      results = results.filter(
+        (s) =>
+          s.name.toLowerCase().includes(needle) ||
+          (s.description ?? "").toLowerCase().includes(needle),
+      )
+    }
+    // Tag filter: resolve the tag id to the set of stream ids carrying it.
+    // Without an injected TagsRepository there is no tag data to consult,
+    // so a tagId filter honestly matches nothing (mirrors an empty join).
+    if (filter?.tagId !== undefined) {
+      const streamIds = this.tagsRepository
+        ? await this.tagsRepository.listStreamIdsForTag(filter.tagId)
+        : new Set<number>()
+      results = results.filter((s) => streamIds.has(s.id))
+    }
     return results.sort(
       (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
     )
@@ -122,9 +179,9 @@ export class StreamsRepository {
     page: number,
     limit: number,
     viewerUserId: number,
-    filter?: StreamListFilter,
+    filter?: StreamListPredicate,
   ): Promise<{ items: Stream[]; total: number }> {
-    const filtered = this.listFiltered(viewerUserId, filter)
+    const filtered = await this.listFiltered(viewerUserId, filter)
     const offset = (page - 1) * limit
     return {
       items: filtered.slice(offset, offset + limit),

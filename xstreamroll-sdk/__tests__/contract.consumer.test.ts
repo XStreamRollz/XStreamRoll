@@ -134,6 +134,77 @@ describe("Consumer contract verification (xstreamroll-sdk)", () => {
     expect(result).toEqual(example)
   })
 
+  it("listStreams() sends the filtered query the list-streams-search contract expects and returns a contract-valid page (issue #532)", async () => {
+    const c = contract("list-streams-search")
+    const example = {
+      data: [
+        {
+          id: "1",
+          userId: "7",
+          name: "Seed stream",
+          description: "Seeded for contract verification",
+          status: "inactive",
+          visibility: "private",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+          tags: [],
+        },
+      ],
+      total: 1,
+      page: 1,
+      limit: 20,
+    }
+    expect(() => paginatedStreamsSchema.parse(example)).not.toThrow()
+
+    const scope = nock(BASE_URL)
+      .get("/streams?page=1&limit=20&q=seed")
+      .reply(c.response.status, example)
+
+    const result = await client.listStreams({ page: 1, limit: 20, q: "seed" })
+
+    expect(scope.isDone()).toBe(true)
+    expect(result.data).toHaveLength(1)
+    expect(result.data[0]?.name).toBe("Seed stream")
+    expect(result.total).toBe(1)
+  })
+
+  it("listStreams() sends the tag filter the list-streams-by-tag contract expects (issue #532)", async () => {
+    const c = contract("list-streams-by-tag")
+    const example = {
+      data: [
+        {
+          id: "1",
+          userId: "7",
+          name: "Seed stream",
+          description: null,
+          status: "inactive",
+          visibility: "private",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+          tags: [],
+        },
+      ],
+      total: 1,
+      page: 1,
+      limit: 20,
+    }
+    expect(() => paginatedStreamsSchema.parse(example)).not.toThrow()
+
+    const scope = nock(BASE_URL)
+      .get("/streams?page=1&limit=20&tag=live-streaming")
+      .reply(c.response.status, example)
+
+    const result = await client.listStreams({
+      page: 1,
+      limit: 20,
+      tag: "live-streaming",
+    })
+
+    expect(scope.isDone()).toBe(true)
+    expect(result.data).toHaveLength(1)
+    expect(result.total).toBe(1)
+  })
+
   it("publishEvent() hits POST /streams/events with the api key and a contract-valid response (issue #514)", async () => {
     const c = contract("ingest-stream-event")
     const apiKey = "sk-test-123"

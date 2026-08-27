@@ -307,14 +307,23 @@ export class StreamingClient {
    */
   paginateAll<T>(
     path: string,
-    params: { limit?: number; startPage?: number; maxPages?: number } = {},
+    params: {
+      limit?: number
+      startPage?: number
+      maxPages?: number
+      query?: Record<string, string | number>
+    } = {},
     signal?: AbortSignal,
   ): AsyncIterable<T> {
     const fetcher: PaginatedFetcher<T> = async (
       { page, limit }: { page: number; limit: number },
       sig?: AbortSignal,
     ): Promise<PaginatedResponse<T>> => {
-      const url = `${path}?page=${page}&limit=${limit}`
+      const qs = new URLSearchParams({ page: String(page), limit: String(limit) })
+      for (const [key, value] of Object.entries(params.query ?? {})) {
+        qs.set(key, String(value))
+      }
+      const url = `${path}?${qs.toString()}`
       const response = sig
         ? await this.http.get(url, { signal: sig })
         : await this.http.get(url)

@@ -18,6 +18,7 @@ import {
   StreamStoppedPayload,
 } from "./stream-events"
 import { JwtExtractorService } from "../common/guards/jwt-extractor.service"
+import { StreamOwnershipService } from "../common/guards/stream-ownership.service"
 import { MetricsService } from "../metrics/metrics.service"
 
 import type { Server, Socket } from "socket.io"
@@ -108,6 +109,15 @@ export function resolveCorsOrigins(
  * `stream:subscribe`/`stream:unsubscribe`. The service-level helpers
  * (`emitStarted` / `emitStopped` / `emitError`) only broadcast to the
  * room matching the affected stream so events stay scoped.
+ *
+ * Subscription visibility (issue #520):
+ *   - Stream owners can always subscribe to their own stream's room.
+ *   - Any authenticated user can subscribe to a *public* stream's room.
+ *   - Private streams that the user does not own are rejected with
+ *     `{ ok: false, error: "forbidden" }`.
+ *   This rule reuses `StreamOwnershipService.canSubscribe` so the
+ *   visibility model is maintained in a single place alongside the
+ *   REST layer's `StreamOwnershipGuard` and `listPaginated` ACL.
  */
 @WebSocketGateway({
   namespace: "/streams",
@@ -123,6 +133,7 @@ export class StreamsGateway
 
   constructor(
     private readonly jwtExtractorService: JwtExtractorService,
+    private readonly ownershipService: StreamOwnershipService,
     @Optional() private readonly metricsService?: MetricsService,
   ) {}
 
@@ -191,18 +202,38 @@ export class StreamsGateway
    * Subscribe a connected, authenticated client to events for a specific
    * stream. The client must already be authenticated (handled in
    * `handleConnection`).
+   *
+   * Ownership / visibility check (issue #520):
+   *   - Stream owners are always allowed to subscribe.
+   *   - Any authenticated user may subscribe to a *public* stream.
+   *   - Private streams the client does not own are rejected with
+   *     `{ ok: false, error: "forbidden" }`.
+   *   The check reuses {@link StreamOwnershipService.canSubscribe} so
+   *   the visibility predicate is single-sourced with the REST layer.
    */
   @SubscribeMessage("stream:subscribe")
-  handleSubscribe(
+  async handleSubscribe(
     @ConnectedSocket() client: AuthenticatedSocket,
     payload: { streamId?: string | number } = {},
-  ): { ok: boolean; room?: string; error?: string } {
+  ): Promise<{ ok: boolean; room?: string; error?: string }> {
     if (!client.data?.userId) {
       return { ok: false, error: "unauthenticated" }
     }
     if (payload.streamId === undefined || payload.streamId === null) {
       return { ok: false, error: "streamId required" }
     }
+
+    const userId = Number(client.data.userId)
+    const streamId = Number(payload.streamId)
+    if (!Number.isInteger(userId) || !Number.isInteger(streamId)) {
+      return { ok: false, error: "forbidden" }
+    }
+
+    const allowed = await this.ownershipService.canSubscribe(userId, streamId)
+    if (!allowed) {
+      return { ok: false, error: "forbidden" }
+    }
+
     const room = this.roomFor(payload.streamId)
     void client.join(room)
     return { ok: true, room }

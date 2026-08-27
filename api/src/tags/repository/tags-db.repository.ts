@@ -6,6 +6,7 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common"
 import { Pool } from "pg"
+
 import { PG_POOL } from "../../database/database.module"
 import { StreamTag, Tag } from "../tag.entity"
 
@@ -204,6 +205,25 @@ export class TagsDbRepository {
    * (issue #330). The query plan uses the composite primary key
    * `(stream_id, tag_id)` on `stream_tags`.
    */
+
+  /**
+   * Returns the set of stream ids carrying `tagId` (issue #532). Backs the
+   * SQL `EXISTS (SELECT 1 FROM stream_tags …)` predicate used by
+   * {@link StreamsDbRepository.listPaginated} so the tag filter is a
+   * single bounded query rather than loading every association.
+   */
+  async listStreamIdsForTag(tagId: number): Promise<Set<number>> {
+    try {
+      const { rows } = await this.pool.query<{ stream_id: number }>(
+        `SELECT stream_id FROM stream_tags WHERE tag_id = $1`,
+        [tagId],
+      )
+      return new Set(rows.map((r) => r.stream_id))
+    } catch (err) {
+      this.handleDbError(err, "listStreamIdsForTag")
+    }
+  }
+
   async listForStreamIds(
     streamIds: number[],
   ): Promise<Map<number, Tag[]>> {

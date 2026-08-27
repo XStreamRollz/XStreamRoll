@@ -15,7 +15,7 @@ import {
   StreamsRepository,
   PendingStreamEvent,
   type StreamCreateParams,
-  type StreamListFilter,
+  type StreamListPredicate,
   type StreamUpdateChanges,
 } from "./streams.repository"
 
@@ -96,7 +96,7 @@ export class StreamsDbRepository {
     page: number,
     limit: number,
     viewerUserId: number,
-    filter?: StreamListFilter,
+    filter?: StreamListPredicate,
   ): Promise<{ items: Stream[]; total: number }> {
     const offset = (page - 1) * limit
     const params: unknown[] = [viewerUserId]
@@ -118,6 +118,25 @@ export class StreamsDbRepository {
     if (filter?.visibility) {
       params.push(filter.visibility)
       conditions.push(`visibility = $${params.length}`)
+    }
+    // Case-insensitive search over name + description. `%`/`_` in user
+    // input are escaped so the pattern matches them literally (issue #532);
+    // the same $N placeholder is reused for both columns.
+    if (filter?.q) {
+      params.push(`%${escapeLikePattern(filter.q)}%`)
+      const ph = `$${params.length}`
+      conditions.push(
+        `(name ILIKE ${ph} ESCAPE '\\' OR description ILIKE ${ph} ESCAPE '\\')`,
+      )
+    }
+    // Tag filter: restrict to streams carrying the resolved tag via the
+    // stream_tags join table. The tag id is resolved upstream (service)
+    // so this predicate never re-implements slug lookups.
+    if (filter?.tagId !== undefined) {
+      params.push(filter.tagId)
+      conditions.push(
+        `EXISTS (SELECT 1 FROM stream_tags st WHERE st.stream_id = streams.id AND st.tag_id = $${params.length})`,
+      )
     }
     const where = `WHERE ${conditions.join(" AND ")}`
 
@@ -420,6 +439,16 @@ function nullableNumber(
 ): number | null {
   if (value === null || value === undefined) return null
   return Number(value)
+}
+
+/**
+ * Escapes LIKE wildcards so user-supplied search text is matched
+ * literally. `\` is escaped first because Postgres treats it as the
+ * default escape character; `%` and `_` follow so they lose their
+ * wildcard meaning.
+ */
+function escapeLikePattern(input: string): string {
+  return input.replace(/[\\%_]/g, (ch) => `\\${ch}`)
 }
 
 function roundPercent(value: number): number {

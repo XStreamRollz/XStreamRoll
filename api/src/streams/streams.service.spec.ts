@@ -27,7 +27,7 @@ describe("StreamsService", () => {
     getPendingEvents: jest.Mock
   }
   let mockWebhooksService: { dispatchStreamEvent: jest.Mock }
-  let mockTagsService: { listForStreamIds: jest.Mock }
+  let mockTagsService: { listForStreamIds: jest.Mock; resolveTag: jest.Mock }
   let mockGateway: {
     emitStarted: jest.Mock
     emitStopped: jest.Mock
@@ -66,6 +66,7 @@ describe("StreamsService", () => {
     }
     mockTagsService = {
       listForStreamIds: jest.fn().mockResolvedValue(new Map()),
+      resolveTag: jest.fn(),
     }
     mockGateway = {
       emitStarted: jest.fn(),
@@ -163,6 +164,72 @@ describe("StreamsService", () => {
     await service.list(1, 10, 7, { visibility: "private", ownerOnly: true })
     expect(mockRepo.listPaginated).toHaveBeenCalledWith(1, 10, 7, {
       visibility: "private",
+      ownerOnly: true,
+    })
+  })
+
+  // ── Search & tag filtering (issue #532) ────────────────────────────────
+
+  it("list resolves a tag slug to its id and forwards the resolved id to the repository", async () => {
+    mockRepo.listPaginated.mockResolvedValue({ items: [], total: 0 })
+    mockTagsService.resolveTag.mockResolvedValue({
+      id: 9,
+      name: "Live",
+      slug: "live",
+      createdAt: new Date(),
+    })
+
+    await service.list(1, 20, 7, { tag: "live" })
+
+    expect(mockTagsService.resolveTag).toHaveBeenCalledWith("live")
+    expect(mockRepo.listPaginated).toHaveBeenCalledWith(1, 20, 7, {
+      tagId: 9,
+    })
+  })
+
+  it("list returns an empty page (not an error) when the tag is unknown", async () => {
+    mockTagsService.resolveTag.mockResolvedValue(undefined)
+
+    const res = await service.list(1, 20, 7, { tag: "nonexistent-tag" })
+
+    expect(res).toEqual({ data: [], page: 1, limit: 20, total: 0, hasMore: false })
+    // The repository is never consulted for an unknown tag — the empty
+    // result is decided at the tag-resolution layer.
+    expect(mockRepo.listPaginated).not.toHaveBeenCalled()
+  })
+
+  it("list trims q before forwarding it to the repository", async () => {
+    mockRepo.listPaginated.mockResolvedValue({ items: [], total: 0 })
+
+    await service.list(1, 20, 7, { q: "  football  " })
+
+    expect(mockRepo.listPaginated).toHaveBeenCalledWith(1, 20, 7, {
+      q: "football",
+    })
+  })
+
+  it("list combines q and a resolved tag with the existing filters", async () => {
+    mockRepo.listPaginated.mockResolvedValue({ items: [], total: 0 })
+    mockTagsService.resolveTag.mockResolvedValue({
+      id: 4,
+      name: "Football",
+      slug: "football",
+      createdAt: new Date(),
+    })
+
+    await service.list(2, 50, 7, {
+      q: "derby",
+      tag: "football",
+      status: "active",
+      visibility: "public",
+      ownerOnly: true,
+    })
+
+    expect(mockRepo.listPaginated).toHaveBeenCalledWith(2, 50, 7, {
+      q: "derby",
+      tagId: 4,
+      status: "active",
+      visibility: "public",
       ownerOnly: true,
     })
   })

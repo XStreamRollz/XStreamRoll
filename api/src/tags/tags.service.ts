@@ -29,6 +29,26 @@ export class TagsService {
   }
 
   /**
+   * Resolves a tag filter value (issue #532) to a concrete {@link Tag}.
+   * A value made entirely of digits is treated as a numeric id; anything
+   * else is looked up by slug. This is a *lookup*, not a slugification —
+   * raw names (e.g. "Live Streaming") are intentionally not slugified
+   * here, so the streams layer never re-implements slug logic.
+   *
+   * Returns `undefined` for an unknown tag, which callers translate to an
+   * empty result set (not an error).
+   */
+  async resolveTag(raw: string | undefined): Promise<Tag | undefined> {
+    if (!raw) return undefined
+    const value = raw.trim()
+    if (!value) return undefined
+    if (/^\d+$/.test(value)) {
+      return this.tags.findById(Number(value))
+    }
+    return this.tags.findBySlug(value)
+  }
+
+  /**
    * Loads every tag attached to any stream in `streamIds`, grouped by
    * stream id. Powers the inline `tags` field on `GET /streams`
    * (issue #330) so the dashboard can render tag chips without a

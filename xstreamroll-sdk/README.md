@@ -185,6 +185,31 @@ and drop the local tokens.
 const stream = await client.getStreamStatus("stream_abc")
 ```
 
+### Listing streams (search + tag filtering)
+
+`client.listStreams()` returns the page of streams visible to the
+caller. Beyond `page`/`limit`, it accepts the server-side search and
+tag filters (issue #532) so callers never have to fetch and filter
+whole tables client-side:
+
+```ts
+const page = await client.listStreams({ page: 1, limit: 20 })
+
+// Case-insensitive name/description search, applied server-side so
+// `total` and `hasMore` stay correct.
+const search = await client.listStreams({ q: "football" })
+
+// Restrict to streams carrying a tag (slug or id). Unknown tags
+// return an empty page, not an error.
+const tagged = await client.listStreams({ tag: "live" })
+const byId = await client.listStreams({ tag: "42" })
+```
+
+`q` matches stream names and descriptions case-insensitively; `%` and
+`_` are matched literally. The same filters can be driven through
+`client.paginateAll<Stream>("/streams", { query: { q: "football", tag: "live" } })`
+to walk every matching stream without hand-driving the cursor.
+
 ### Stream CRUD
 
 Stream CRUD (`POST /streams`, `GET /streams`, `PATCH /streams/:id`,

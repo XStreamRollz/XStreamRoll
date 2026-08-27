@@ -21,6 +21,7 @@ import { PendingStreamEvent } from "./repository/streams.repository"
 import type { StreamVisibility } from "./dto/visibility"
 import type {
   StreamListFilter,
+  StreamListPredicate,
   StreamUpdateChanges,
   StreamCreateParams,
 } from "./repository/streams.repository"
@@ -69,7 +70,9 @@ export class StreamsService {
    * Pass {@link StreamListFilter.ownerOnly} to restrict the result to
    * the caller's own streams regardless of visibility (useful for a
    * "my streams" tab). Pass {@link StreamListFilter.visibility} to
-   * narrow the visible-to-caller set further.
+   * narrow the visible-to-caller set further. Pass
+   * {@link StreamListFilter.q} for a case-insensitive name/description
+   * search and {@link StreamListFilter.tag} for tag filtering (issue #532).
    *
    * Also batches tags inline (issue #330) so the dashboard can render
    * tag chips without a second HTTP call per row.
@@ -83,11 +86,33 @@ export class StreamsService {
     if (!Number.isInteger(viewerUserId) || viewerUserId <= 0) {
       throw new NotFoundException("invalid viewer")
     }
+
+    // The repository only understands a resolved tag id; the raw `tag`
+    // query value (slug or id) is resolved here via the shared tag
+    // lookup so the storage layer never re-implements slugification.
+    // Only defined keys are emitted so callers that pass a partial
+    // filter (e.g. `{ visibility: "public" }`) get a matching predicate.
+    const predicate: StreamListPredicate = {}
+    if (filter?.status) predicate.status = filter.status
+    if (filter?.visibility) predicate.visibility = filter.visibility
+    if (filter?.ownerOnly) predicate.ownerOnly = filter.ownerOnly
+    const q = filter?.q?.trim()
+    if (q) predicate.q = q
+    if (filter?.tag) {
+      const tag = await this.tagsService.resolveTag(filter.tag)
+      if (!tag) {
+        // Unknown tag → an empty page, not an error (documented choice,
+        // issue #532). The totals and hasMore reflect that empty set.
+        return { data: [], page, limit, total: 0, hasMore: false }
+      }
+      predicate.tagId = tag.id
+    }
+
     const { items, total } = await this.repo.listPaginated(
       page,
       limit,
       viewerUserId,
-      filter,
+      predicate,
     )
     const tagsByStream = await this.tagsService.listForStreamIds(
       items.map((s) => s.id),
