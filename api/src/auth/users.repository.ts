@@ -32,14 +32,6 @@ export class UsersRepository {
     return rows[0] ?? null
   }
 
-  async findById(id: number): Promise<User | null> {
-    const { rows } = await this.pool.query(
-      "SELECT id, username, email, password_hash, created_at FROM users WHERE id = $1",
-      [id],
-    )
-    return rows[0] ?? null
-  }
-
   async findByUsername(username: string): Promise<User | null> {
     const { rows } = await this.pool.query(
       "SELECT id, username, email, password_hash, created_at, password_changed_at, is_admin FROM users WHERE username = $1",

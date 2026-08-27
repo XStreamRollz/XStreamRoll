@@ -53,4 +53,53 @@ export class StreamOwnershipService {
       )
     }
   }
+
+  /**
+   * Returns true when the user may subscribe to a stream's real-time
+   * events via the WebSocket gateway.
+   *
+   * Visibility rule (issue #520):
+   *   - The stream owner can always subscribe.
+   *   - Any authenticated user can subscribe to a *public* stream.
+   *   - Private streams that the user does not own are rejected.
+   *
+   * This mirrors the ACL used by `GET /streams` (see
+   * `StreamsDbRepository.listPaginated`) so the socket layer and the
+   * REST layer agree on who can see what.
+   *
+   * Returns `true` for a stream the user owns or that is public.
+   * Returns `false` when the stream does not exist, is private, or
+   * the user does not own it.
+   *
+   * Throws {@link ServiceUnavailableException} if the database is
+   * unreachable.
+   */
+  async canSubscribe(userId: number, streamId: number): Promise<boolean> {
+    try {
+      const { rows } = await this.pool.query<{
+        user_id: number
+        visibility: string
+      }>(
+        `SELECT user_id, visibility FROM streams WHERE id = $1`,
+        [streamId],
+      )
+
+      if (!rows[0]) {
+        // Stream does not exist — deny.
+        return false
+      }
+
+      return (
+        rows[0].user_id === userId || rows[0].visibility === "public"
+      )
+    } catch (err) {
+      this.logger.error(
+        `DB error checking subscribe permission for stream ${streamId}`,
+        (err as Error).stack,
+      )
+      throw new ServiceUnavailableException(
+        "Database is unavailable. Please try again later.",
+      )
+    }
+  }
 }

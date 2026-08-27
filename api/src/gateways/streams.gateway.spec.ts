@@ -1,8 +1,10 @@
 import { Test } from "@nestjs/testing"
+import { ServiceUnavailableException } from "@nestjs/common"
 
 import { NOTIFICATION_EVENTS, STREAM_EVENTS } from "./stream-events"
 import { StreamsGateway, resolveCorsOrigins } from "./streams.gateway"
 import { JwtExtractorService } from "../common/guards/jwt-extractor.service"
+import { StreamOwnershipService } from "../common/guards/stream-ownership.service"
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // NestJS gateway tests require socket mocks cast as any to satisfy the
@@ -125,6 +127,7 @@ describe("resolveCorsOrigins", () => {
 describe("StreamsGateway", () => {
   let gateway: StreamsGateway
   let authExtractor: { authenticate: jest.Mock }
+  let ownershipService: { canSubscribe: jest.Mock }
 
   beforeEach(async () => {
     const module = await Test.createTestingModule({
@@ -134,6 +137,10 @@ describe("StreamsGateway", () => {
           provide: JwtExtractorService,
           useValue: { authenticate: jest.fn() },
         },
+        {
+          provide: StreamOwnershipService,
+          useValue: { canSubscribe: jest.fn() },
+        },
       ],
     }).compile()
 
@@ -141,6 +148,9 @@ describe("StreamsGateway", () => {
     authExtractor = module.get(
       JwtExtractorService,
     ) as unknown as { authenticate: jest.Mock }
+    ownershipService = module.get(
+      StreamOwnershipService,
+    ) as unknown as { canSubscribe: jest.Mock }
   })
 
   describe("handleConnection", () => {
@@ -302,31 +312,96 @@ describe("StreamsGateway", () => {
   })
 
   describe("stream room lifecycle", () => {
-    it("allows an authenticated client to subscribe", () => {
-      const socket = makeSocket({ data: { userId: 55 } })
-      const result = gateway.handleSubscribe(socket as unknown as any, {
-        streamId: "abc",
-      })
+    // Issue #520: stream:subscribe now performs an ownership / visibility
+    // check via StreamOwnershipService.canSubscribe before joining the room.
 
-      expect(result).toEqual({ ok: true, room: "stream:abc" })
-      expect(socket.join).toHaveBeenCalledWith("stream:abc")
+    it("allows the stream owner to subscribe", async () => {
+      ownershipService.canSubscribe.mockResolvedValue(true)
+      const socket = makeSocket({ data: { userId: 55 } })
+      const result = await gateway.handleSubscribe(
+        socket as unknown as any,
+        { streamId: 42 },
+      )
+
+      expect(result).toEqual({ ok: true, room: "stream:42" })
+      expect(socket.join).toHaveBeenCalledWith("stream:42")
+      expect(ownershipService.canSubscribe).toHaveBeenCalledWith(55, 42)
     })
 
-    it("rejects an unauthenticated client from subscribing", () => {
-      const socket = makeSocket({ data: {} })
-      const result = gateway.handleSubscribe(socket as unknown as any, {
-        streamId: "abc",
-      })
+    it("allows any authenticated user to subscribe to a public stream", async () => {
+      ownershipService.canSubscribe.mockResolvedValue(true)
+      const socket = makeSocket({ data: { userId: 99 } })
+      const result = await gateway.handleSubscribe(
+        socket as unknown as any,
+        { streamId: 7 },
+      )
 
-      expect(result).toEqual({ ok: false, error: "unauthenticated" })
+      expect(result).toEqual({ ok: true, room: "stream:7" })
+      expect(socket.join).toHaveBeenCalledWith("stream:7")
+      expect(ownershipService.canSubscribe).toHaveBeenCalledWith(99, 7)
+    })
+
+    it("rejects a non-owner subscribing to a private stream", async () => {
+      ownershipService.canSubscribe.mockResolvedValue(false)
+      const socket = makeSocket({ data: { userId: 99 } })
+      const result = await gateway.handleSubscribe(
+        socket as unknown as any,
+        { streamId: 42 },
+      )
+
+      expect(result).toEqual({ ok: false, error: "forbidden" })
+      expect(socket.join).not.toHaveBeenCalled()
+      expect(ownershipService.canSubscribe).toHaveBeenCalledWith(99, 42)
+    })
+
+    it("rejects subscribe when the stream does not exist", async () => {
+      // canSubscribe returns false for non-existent streams
+      ownershipService.canSubscribe.mockResolvedValue(false)
+      const socket = makeSocket({ data: { userId: 1 } })
+      const result = await gateway.handleSubscribe(
+        socket as unknown as any,
+        { streamId: 99999 },
+      )
+
+      expect(result).toEqual({ ok: false, error: "forbidden" })
       expect(socket.join).not.toHaveBeenCalled()
     })
 
-    it("rejects an authenticated client from subscribing without a streamId", () => {
+    it("rejects an unauthenticated client from subscribing", async () => {
+      const socket = makeSocket({ data: {} })
+      const result = await gateway.handleSubscribe(
+        socket as unknown as any,
+        { streamId: "abc" },
+      )
+
+      expect(result).toEqual({ ok: false, error: "unauthenticated" })
+      expect(socket.join).not.toHaveBeenCalled()
+      expect(ownershipService.canSubscribe).not.toHaveBeenCalled()
+    })
+
+    it("rejects an authenticated client from subscribing without a streamId", async () => {
       const socket = makeSocket({ data: { userId: 55 } })
-      const result = gateway.handleSubscribe(socket as unknown as any, {})
+      const result = await gateway.handleSubscribe(
+        socket as unknown as any,
+        {},
+      )
 
       expect(result).toEqual({ ok: false, error: "streamId required" })
+      expect(socket.join).not.toHaveBeenCalled()
+      expect(ownershipService.canSubscribe).not.toHaveBeenCalled()
+    })
+
+    it("rejects subscribe when the ownership service throws (DB unavailable)", async () => {
+      ownershipService.canSubscribe.mockRejectedValue(
+        new ServiceUnavailableException(
+          "Database is unavailable. Please try again later.",
+        ),
+      )
+      const socket = makeSocket({ data: { userId: 1 } })
+
+      await expect(
+        gateway.handleSubscribe(socket as unknown as any, { streamId: 1 }),
+      ).rejects.toThrow(ServiceUnavailableException)
       expect(socket.join).not.toHaveBeenCalled()
     })
 
@@ -358,12 +433,16 @@ describe("StreamsGateway", () => {
       expect(socket.leave).not.toHaveBeenCalled()
     })
 
-    it("supports duplicate subscriptions without failure", () => {
+    it("supports duplicate subscriptions without failure", async () => {
+      ownershipService.canSubscribe.mockResolvedValue(true)
       const socket = makeSocket({ data: { userId: 55 } })
-      gateway.handleSubscribe(socket as unknown as any, { streamId: "abc" })
-      const second = gateway.handleSubscribe(socket as unknown as any, {
+      await gateway.handleSubscribe(socket as unknown as any, {
         streamId: "abc",
       })
+      const second = await gateway.handleSubscribe(
+        socket as unknown as any,
+        { streamId: "abc" },
+      )
 
       expect(second).toEqual({ ok: true, room: "stream:abc" })
       expect(socket.join).toHaveBeenCalledTimes(2)
@@ -427,12 +506,15 @@ describe("StreamsGateway", () => {
     // Issue #519: the broadcast must land on the exact room a client
     // joined via `stream:subscribe` — this ties the subscribe handshake
     // to the emit helpers end-to-end.
-    it("broadcasts a status emit to the room a subscribed socket joined", () => {
+    it("broadcasts a status emit to the room a subscribed socket joined", async () => {
+      ownershipService.canSubscribe.mockResolvedValue(true)
       const { server, events } = makeServer()
       gateway.server = server as unknown as any
 
       const socket = makeSocket({ data: { userId: 55 } })
-      gateway.handleSubscribe(socket as unknown as any, { streamId: "abc" })
+      await gateway.handleSubscribe(socket as unknown as any, {
+        streamId: "abc",
+      })
 
       gateway.emitStarted({
         streamId: "abc",
