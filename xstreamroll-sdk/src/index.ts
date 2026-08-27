@@ -26,6 +26,11 @@ export type {
   StreamEventType,
   StreamEvent,
   StreamEventRecord,
+  // Stream Analytics
+  StreamAnalytics,
+  // Notifications
+  Notification,
+  NotificationsPage,
   // Webhooks
   CreateWebhookDto,
   UpdateWebhookDto,

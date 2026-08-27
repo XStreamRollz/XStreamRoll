@@ -3,7 +3,6 @@
 import type {
   ApiErrorResponse,
   PaginatedResponse,
-  PaginationParams,
   StreamEventType,
   Tag,
   User,
@@ -53,28 +52,6 @@ export type {
   ValidationError,
   ApiErrorResponse,
 } from "@xstreamroll/types"
-
-// ─── Streams ─────────────────────────────────────────────────────────────────
-
-/**
- * Query parameters for `GET /streams` (issue #532). Extends the shared
- * pagination params with the server-side search and tag filters so the
- * dashboard search box can pass them through without client-side
- * post-filtering.
- */
-export interface StreamListParams extends PaginationParams {
-  /**
-   * Case-insensitive substring matched against stream name and
-   * description. `%`/`_` are treated literally by the server, never as
-   * wildcards.
-   */
-  q?: string
-  /**
-   * Tag slug or numeric id. Only streams carrying that tag are
-   * returned; an unknown tag yields an empty page.
-   */
-  tag?: string
-}
 
 // ─── Tags ────────────────────────────────────────────────────────────────────
 
@@ -130,6 +107,58 @@ export interface AuthResponse {
  * auth responses but isn't persisted by {@link StreamingClient}.
  */
 export type AuthTokens = AuthResponse
+
+// ─── Streams: analytics & event replay ───────────────────────────────────────
+
+/**
+ * Aggregate analytics returned by `GET /streams/:id/analytics`. Mirrors
+ * the API's `StreamAnalyticsDto` exactly (issue #534).
+ */
+export interface StreamAnalytics {
+  streamId: number
+  totalEventsProcessed: {
+    last24h: number
+    last7d: number
+    last30d: number
+  }
+  errorRate: {
+    window: "30d"
+    totalEvents: number
+    errorEvents: number
+    percentage: number
+  }
+  processingLatency: {
+    window: "30d"
+    averageMs: number | null
+    p99Ms: number | null
+  }
+  eventsPerMinute: Array<{
+    minute: string
+    count: number
+  }>
+  generatedAt: string
+}
+
+// ─── Notifications ───────────────────────────────────────────────────────────
+
+/**
+ * A single unread notification, as returned by `GET /notifications`
+ * (issue #534). Numeric ids and ISO-string timestamps on the wire.
+ */
+export interface Notification {
+  id: number
+  userId: number
+  type: string
+  payload: Record<string, unknown>
+  readAt: string | null
+  createdAt: string
+  expiresAt: string
+}
+
+/** Paginated unread-notification envelope from `GET /notifications`. */
+export interface NotificationsPage extends PaginatedResponse<Notification> {
+  unreadCount: number
+}
 
 // ─── Webhooks ─────────────────────────────────────────────────────────────────
 

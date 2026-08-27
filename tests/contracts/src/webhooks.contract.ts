@@ -3,6 +3,7 @@ import { z } from "zod"
 import { PLACEHOLDER, type Contract } from "./contract"
 import {
   apiErrorSchema,
+  paginatedWebhookDeliveriesSchema,
   paginatedWebhookSubscriptionsSchema,
   webhookDeliverySchema,
   webhookSubscriptionSchema,
@@ -66,6 +67,28 @@ export const webhooksContracts: Contract[] = [
     response: {
       status: 200,
       schema: webhookSubscriptionSummarySchema,
+    },
+  },
+  {
+    // Runs against the seeded subscription + its terminal failed delivery
+    // (both created in the provider suite's beforeAll), mirroring the
+    // create-stream → register-webhook → list-deliveries chain: the
+    // subscription the delivery belongs to already exists by the time this
+    // contract runs, and the fixture is never re-seeded per contract.
+    name: "list-webhook-deliveries",
+    description: "GET /webhooks/:id/deliveries returns the delivery log in the paginated envelope",
+    consumer: "xstreamroll-sdk",
+    provider: "api",
+    request: {
+      method: "GET",
+      path: "/webhooks/:id/deliveries",
+      pathParams: { id: PLACEHOLDER.EXISTING_WEBHOOK_ID },
+      query: { page: 1, limit: 20 },
+      authenticated: true,
+    },
+    response: {
+      status: 200,
+      schema: paginatedWebhookDeliveriesSchema,
     },
   },
   {

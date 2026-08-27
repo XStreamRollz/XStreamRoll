@@ -1,8 +1,10 @@
 import { PLACEHOLDER, type Contract } from "./contract"
 import {
   apiErrorSchema,
+  paginatedStreamEventsSchema,
   paginatedStreamsSchema,
   pendingStreamEventSchema,
+  streamAnalyticsSchema,
   streamSchema,
 } from "./schemas"
 
@@ -109,42 +111,39 @@ export const streamsContracts: Contract[] = [
     },
   },
   {
-    // Runs after the seed stream exists (created in the provider suite's
-    // beforeAll). `q=seed` matches the seed stream's name
-    // case-insensitively; the response is the standard paginated
-    // envelope over the filtered set (issue #532).
-    name: "list-streams-search",
-    description: "GET /streams?q=… returns only streams matching the search, in the paginated envelope",
+    // The provider suite records one event on the seeded stream in
+    // beforeAll, so this contract validates the non-empty shape — most
+    // importantly the stringified `id`/`streamId` fields (issue #534).
+    name: "list-stream-events",
+    description: "GET /streams/:id/events replays the stream's event log in the paginated envelope",
     consumer: "xstreamroll-sdk",
     provider: "api",
     request: {
       method: "GET",
-      path: "/streams",
-      query: { page: 1, limit: 20, q: "seed" },
+      path: "/streams/:id/events",
+      pathParams: { id: PLACEHOLDER.EXISTING_STREAM_ID },
+      query: { page: 1, limit: 50 },
       authenticated: true,
     },
     response: {
       status: 200,
-      schema: paginatedStreamsSchema,
+      schema: paginatedStreamEventsSchema,
     },
   },
   {
-    // `tag=live-streaming` matches the seed stream, which the provider
-    // suite tags in beforeAll. Unknown tags return an empty page, so the
-    // shape contract holds either way (issue #532).
-    name: "list-streams-by-tag",
-    description: "GET /streams?tag=… returns only streams carrying the tag, in the paginated envelope",
+    name: "get-stream-analytics",
+    description: "GET /streams/:id/analytics returns the aggregate analytics shape",
     consumer: "xstreamroll-sdk",
     provider: "api",
     request: {
       method: "GET",
-      path: "/streams",
-      query: { page: 1, limit: 20, tag: "live-streaming" },
+      path: "/streams/:id/analytics",
+      pathParams: { id: PLACEHOLDER.EXISTING_STREAM_ID },
       authenticated: true,
     },
     response: {
       status: 200,
-      schema: paginatedStreamsSchema,
+      schema: streamAnalyticsSchema,
     },
   },
   {
