@@ -6,6 +6,7 @@ import {
   destroyTestApp,
   TestAppContext,
 } from "./database/test-utils"
+import { AdminStatsService } from "./admin/admin-stats.service"
 import { StreamsDbRepository } from "./streams/repository/streams-db.repository"
 
 describe("Database Integration Tests", () => {
@@ -303,6 +304,43 @@ describe("Database Integration Tests", () => {
         [userAStreamId, userBId],
       )
       expect(deleted.rows).toHaveLength(0)
+    })
+  })
+
+  describe("Admin statistics", () => {
+    it("counts users, streams, active streams, and recent events", async () => {
+      const users = await pool.query<{ id: number }>(
+        `INSERT INTO users (username, email, password_hash)
+         VALUES ('stats-user-1', 'stats-1@test.com', 'hash'),
+                ('stats-user-2', 'stats-2@test.com', 'hash')
+         RETURNING id`,
+      )
+
+      const streams = await pool.query<{ id: number }>(
+        `INSERT INTO streams (user_id, name, status)
+         VALUES ($1, 'Active Stream 1', 'active'),
+                ($2, 'Active Stream 2', 'active'),
+                ($1, 'Inactive Stream', 'inactive')
+         RETURNING id`,
+        [users.rows[0].id, users.rows[1].id],
+      )
+
+      await pool.query(
+        `INSERT INTO stream_events
+           (stream_id, event_type, event_data, created_at)
+         VALUES ($1, 'recent-1', '{}'::jsonb, NOW()),
+                ($2, 'recent-2', '{}'::jsonb, NOW() - INTERVAL '1 hour'),
+                ($3, 'old', '{}'::jsonb, NOW() - INTERVAL '25 hours')`,
+        streams.rows.map((row) => row.id),
+      )
+
+      const stats = await new AdminStatsService(pool).compute()
+
+      expect(stats.totalUsers).toBe(2)
+      expect(stats.totalStreams).toBe(3)
+      expect(stats.activeStreams).toBe(2)
+      expect(stats.eventsLast24h).toBe(2)
+      expect(stats.generatedAt).toEqual(expect.any(String))
     })
   })
 
