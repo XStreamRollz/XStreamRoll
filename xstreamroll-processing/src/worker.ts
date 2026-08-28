@@ -7,6 +7,7 @@ import { env } from "./config"
 import { createLockManager, type LockManager } from "./leader-election"
 import { GracefulShutdown, ShutdownReason } from "./lifecycle"
 import { currentCorrelationId, newCorrelationId } from "./logger"
+import { FileDeadLetterStore } from "./dead-letter-store"
 import { markShuttingDown, setQueueDepth, startMetricsServer } from "./metrics"
 import {
   EventFilter,
@@ -54,6 +55,7 @@ const EVENT_FILTER_REDIS_URL: string | undefined =
 // Shared keep-alive agent so axios reuses TCP connections and we can
 // explicitly destroy the pool on graceful shutdown.
 export const httpAgent = new http.Agent({ keepAlive: true })
+export const deadLetterStore = new FileDeadLetterStore(env.DEAD_LETTER_STORE_PATH)
 
 /**
  * HTTP server that exposes worker metrics and probes to Kubernetes.
@@ -63,7 +65,7 @@ export const httpAgent = new http.Agent({ keepAlive: true })
  * below) can close it without losing the reference.
  */
 export const metricsServer =
-  env.NODE_ENV !== "test" ? startMetricsServer(3002) : null
+  env.NODE_ENV !== "test" ? startMetricsServer(3002, deadLetterStore) : null
 
 // Axios instance that routes all requests through the shared agent.
 export const axiosInstance = axios.create({ httpAgent })
@@ -311,6 +313,9 @@ async function start(): Promise<void> {
     {
       async publish(event: ProcessedStreamEvent): Promise<void> {
         await axiosInstance.post(`${API_URL}/streams/processed`, event)
+      },
+      async deadLetter(event, error, attempts): Promise<void> {
+        await deadLetterStore.record(event, error, attempts)
       },
     },
     {

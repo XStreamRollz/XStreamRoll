@@ -1,5 +1,7 @@
 import { createServer, IncomingMessage, ServerResponse } from "http"
 
+import { DeadLetterStore } from "./dead-letter-store"
+
 export interface Metrics {
   messagesProcessed: number
   errors: number
@@ -104,7 +106,10 @@ export function markReady(): void {
   live = true
 }
 
-export function startMetricsServer(port = 3002): ReturnType<typeof createServer> {
+export function startMetricsServer(
+  port = 3002,
+  deadLetterStore?: DeadLetterStore,
+): ReturnType<typeof createServer> {
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const url = req.url || ""
     const accept = (req.headers.accept || "").toLowerCase()
@@ -144,6 +149,25 @@ export function startMetricsServer(port = 3002): ReturnType<typeof createServer>
         const body = JSON.stringify(getMetrics())
         res.writeHead(200, { "Content-Type": "application/json" })
         res.end(body)
+        return
+      }
+
+      if (url === "/dead-letters" || url === "/dead-letters/") {
+        if (!deadLetterStore) {
+          res.writeHead(503, { "Content-Type": "application/json" })
+          res.end(JSON.stringify({ error: "dead-letter store unavailable" }))
+          return
+        }
+        void deadLetterStore.list().then(
+          (records) => {
+            res.writeHead(200, { "Content-Type": "application/json" })
+            res.end(JSON.stringify(records))
+          },
+          () => {
+            res.writeHead(500, { "Content-Type": "application/json" })
+            res.end(JSON.stringify({ error: "dead-letter store unavailable" }))
+          },
+        )
         return
       }
 

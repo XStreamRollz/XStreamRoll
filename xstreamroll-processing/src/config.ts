@@ -42,6 +42,7 @@ const envSchema = z.object({
     .default("3")
     .transform((s) => Number(s))
     .pipe(z.number().int().min(0)),
+  DEAD_LETTER_STORE_PATH: z.string().default("./data/dead-letters.json"),
   /**
    * Backend for the per-stream {@link EventFilter} config store
    * (issue #351). `memory` keeps every config in-process and matches
