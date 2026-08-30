@@ -45,7 +45,8 @@ export class AdminController {
   @ApiBearerAuth("bearer")
   @ApiOperation({
     summary: "Get platform-wide statistics",
-    description: "Returns cached aggregate platform metrics. Admin role required.",
+    description:
+      "Returns cached aggregate platform metrics: total users, total streams, active streams (status = 'active'), and stream events created within the last 24 hours. Admin role required.",
   })
   @ApiOkResponse({ description: "Admin platform statistics." })
   @ApiUnauthorizedResponse({ description: "Authentication required." })

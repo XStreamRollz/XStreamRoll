@@ -1,4 +1,12 @@
-import { Injectable } from "@nestjs/common"
+import {
+  Inject,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from "@nestjs/common"
+import { Pool } from "pg"
+
+import { PG_POOL } from "../database/database.module"
 
 export interface AdminStats {
   totalUsers: number
@@ -11,13 +19,10 @@ export interface AdminStats {
 /**
  * Aggregates platform-wide stats for the admin dashboard.
  *
- * The current implementation returns a deterministic, zero-valued
- * snapshot — it exists so the endpoint, guard, and 60-second cache
- * can be wired and exercised end-to-end before the Postgres data
- * layer lands.
- *
- * When the DB layer is available the four numeric fields will be
- * computed via the following aggregate queries (single round-trip):
+ * The four numeric fields are computed with aggregate subqueries in a
+ * single database round-trip. Active streams are those whose status is
+ * `active` at query time, and eventsLast24h covers events created within
+ * the preceding 24 hours.
  *
  *   SELECT
  *     (SELECT COUNT(*) FROM users)                                AS total_users,
@@ -31,15 +36,41 @@ export interface AdminStats {
  */
 @Injectable()
 export class AdminStatsService {
+  private readonly logger = new Logger(AdminStatsService.name)
+
+  constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
+
+  private handleDbError(err: unknown): never {
+    this.logger.error("DB error in compute", (err as Error).stack)
+    throw new ServiceUnavailableException(
+      "Database is unavailable. Please try again later.",
+    )
+  }
+
   async compute(): Promise<AdminStats> {
-    // Placeholder zero snapshot. The query above replaces this body
-    // once the DB module is wired.
-    return {
-      totalUsers: 0,
-      totalStreams: 0,
-      activeStreams: 0,
-      eventsLast24h: 0,
-      generatedAt: new Date().toISOString(),
+    try {
+      const { rows } = await this.pool.query<{
+        total_users: number
+        total_streams: number
+        active_streams: number
+        events_24h: number
+      }>(`SELECT
+           (SELECT COUNT(*)::int FROM users) AS total_users,
+           (SELECT COUNT(*)::int FROM streams) AS total_streams,
+           (SELECT COUNT(*)::int FROM streams WHERE status = 'active') AS active_streams,
+           (SELECT COUNT(*)::int FROM stream_events
+            WHERE created_at > NOW() - INTERVAL '24 hours') AS events_24h`)
+
+      const row = rows[0]
+      return {
+        totalUsers: Number(row?.total_users ?? 0),
+        totalStreams: Number(row?.total_streams ?? 0),
+        activeStreams: Number(row?.active_streams ?? 0),
+        eventsLast24h: Number(row?.events_24h ?? 0),
+        generatedAt: new Date().toISOString(),
+      }
+    } catch (err) {
+      this.handleDbError(err)
     }
   }
 }
