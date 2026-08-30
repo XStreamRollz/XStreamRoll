@@ -9,3 +9,4 @@ dist/
 *.swp
 *.swo
 coverage/
+data/dead-letters.json

@@ -26,6 +26,8 @@ export interface SessionHandlers {
    * caller back-pressure the queue when the API is slow.
    */
   publish(event: ProcessedStreamEvent): Promise<void>
+  /** Persists an event after its publish retry budget is exhausted. */
+  deadLetter?(event: StreamEvent, error: Error, attempts: number): Promise<void>
   /** Optional structured logger; defaults to console. */
   logger?: Pick<Console, "log" | "warn" | "error">
 }
@@ -46,13 +48,13 @@ export interface SessionHandlers {
  *               errored ◀─── fail() called explicitly ────
  *
  * Note: publish errors inside the pump loop are handled via
- * exponential-backoff retry + dead-lettering (issue #343) and do
- * NOT call `fail()`; the session keeps running after a dead-letter.
+ * exponential-backoff retry + durable dead-lettering (issue #343/#525)
+ * and do NOT call `fail()`; the session keeps running after a dead-letter.
  *
  * The session emits the following events for observability:
  *   - `state`       (next: SessionState, prev: SessionState)
  *   - `processed`   (ProcessedStreamEvent)
- *   - `dead-letter` (StreamEvent, Error) — emitted when retry budget exhausted
+ *   - `dead-letter` (StreamEvent, Error) — emitted after durable recording
  *   - `error`       (Error) — only emitted by explicit `fail()` calls
  */
 export class StreamSession extends EventEmitter {
@@ -133,8 +135,8 @@ export class StreamSession extends EventEmitter {
    * repeated publish errors from the coordinator). Drops queued work
    * and marks the session errored so the registry can evict it.
    *
-   * Note: publish errors inside the pump loop are handled via
-   * exponential-backoff retry + dead-lettering (issue #343) and do
+  * Note: publish errors inside the pump loop are handled via
+  * exponential-backoff retry + durable dead-lettering (issue #343/#525) and do
    * NOT call this method; the session keeps running after a dead-letter.
    */
   fail(err: Error): void {
@@ -191,12 +193,22 @@ export class StreamSession extends EventEmitter {
             attempts++
 
             if (attempts > maxRetries) {
-              // Dead-letter: log the event, emit the signal, then
-              // continue processing the rest of the queue. The session
-              // remains running so subsequent events still get a chance.
+              // Persist before emitting so an emitted dead-letter means the
+              // durable failure record already exists.
               this.logger.error(
                 `[${this.workerId}] session ${this.id} publish FAILED after ${attempts} attempt(s) — dead-lettering event: ${error.message}`,
               )
+              try {
+                await this.handlers.deadLetter?.(next, error, attempts)
+              } catch (deadLetterError) {
+                const message =
+                  deadLetterError instanceof Error
+                    ? deadLetterError.message
+                    : String(deadLetterError)
+                this.logger.error(
+                  `[${this.workerId}] failed to persist dead-letter: ${message}`,
+                )
+              }
               this.emit("dead-letter", next, error)
               break // skip this event, carry on with the queue
             }

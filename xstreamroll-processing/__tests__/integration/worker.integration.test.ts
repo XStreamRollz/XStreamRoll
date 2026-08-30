@@ -45,6 +45,7 @@ test("single event: polled -> session -> published", async () => {
   let sent = false
   nock("http://mock-api")
     .get("/streams/pending")
+    .query(true)
     .times(100)
     .reply(() => {
       if (!sent) {
@@ -86,6 +87,7 @@ test("multiple events same stream -> routed to same session", async () => {
   let sentOnce = false
   nock("http://mock-api")
     .get("/streams/pending")
+    .query(true)
     .times(100)
     .reply(() => {
       if (!sentOnce) {
@@ -127,6 +129,7 @@ test("capacity exceeded -> event dropped, not published", async () => {
   let once = false
   nock("http://mock-api")
     .get("/streams/pending")
+    .query(true)
     .times(100)
     .reply(() => {
       if (!once) {
@@ -164,6 +167,7 @@ test("graceful shutdown flushes pending publishes", async () => {
   let sent = false
   nock("http://mock-api")
     .get("/streams/pending")
+    .query(true)
     .times(100)
     .reply(() => {
       if (!sent) {
@@ -183,7 +187,7 @@ test("graceful shutdown flushes pending publishes", async () => {
       return "ok"
     })
 
-  const workerMod = await import("../../src/worker")
+  workerMod = await import("../../src/worker")
 
   // give worker a moment to pick up the event
   await new Promise((r) => setTimeout(r, 100))
@@ -202,6 +206,7 @@ test("api error then recovery -> worker retries next poll", async () => {
   let calls = 0
   nock("http://mock-api")
     .get("/streams/pending")
+    .query(true)
     .times(100)
     .reply(() => {
       calls++
@@ -219,7 +224,7 @@ test("api error then recovery -> worker retries next poll", async () => {
       })
   })
 
-  const workerMod = await import("../../src/worker")
+  workerMod = await import("../../src/worker")
   await awaitWithTimeout(publishedPromise, 5000, "publish timeout")
   await workerMod.shutdown("test")
 })

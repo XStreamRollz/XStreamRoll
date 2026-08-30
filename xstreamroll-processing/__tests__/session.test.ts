@@ -267,6 +267,7 @@ describe("StreamSession — publish retry and dead-letter (issue #343)", () => {
   it("dead-letters after exhausting retries and continues processing remaining queue", async () => {
     const published: ProcessedStreamEvent[] = []
     const deadLettered: StreamEvent[] = []
+    const deadLetterAttempts: number[] = []
     let callsForFirst = 0
 
     // First event always fails; second event always succeeds
@@ -280,6 +281,9 @@ describe("StreamSession — publish retry and dead-letter (issue #343)", () => {
             throw new Error("permanent error")
           }
           published.push(e)
+        },
+        deadLetter: async (_event, _error, attempts) => {
+          deadLetterAttempts.push(attempts)
         },
       },
       1000,
@@ -306,6 +310,7 @@ describe("StreamSession — publish retry and dead-letter (issue #343)", () => {
     expect(callsForFirst).toBe(3)
     expect(deadLettered).toHaveLength(1)
     expect(deadLettered[0].data).toEqual({ seq: 1 })
+    expect(deadLetterAttempts).toEqual([3])
 
     // Second event was still published successfully
     expect(published).toHaveLength(1)

@@ -65,6 +65,7 @@ test("filtered events are not published (integration)", async () => {
   let sent = false
   nock("http://mock-api")
     .get("/streams/pending")
+    .query(true)
     .times(100)
     .reply(() => {
       if (!sent) {

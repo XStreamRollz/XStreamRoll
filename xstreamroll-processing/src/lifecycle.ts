@@ -18,7 +18,12 @@
  */
 
 export type ShutdownReason =
-  "SIGINT" | "SIGTERM" | "uncaughtException" | "unhandledRejection" | "manual"
+  | "SIGINT"
+  | "SIGTERM"
+  | "uncaughtException"
+  | "unhandledRejection"
+  | "manual"
+  | "test"
 
 export interface ShutdownHook {
   /** Human-readable name for logging. */
