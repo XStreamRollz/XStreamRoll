@@ -70,10 +70,10 @@
     "supertest": "^7.2.2"
   },
   "dependencies": {
-    "@hookform/resolvers": "^5.2.2",
-    "@tanstack/react-query": "^5.101.4",
-    "js-cookie": "^3.0.7",
-    "react-hook-form": "^7.76.0",
+    "@hookform/resolvers": "^5.9.1",
+    "@tanstack/react-query": "^5.102.8",
+    "js-cookie": "^3.0.8",
+    "react-hook-form": "^7.86.0",
     "zod": "^4.4.3"
   }
 }
