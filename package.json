@@ -62,7 +62,7 @@
     "eslint": "^8.57.0",
     "eslint-import-resolver-node": "^0.3.9",
     "eslint-plugin-import": "^2.31.0",
-    "fast-check": "^4.9.0",
+    "fast-check": "^4.10.0",
     "husky": "^9.1.7",
     "js-yaml": "^4.1.0",
     "lint-staged": "^17.0.8",
@@ -70,10 +70,10 @@
     "supertest": "^7.2.2"
   },
   "dependencies": {
-    "@hookform/resolvers": "^5.2.2",
-    "@tanstack/react-query": "^5.101.4",
-    "js-cookie": "^3.0.7",
-    "react-hook-form": "^7.76.0",
-    "zod": "^4.4.3"
+    "@hookform/resolvers": "^5.9.1",
+    "@tanstack/react-query": "^5.102.8",
+    "js-cookie": "^3.0.8",
+    "react-hook-form": "^7.87.0",
+    "zod": "^4.6.2"
   }
 }
