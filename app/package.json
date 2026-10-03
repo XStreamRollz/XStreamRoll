@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "next build",
+    "build": "node init && next build",
     "analyze": "cross-env ANALYZE=true npm run build",
-    "dev": "next dev",
+    "dev": "node init && next dev",
     "lint": "eslint .",
-    "start": "next start",
+    "start": "node init && next start",
     "test": "jest",
     "test:cov": "jest --coverage",
     "typecheck": "tsc --noEmit"

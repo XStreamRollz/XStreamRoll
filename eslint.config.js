@@ -141,4 +141,4 @@ module.exports = [
       eqeqeq: ["error", "always", { null: "ignore" }],
     },
   },
-]
+];

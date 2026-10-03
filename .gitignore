@@ -19,7 +19,6 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files
-.env*
 # ...but keep the committed templates
 !.env.example
 
@@ -41,3 +40,4 @@ dist
 
 CLAUDE.md
 plan.md
+config.bat

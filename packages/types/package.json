@@ -9,7 +9,7 @@
     "src"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "node init && tsc",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/**/*.ts"
   },

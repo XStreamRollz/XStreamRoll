@@ -4,9 +4,9 @@
   "description": "Stream processing worker for Stellar Streaming",
   "main": "dist/worker.js",
   "scripts": {
-    "start": "node dist/worker.js",
-    "dev": "ts-node src/worker.ts",
-    "build": "tsc",
+    "start": "node init && node dist/worker.js",
+    "dev": "node init && ts-node src/worker.ts",
+    "build": "node init && tsc",
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "test:cov": "jest --coverage",
