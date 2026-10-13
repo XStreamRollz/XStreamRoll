@@ -60,14 +60,14 @@
     "@stryker-mutator/core": "^8.7.1",
     "@stryker-mutator/jest-runner": "^8.7.1",
     "@stryker-mutator/typescript-checker": "^8.7.1",
-    "@types/jest": "^29.5.14",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20.10.0",
     "@xstreamroll/contract-tests": "file:../tests/contracts",
-    "jest": "^29.7.0",
-    "nock": "^14.0.15",
+    "jest": "^30.5.2",
+    "nock": "^15.0.1",
     "openapi-typescript": "^7.13.0",
-    "ts-jest": "^29.2.5",
-    "typedoc": "^0.25.13",
+    "ts-jest": "^29.4.14",
+    "typedoc": "^0.28.20",
     "typescript": "^5.3.0"
   }
 }
